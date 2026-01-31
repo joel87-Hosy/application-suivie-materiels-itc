@@ -399,19 +399,57 @@ function handleScanSuccess(id) {
                     <div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 border-slate-200">
                         <h3 class="text-xl font-black mb-6 uppercase text-indigo-900">${key}</h3>
                         <div class="space-y-2">
-                            ${group.map(m => {
-                                let badgeColor = (key === 'ITC' && m.qty < 5) ? 'text-red-600 bg-red-50' : 'text-indigo-600 bg-indigo-50';
-                                return `<div class="flex justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">
-                                    <span class="w-2/3 truncate uppercase">${m.label}</span>
-                                    <span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">${key==='ITC'?m.qty+' U':'DISPO'}</span>
-                                    ${currentUser.role === 'Gestionnaire' ? `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 ml-2 hover:text-red-500"><i class="fas fa-trash"></i></button>` : ''}
-                                </div>`;
-                            }).join("")}
+    
+${group.map(m => {
+    let badgeColor = (key === 'ITC' && m.qty < 5) ? 'text-red-600 bg-red-50' : 'text-indigo-600 bg-indigo-50';
+    return `<div class="flex justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">
+        <span class="w-1/2 truncate uppercase">${m.label}</span>
+        <div class="flex items-center gap-2">
+            <span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">${key==='ITC'?m.qty+' U':'DISPO'}</span>
+            
+            ${(currentUser.role === 'Gestionnaire' && key === 'ITC') ? 
+                `<button onclick="ouvrirModifStock('${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1">
+                    <i class="fas fa-edit"></i>
+                </button>` : ''}
+
+            ${currentUser.role === 'Gestionnaire' ? 
+                `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 hover:text-red-500 ml-1">
+                    <i class="fas fa-trash"></i>
+                </button>` : ''}
+        </div>
+    </div>`;
+}).join("")}
                         </div>
                     </div>`;
             });
             html += `</div>`; container.innerHTML = html;
         }
+
+        function ouvrirModifStock(label) {
+    const item = appData.stock.find(s => s.label === label && s.op === "ITC");
+    if (!item) return;
+
+    // Sauvegarde de l'état initial pour l'audit
+    const ancienneQty = item.qty;
+    const ancienNom = item.label;
+
+    const nouveauNom = prompt("MODIFIER LE NOM DE L'ARTICLE :", item.label);
+    if (nouveauNom === null) return; 
+
+    const nouvelleQty = prompt("MODIFIER LA QUANTITÉ EN STOCK :", item.qty);
+    if (nouvelleQty === null) return; 
+
+    // Mise à jour
+    item.label = nouveauNom.toUpperCase();
+    item.qty = parseInt(nouvelleQty) || 0;
+
+    // ALERTE AUDIT POUR LE SUPERVISEUR (ID 1)
+    const messageAudit = `ALERTE MODIFICATION STOCK : L'article "${ancienNom}" (${ancienneQty}U) a été renommé en "${item.label}" avec une nouvelle quantité de (${item.qty}U) par le gestionnaire.`;
+    addNotification(1, messageAudit);
+    
+    save();
+    showSection("cockpit");
+}
 
         function renderTechMesDemandes(container) {
     // Affiche les bons dès qu'ils sont validés par la coordination
@@ -765,7 +803,21 @@ function renderCoordFluxTech(container) {
             const count = appData.notifications.filter(n => n.userId === currentUser.id && !n.lu).length;
             ["notif-coord", "notif-tech", "notif-superviseur", "notif-gest-coord"].forEach(id => { const el = document.getElementById(id); if(el) { el.innerText = count; el.classList.toggle("hidden", count === 0); }});
         }
-        function deleteMaterial(op, label) { if (!confirm("VOULEZ-VOUS SUPPRIMER CET ARTICLE ?")) return; appData.stock = appData.stock.filter(s => !(s.op === op && s.label === label)); addNotification(1, `ALERTE : ARTICLE SUPPRIMÉ (${label})`); save(); showSection("cockpit"); }
+        function deleteMaterial(op, label) {
+    if (!confirm("ATTENTION : VOULEZ-VOUS SUPPRIMER DÉFINITIVEMENT CET ARTICLE DU STOCK ?")) return;
+    
+    const itemASupprimer = appData.stock.find(s => s.op === op && s.label === label);
+    const qteAuMomentSuppr = itemASupprimer ? itemASupprimer.qty : "Inconnue";
+
+    appData.stock = appData.stock.filter(s => !(s.op === op && s.label === label));
+
+    // ALERTE CRITIQUE POUR LE SUPERVISEUR (ID 1)
+    const messageAudit = `ALERTE SUPPRESSION CRITIQUE : Le gestionnaire a supprimé l'article "${label}" de l'opérateur ${op}. (Quantité au moment de la suppression : ${qteAuMomentSuppr}U)`;
+    addNotification(1, messageAudit);
+
+    save();
+    showSection("cockpit");
+}
 
         // INITIALISATION
         if (appData.currentUserId) {
