@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ITC Telecom ERP | Automation & Stock Expert</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        .sidebar-transition { transition: transform 0.3s ease-in-out; }
+        @media (max-width: 1024px) { .sidebar-hidden { transform: translateX(-100%); } }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #ec4899; border-radius: 10px; }
+        .notification-badge { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 overflow-hidden uppercase italic font-bold text-[10px]">
+    <audio id="beep-sound" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" preload="auto"></audio>
+    <div id="qrcode-temp" style="display:none;"></div>
+    <div id="login-screen" class="fixed inset-0 bg-slate-900 flex items-center justify-center z-[100]">
+        <div class="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full mx-4 text-center border-t-4 border-pink-500">
+            <img src="logo-ITC-NW-01-fond-blanc-01.jpg" alt="Logo ITC" class="h-20 mx-auto mb-4" />
+            <h2 class="text-xl font-black text-slate-900 mb-8 tracking-tighter italic">SÉCURITÉ ERP GLOBAL</h2>
+            <form onsubmit="handleLogin(event)" class="space-y-4">
+                <input id="login-email" type="email" placeholder="EMAIL PROFESSIONNEL" class="w-full border-2 p-3 rounded-xl text-xs uppercase outline-none" required />
+                <input id="login-password" type="password" placeholder="MOT DE PASSE" class="w-full border-2 p-3 rounded-xl text-xs outline-none" required />
+                <button type="submit" class="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-lg">AUTHENTIFICATION</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="main-app" class="hidden">
+        <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/60 z-40 hidden lg:hidden"></div>
+        <div class="flex h-screen overflow-hidden">
+            <aside id="sidebar" class="fixed lg:relative w-72 bg-slate-900 text-white h-full z-50 sidebar-transition sidebar-hidden lg:transform-none shadow-2xl flex flex-col">
+                <div class="p-4 bg-white border-b border-slate-800 flex flex-col items-center shrink-0">
+                    <img src="logo-ITC-NW-01-fond-blanc-01.jpg" alt="Logo ITC" class="h-16 lg:h-20 object-contain" />
+                </div>
+                <nav class="flex-1 mt-4 overflow-y-auto custom-scrollbar pb-10">
+                    <div id="menu-cockpit" onclick="showSection('cockpit'); toggleSidebarMobile();" class="cursor-pointer py-3 px-6 flex items-center hover:bg-slate-800 transition">
+                        <i class="fas fa-chart-line w-6 text-pink-500"></i><span class="ml-2">Tableau de Bord</span>
+                    </div>
+
+                    <div id="menu-superviseur" class="mt-6 hidden">
+                        <p class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50">Contrôle</p>
+                        <div onclick="showSection('trafic-audit'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
+                            <i class="fas fa-exchange-alt w-5 text-blue-400"></i> Journal d'Audit <span id="notif-superviseur" class="notification-badge hidden">0</span>
+                        </div>
+                    </div>
+
+                    <div id="menu-technicien" class="mt-6 hidden">
+                        <p class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50">Opérations Terrain</p>
+                        <div onclick="showSection('tech-nouvelle-demande'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-plus-circle w-5 text-green-500"></i> Demander Matériel</div>
+                        <div onclick="showSection('tech-retour-materiel'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-undo w-5 text-orange-400"></i> Retour de Stock</div>
+                        <div onclick="showSection('tech-mes-demandes'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic"><i class="fas fa-file-download w-5 text-pink-500"></i> Mes Bons <span id="notif-tech" class="notification-badge hidden">0</span></div>
+                    </div>
+
+                    <div id="menu-coordinatrice" class="mt-6 hidden">
+                        <p class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50">Gestion Flux</p>
+                        <div onclick="showSection('coord-demandes-tech'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic"><i class="fas fa-inbox w-5 text-orange-500"></i> Flux Tech <span id="notif-coord" class="notification-badge hidden">0</span></div>
+                        <div onclick="showSection('coord-creation-directe'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-plus-square w-5 text-pink-400"></i> Commande Directe</div>
+                        <div onclick="showSection('coord-excel'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-file-excel w-5 text-green-400"></i> Commande via Excel</div>
+                    </div>
+
+                    <div id="menu-gestionnaire" class="mt-6 hidden">
+                        <p class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50">Magasin</p>
+                        <div onclick="showSection('demandes-coordonnatrice'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic"><i class="fas fa-envelope-open-text w-5 text-yellow-500"></i> Commandes <span id="notif-gest-coord" class="notification-badge hidden">0</span></div>
+                        <div onclick="showSection('reception'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-download w-5 text-green-400"></i> Entrée Stock</div>
+                        <div onclick="showSection('livraison'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-truck-loading w-5 text-indigo-400"></i> Sortie Physique</div>
+                        <div onclick="showSection('gestion-retours'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-undo-alt w-5 text-orange-500"></i> Valider Retours</div>
+                        <div onclick="showSection('scanner-physique'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic font-black text-pink-400 border-l-2 border-pink-500 ml-2 mt-1">
+                          <i class="fas fa-qrcode w-5"></i> Scanner Bon (Cam)
+                      </div>
+                    </div>
+                    
+                    <div id="section-stock-disponible" class="mt-6 border-t border-slate-800 pt-4">
+                        <p class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50">Consultation Stock</p>
+                        <div onclick="showSection('stock-itc'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-box w-5 text-indigo-400"></i> STOCK ITC</div>
+                        <div onclick="showSection('stock-oci-cic'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-box w-5 text-green-400"></i> OCI-CIC</div>
+                        <div onclick="showSection('stock-moov'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-box w-5 text-yellow-400"></i> MOOV</div>
+                        <div onclick="showSection('stock-mtn'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-box w-5 text-red-400"></i> MTN</div>
+                    </div>
+                    
+                </nav>
+                <div class="p-4 border-t border-slate-800"><button onclick="logout()" class="w-full bg-red-600 text-white py-2 rounded-xl text-xs font-black uppercase hover:bg-red-700 transition">Déconnexion</button></div>
+            </aside>
+
+            <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+                <header class="h-16 bg-white border-b flex items-center justify-between px-8 shadow-sm shrink-0 font-black italic">
+                    <div class="flex items-center">
+                        <button onclick="toggleSidebar()" class="lg:hidden mr-4 text-slate-600 text-xl p-2 rounded-md hover:bg-slate-100 transition"><i class="fas fa-bars"></i></button>
+                        <h2 id="view-title" class="font-black text-slate-500 tracking-widest uppercase italic text-[10px]">ERP DASHBOARD</h2>
+                    </div>
+                    <div class="text-right">
+                        <p id="user-role-badge" class="text-[8px] font-black text-white bg-pink-600 px-2 py-0.5 rounded uppercase mb-1">RÔLE</p>
+                        <p id="user-name" class="text-slate-800 italic">UTILISATEUR</p>
+                    </div>
+                </header>
+                <div id="app-container" class="p-8 overflow-y-auto flex-1 h-full"></div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // --- BASE DE DONNÉES ---
+        const initialUsers = [
+            { id: 1, name: "AHONON ROGER", role: "Superviseur", email: "roger.ahonon@itc.ci", password: "admin123" },
+            { id: 2, name: "S. KOFFI", role: "Gestionnaire", email: "koffi@itc.ci", password: "gest123" },
+            { id: 7, name: "COORDINATRICE", role: "Coordinatrice", email: "coord@itc.ci", password: "coord123" },
+            { id: 8, name: "TECHNICIEN TERRAIN", role: "Technicien", email: "tech@itc.ci", password: "tech123" }
+        ];
+
+    let appData = JSON.parse(localStorage.getItem("itc_erp_v6_qr")) || {
+    stock: [], 
+    demandes: [], 
+    techDemandes: [], 
+    retours: [], 
+    notifications: [], 
+    scansDuJour: [], // Unique et bien placé
+    derniereDateScan: null, // Unique et bien placé
+    currentUserId: null, 
+    users: initialUsers // Une seule fois à la fin
+};
+
+        let currentUser = null;
+        function save() { 
+    localStorage.setItem("itc_erp_v6_qr", JSON.stringify(appData)); 
+}
+
+        // --- AUTH ---
+        function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById("login-email").value.toLowerCase().trim();
+            const password = document.getElementById("login-password").value.trim();
+            const user = appData.users.find(u => u.email === email && u.password === password);
+            if (!user) return alert("ACCÈS REFUSÉ");
+            currentUser = user; appData.currentUserId = user.id; save();
+            document.getElementById("login-screen").classList.add("hidden");
+            document.getElementById("main-app").classList.remove("hidden");
+            updateMenuVisibility(); updateUserInfo(); updateNotifications();
+            showSection(currentUser.role === 'Technicien' ? "tech-nouvelle-demande" : "cockpit");
+        }
+        function logout() { appData.currentUserId = null; save(); location.reload(); }
+
+        function updateMenuVisibility() {
+            const r = currentUser.role;
+            document.getElementById("menu-superviseur").classList.toggle("hidden", r !== "Superviseur");
+            document.getElementById("menu-technicien").classList.toggle("hidden", r !== "Technicien");
+            document.getElementById("menu-coordinatrice").classList.toggle("hidden", r !== "Coordinatrice");
+            document.getElementById("menu-gestionnaire").classList.toggle("hidden", r !== "Gestionnaire");
+            document.getElementById("section-stock-disponible").classList.toggle("hidden", r === "Technicien");
+            document.getElementById("menu-cockpit").classList.toggle("hidden", r === "Technicien");
+        }
+        function updateUserInfo() {
+            document.getElementById("user-name").innerText = currentUser.name;
+            document.getElementById("user-role-badge").innerText = currentUser.role.toUpperCase();
+        }
+        function toggleSidebar() { document.getElementById("sidebar").classList.toggle("sidebar-hidden"); document.getElementById("sidebar-overlay").classList.toggle("hidden"); }
+        function toggleSidebarMobile() { if (window.innerWidth < 1024) toggleSidebar(); }
+
+        function verifierReinitialisationQuotidienne() {
+    const aujourdhui = new Date().toLocaleDateString();
+    if (appData.derniereDateScan !== aujourdhui) {
+        appData.scansDuJour = []; // On vide l'historique
+        appData.derniereDateScan = aujourdhui; // On met à jour la date
+        save();
+    }
+}
+
+        // --- SECTION ROUTER ---
+        function showSection(id) {
+            const container = document.getElementById("app-container");
+            document.getElementById("view-title").innerText = id.toUpperCase().replace(/-/g, " ");
+            container.innerHTML = "";
+
+            if (id === "cockpit") renderCockpit(container);
+            else if (id === "tech-nouvelle-demande") renderTechDemandeForm(container);
+            else if (id === "tech-mes-demandes") renderTechMesDemandes(container);
+            else if (id === "tech-retour-materiel") renderRetourForm(container);
+            else if (id === "coord-demandes-tech") renderCoordFluxTech(container);
+            else if (id === "coord-creation-directe") renderCoordCreationDirecte(container);
+            else if (id === "coord-excel") renderCoordExcelUpload(container);
+            else if (id === "demandes-coordonnatrice") renderDemandesGestionnaire(container);
+            else if (id === "livraison") renderLivraisonForm(container);
+            else if (id === "gestion-retours") renderGestionRetours(container);
+            else if (id === "trafic-audit") renderTraficAudit(container);
+            else if (id === "reception") renderReceptionForm(container);
+            else if (id.startsWith("stock-")) renderStock(id.replace("stock-", ""), container);
+            // À ajouter dans la liste des if/else de showSection
+            else if (id === "scanner-physique") renderScanner(container);
+
+            if (["coord-demandes-tech", "demandes-coordonnatrice", "tech-mes-demandes", "coord-excel", "trafic-audit"].includes(id)) markNotificationsAsRead();
+        }
+
+        // --- AUTOMATISATION EXCEL (COORDINATRICE) ---
+        function renderCoordExcelUpload(container) {
+            container.innerHTML = `
+                <div class="max-w-2xl mx-auto bg-white p-10 rounded-3xl shadow-xl text-center">
+                    <i class="fas fa-file-excel text-6xl text-green-600 mb-6"></i>
+                    <h3 class="text-xl mb-4 font-black italic">Importer une liste de matériel</h3>
+                    <p class="text-slate-400 mb-8 text-[9px] uppercase">Colonnes attendues : "Désignation" et "Quantité"</p>
+                    <input type="file" id="excel-file" accept=".xlsx, .xls" class="hidden" onchange="processExcel(event)" />
+                    <button onclick="document.getElementById('excel-file').click()" class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700">Sélectionner le fichier Excel</button>
+                </div>`;
+        }
+
+        function processExcel(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const data = evt.target.result;
+                const workbook = XLSX.read(data, { type: 'binary' });
+                const sheetName = workbook.SheetNames[0];
+                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                renderExcelOrderForm(rows);
+            };
+            reader.readAsBinaryString(file);
+        }
+
+        function renderExcelOrderForm(items) {
+            const container = document.getElementById("app-container");
+            container.innerHTML = `
+                <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
+                    <h3 class="mb-8 border-b-4 border-indigo-600 pb-2 text-indigo-900 uppercase font-black italic">Formulaire de Commande via Excel</h3>
+                    <form onsubmit="handleExcelSubmit(event)" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border-2">
+                            <div><label class="text-[8px] text-slate-400">OPÉRATEUR SOURCE</label><input id="ex-op" type="text" value="ITC" class="w-full border-2 p-3 rounded-xl text-xs uppercase font-black bg-slate-100" readonly /></div>
+                            <div><label class="text-[8px] text-slate-400">CHEF D'ÉQUIPE</label><input id="ex-chef" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="NOM DU CHEF" required /></div>
+                            <div><label class="text-[8px] text-slate-400">NOM DE L'ÉQUIPE</label><input id="ex-team" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="NOM DE L'ÉQUIPE" required /></div>
+                            <div><label class="text-[8px] text-slate-400">MOTIF & LIEU D'INTERVENTION</label><input id="ex-motif" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="MOTIF ET LIEU" required /></div>
+                        </div>
+
+                        <div class="space-y-3" id="excel-items-list">
+                            <p class="text-[9px] text-indigo-600 mb-2 uppercase font-black">Matériel à valider ou modifier :</p>
+                            ${items.map(it => `
+                                <div class="flex gap-2 items-center art-row-ex bg-slate-50 p-2 rounded-xl border transition hover:border-indigo-300">
+                                    <input type="text" value="${it.Désignation || it.Article || ''}" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
+                                    <input type="number" value="${it.Quantité || it.Qté || 0}" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />
+                                    <button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>
+                                </div>
+                            `).join("")}
+                        </div>
+
+                        <div class="flex gap-4">
+                            <button type="button" onclick="addRowEx()" class="bg-slate-200 text-slate-700 px-6 py-3 rounded-xl text-[9px] uppercase font-black">+ Ajouter matériel</button>
+                            <button type="submit" class="flex-1 bg-indigo-600 text-white py-4 rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-black transition">Soumettre au Gestionnaire</button>
+                        </div>
+                    </form>
+                </div>`;
+        }
+
+        function renderScanner(container) {
+    // Vérification de la date à l'ouverture du scanner
+    verifierReinitialisationQuotidienne();
+
+    container.innerHTML = `
+        <div class="max-w-md mx-auto space-y-4">
+            <div class="bg-white p-6 rounded-3xl shadow-xl text-center">
+                <h3 class="mb-4 uppercase text-pink-600 font-black italic">Scanner de Bons ITC</h3>
+                <div id="reader" class="rounded-2xl overflow-hidden border-4 border-slate-100 bg-black"></div>
+                <div class="flex justify-center gap-4 mt-4">
+                    <button id="torch-button" class="bg-yellow-400 text-slate-900 px-4 py-2 rounded-xl text-[8px] font-black uppercase">
+                        <i class="fas fa-lightbulb"></i> Lampe
+                    </button>
+                </div>
+                <div id="scanner-result" class="mt-4 p-4 hidden bg-green-50 rounded-xl border border-green-200">
+                    <p class="text-[9px] text-green-700 font-black italic uppercase" id="scan-id-text"></p>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 text-white p-6 rounded-3xl shadow-xl">
+                <div class="flex justify-between items-center border-b border-slate-700 pb-2 mb-4">
+                    <h4 class="text-[9px] font-black uppercase italic text-slate-400">Scans du jour</h4>
+                    <span class="text-[8px] bg-slate-700 px-2 py-0.5 rounded">${new Date().toLocaleDateString()}</span>
+                </div>
+                <div class="space-y-3 max-h-40 overflow-y-auto custom-scrollbar">
+                    ${appData.scansDuJour.length === 0 ? 
+                        '<p class="text-center py-4 text-slate-600 text-[8px] uppercase">Aucun scan aujourd\'hui</p>' : 
+                        appData.scansDuJour.map(s => `
+                            <div class="flex justify-between items-center bg-slate-800 p-3 rounded-xl border-l-2 border-pink-500">
+                                <div>
+                                    <p class="text-pink-400 text-[9px] font-black">${s.id}</p>
+                                    <p class="text-[7px] text-slate-400 uppercase">${s.technicien}</p>
+                                </div>
+                                <span class="text-[8px] font-black text-slate-500">${s.heure}</span>
+                            </div>
+                        `).join("")
+                    }
+                </div>
+            </div>
+
+            <button onclick="showSection('cockpit')" class="w-full text-slate-400 text-[8px] uppercase font-black text-center">Retour au tableau de bord</button>
+        </div>`;
+
+    // ... (Code d'initialisation Html5Qrcode et Torch identique au précédent)
+    const html5QrCode = new Html5Qrcode("reader");
+    let isTorchOn = false;
+    const qrCodeSuccessCallback = (decodedText) => {
+        html5QrCode.stop().then(() => { handleScanSuccess(decodedText); }).catch(err => console.error(err));
+    };
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback).then(() => {
+        const torchBtn = document.getElementById("torch-button");
+        torchBtn.addEventListener("click", () => {
+            isTorchOn = !isTorchOn;
+            html5QrCode.applyVideoConstraints({ advanced: [{ torch: isTorchOn }] }).catch(e => {});
+            torchBtn.innerHTML = isTorchOn ? '<i class="fas fa-lightbulb"></i> Éteindre' : '<i class="fas fa-lightbulb"></i> Allumer';
+        });
+    });
+}
+
+function handleScanSuccess(id) {
+    const beep = document.getElementById("beep-sound");
+    if (beep) beep.play();
+    if (navigator.vibrate) navigator.vibrate(100);
+
+    const d = appData.demandes.find(x => x.id === id);
+    if (d) {
+        // 1. Vérifier la date avant d'ajouter
+        verifierReinitialisationQuotidienne();
+
+        // 2. Ajouter à l'historique du jour (si pas déjà présent pour éviter les doublons)
+        if (!appData.scansDuJour.some(s => s.id === id)) {
+            appData.scansDuJour.unshift({
+                id: id,
+                heure: new Date().toLocaleTimeString([], {hour: '2p', minute: '2p'}),
+                technicien: d.demandeurName
+            });
+            save();
+        }
+
+        const resultText = document.getElementById("scan-id-text");
+        const resultDiv = document.getElementById("scanner-result");
+        if (resultText && resultDiv) {
+            resultText.innerText = "BON DÉTECTÉ : " + id;
+            resultDiv.classList.remove("hidden");
+        }
+
+        setTimeout(() => {
+            if (d.status === "PRET" || d.status === "EN ATTENTE GESTIONNAIRE") {
+                prepSortie(id); 
+            } else {
+                alert("STATUT : " + d.status);
+                showSection("scanner-physique");
+            }
+        }, 1000);
+    } else {
+        alert("QR CODE INCONNU.");
+        showSection("scanner-physique");
+    }
+}
+        function addRowEx() {
+            const div = document.createElement("div"); div.className = "flex gap-2 items-center art-row-ex bg-slate-50 p-2 rounded-xl border";
+            div.innerHTML = `<input type="text" placeholder="DÉSIGNATION" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required /><input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" /><button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>`;
+            document.getElementById("excel-items-list").appendChild(div);
+        }
+
+        function handleExcelSubmit(e) {
+            e.preventDefault();
+            const items = [];
+            document.querySelectorAll(".art-row-ex").forEach(r => { items.push({ label: r.querySelector(".art-l").value.toUpperCase(), qty: parseInt(r.querySelector(".art-q").value) }); });
+            const motifComplet = `[ÉQUIPE: ${document.getElementById("ex-team").value}] CHEF: ${document.getElementById("ex-chef").value} | LIEU/MOTIF: ${document.getElementById("ex-motif").value}`;
+            const c = { id: "EXCEL-"+Date.now().toString().slice(-4), demandeurOriginalId: currentUser.id, demandeurName: "COORDINATION (AUTO)", op: "ITC", items, motif: motifComplet.toUpperCase(), status: "EN ATTENTE GESTIONNAIRE", date: new Date().toLocaleDateString() };
+            appData.demandes.unshift(c); addNotification(2, `COMMANDE VIA EXCEL : ${c.id}`); save(); alert("COMMANDE ÉMISE."); showSection("cockpit");
+        }
+
+        // --- COCKPIT & ALERTES ---
+        function renderCockpit(container) {
+            const totalStock = appData.stock.filter(s => s.op === "ITC").reduce((a, b) => a + b.qty, 0);
+            const pending = appData.demandes.filter(d => d.status === "EN ATTENTE GESTIONNAIRE").length;
+            const alerts = appData.stock.filter(s => s.op === "ITC" && s.qty < 5).length;
+
+            let html = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 font-black">
+                    <div class="bg-indigo-600 text-white p-6 rounded-3xl shadow-lg">
+                        <p class="text-[8px] opacity-60">STOCK TOTAL ITC</p>
+                        <p class="text-3xl font-black">${totalStock} U</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-yellow-500">
+                        <p class="text-[8px] text-slate-400 uppercase font-black">Commandes en attente</p>
+                        <p class="text-3xl text-slate-800">${pending}</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500">
+                        <p class="text-[8px] text-slate-400 uppercase font-black tracking-widest">Alertes Rupture</p>
+                        <p class="text-3xl text-red-600">${alerts}</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 italic font-bold">`;
+
+            ["ITC", "OCI-CIC", "MOOV", "MTN"].forEach(key => {
+                const group = appData.stock.filter(s => key === "OCI-CIC" ? ["OCI", "CIC", "OCI-CIC"].includes(s.op) : s.op === key);
+                html += `
+                    <div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 border-slate-200">
+                        <h3 class="text-xl font-black mb-6 uppercase text-indigo-900">${key}</h3>
+                        <div class="space-y-2">
+                            ${group.map(m => {
+                                let badgeColor = (key === 'ITC' && m.qty < 5) ? 'text-red-600 bg-red-50' : 'text-indigo-600 bg-indigo-50';
+                                return `<div class="flex justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">
+                                    <span class="w-2/3 truncate uppercase">${m.label}</span>
+                                    <span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">${key==='ITC'?m.qty+' U':'DISPO'}</span>
+                                    ${currentUser.role === 'Gestionnaire' ? `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 ml-2 hover:text-red-500"><i class="fas fa-trash"></i></button>` : ''}
+                                </div>`;
+                            }).join("")}
+                        </div>
+                    </div>`;
+            });
+            html += `</div>`; container.innerHTML = html;
+        }
+
+        function renderTechMesDemandes(container) {
+    // Affiche les bons dès qu'ils sont validés par la coordination
+    const myBS = appData.demandes.filter(d => 
+        d.demandeurOriginalId === currentUser.id && 
+        ["EN ATTENTE GESTIONNAIRE", "PRET", "LIVREE"].includes(d.status)
+    );
+
+    container.innerHTML = `
+        <div class="bg-white rounded-3xl p-8 shadow-xl italic font-bold">
+            <h3 class="border-b-2 mb-6 uppercase text-pink-600 font-black">Mes Bons de Sortie (Disponibles)</h3>
+            <div class="grid grid-cols-1 gap-4">
+                ${myBS.map(bs => `
+                    <div class="bg-slate-50 p-5 rounded-2xl border flex justify-between items-center">
+                        <div>
+                            <p class="text-indigo-900 font-black">${bs.id}</p>
+                            <p class="text-[8px] uppercase text-orange-500">STATUT : ${bs.status.replace(/-/g, " ")}</p>
+                            <p class="text-[7px] text-slate-400">PROJET : ${bs.motif}</p>
+                        </div>
+                        <button onclick="downloadPDF('${bs.id}')" class="bg-indigo-600 text-white px-6 py-3 rounded-xl text-[9px] font-black uppercase">
+                            <i class="fas fa-file-pdf mr-2"></i> Générer PDF
+                        </button>
+                    </div>`).join("")}
+                ${myBS.length === 0 ? '<p class="text-center py-10 opacity-30 uppercase">Aucun bon disponible</p>' : ''}
+            </div>
+        </div>`;
+}
+
+function renderTechDemandeForm(container) {
+    container.innerHTML = `
+        <div class="max-w-xl mx-auto bg-white p-8 rounded-3xl shadow-xl italic font-bold">
+            <h3 class="mb-6 uppercase text-indigo-600 border-b-2 pb-2 font-black italic">
+                <i class="fas fa-user-edit mr-2"></i> Identification & Besoins
+            </h3>
+            <form onsubmit="handleTechSubmit(event)" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[8px] text-slate-400 uppercase">Nom du Technicien</label>
+                        <input id="t-nom" type="text" value="${currentUser.name}" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50 outline-none focus:border-indigo-500" placeholder="VOTRE NOM" required />
+                    </div>
+                    <div>
+                        <label class="text-[8px] text-slate-400 uppercase">Nom de l'équipe</label>
+                        <input id="t-equipe" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50 outline-none focus:border-indigo-500" placeholder="EX: ÉQUIPE FIBRE 1" required />
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[8px] text-slate-400 uppercase">Lieu & Nom de la tâche (Site)</label>
+                    <input id="t-objectif" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50 outline-none focus:border-indigo-500" placeholder="EX: SITE COCODY - INSTALLATION BOX" required />
+                </div>
+                <div>
+                    <label class="text-[8px] text-slate-400 uppercase">Détails matériel & Quantités demandés</label>
+                    <textarea id="t-besoin" class="w-full border-2 p-3 rounded-xl text-xs h-32 uppercase bg-slate-50 outline-none focus:border-indigo-500" placeholder="EX: 5X CONNECTEURS, 1X ROUTEUR..." required></textarea>
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 text-white py-4 rounded-2xl text-[10px] uppercase font-black shadow-lg hover:bg-indigo-700 transition">
+                    Envoyer à la coordination
+                </button>
+            </form>
+        </div>`;
+}
+
+function handleTechSubmit(e) {
+    e.preventDefault();
+    const d = { 
+        id: "T-" + Date.now().toString().slice(-4), 
+        technicienId: currentUser.id, // Garde l'ID du compte pour l'archivage
+        technicienNom: document.getElementById("t-nom").value.toUpperCase(), // Récupère le nom saisi
+        equipe: document.getElementById("t-equipe").value.toUpperCase(),
+        besoin: document.getElementById("t-besoin").value.toUpperCase(), 
+        objectif: document.getElementById("t-objectif").value.toUpperCase(), 
+        statut: "EN ATTENTE COORDINATION", 
+        date: new Date().toLocaleDateString() 
+    };
+    appData.techDemandes.unshift(d); 
+    addNotification(7, `BESOIN : ${d.technicienNom} (${d.equipe})`); 
+    save(); 
+    alert("DEMANDE TRANSMISE À LA COORDINATRICE."); 
+    showSection("cockpit");
+}
+function renderCoordFluxTech(container) {
+    const data = appData.techDemandes.filter(d => d.statut === "EN ATTENTE COORDINATION");
+    
+    container.innerHTML = `
+        <div class="bg-white rounded-3xl shadow-xl p-8">
+            <h3 class="mb-6 uppercase border-b-2 pb-2 text-orange-500 font-black italic">
+                <i class="fas fa-truck-pickup mr-2"></i> Besoins Techniciens en attente
+            </h3>
+            <div class="space-y-4">
+                ${data.map(d => `
+                    <div class="bg-slate-50 p-5 rounded-2xl border-2 border-slate-100 flex justify-between items-center transition hover:border-orange-300">
+                        <div class="w-2/3">
+                            <p class="font-black text-indigo-900 text-[11px]">
+                                ${d.technicienNom} 
+                                <span class="text-indigo-400 font-medium ml-2">[ÉQUIPE : ${d.equipe || 'N/A'}]</span>
+                            </p>
+                            
+                            <p class="text-[9px] text-pink-600 font-black uppercase mt-1">
+                                <i class="fas fa-map-marker-alt mr-1"></i> SITE : ${d.objectif}
+                            </p>
+                            
+                            <div class="mt-2 p-2 bg-white rounded-lg border border-slate-200">
+                                <p class="text-[8px] text-slate-400 uppercase mb-1">Matériel & Quantités demandés :</p>
+                                <p class="text-[9px] uppercase text-slate-700 leading-tight">${d.besoin}</p>
+                            </div>
+                            
+                            <p class="text-[7px] text-slate-300 mt-2">ÉMIS LE : ${d.date}</p>
+                        </div>
+                        
+                        <div class="text-right">
+                            <button onclick="preparerCmd('${d.id}')" class="bg-indigo-600 text-white px-6 py-3 rounded-xl text-[9px] uppercase font-black shadow-md hover:bg-indigo-700 transition">
+                                Traiter & Assigner
+                            </button>
+                        </div>
+                    </div>
+                `).join("")}
+                ${data.length === 0 ? `
+                    <div class="py-20 text-center">
+                        <i class="fas fa-check-circle text-slate-200 text-5xl mb-4"></i>
+                        <p class="text-slate-400 italic uppercase">Aucun nouveau besoin terrain à traiter</p>
+                    </div>
+                ` : ''}
+            </div>
+        </div>`;
+}
+
+        function preparerCmd(id) {
+            const tech = appData.techDemandes.find(x => x.id === id); window._currentTechProcess = tech;
+            const container = document.getElementById("app-container");
+            container.innerHTML = `<div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold font-black"><h3 class="mb-6 border-b-2 text-pink-600 uppercase">Conversion du besoin</h3><input id="c-motif" type="text" class="w-full border-2 p-3 rounded-xl mb-6 text-xs uppercase bg-slate-50" value="${tech.objectif}" required /><div id="cmd-list" class="space-y-3"></div><button onclick="addRow()" class="text-indigo-600 text-[9px] mt-4 uppercase">+ ARTICLE</button><button onclick="submitCmd()" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] mt-8 uppercase font-black">Envoyer Magasin</button></div>`;
+            addRow();
+        }
+
+        function addRow() {
+            const div = document.createElement("div"); div.className = "flex gap-2 items-center art-row bg-slate-50 p-2 rounded-xl";
+            const stockITC = appData.stock.filter(s => s.op === "ITC");
+            div.innerHTML = `<select class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase">${stockITC.map(s => `<option value="${s.label}">${s.label} (${s.qty} DISPO)</option>`).join("")}</select><input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />`;
+            document.getElementById("cmd-list").appendChild(div);
+        }
+
+        function submitCmd() {
+    const tech = window._currentTechProcess;
+    const items = [];
+    document.querySelectorAll(".art-row").forEach(r => {
+        const label = r.querySelector(".art-l").value;
+        const qty = parseInt(r.querySelector(".art-q").value);
+        if(label && qty > 0) items.push({ label, qty });
+    });
+
+    const c = { 
+        id: "BS-" + Date.now().toString().slice(-4), 
+        demandeurOriginalId: tech.technicienId, 
+        demandeurName: tech.technicienNom,
+        coordinateurNom: currentUser.name, // Nom de la coordinatrice connectée
+        prestataire: "ITC / " + (tech.equipe || "TERRAIN"), 
+        op: "ITC", 
+        items, 
+        motif: tech.objectif.toUpperCase(), 
+        status: "EN ATTENTE GESTIONNAIRE", // Disponible immédiatement pour le tech
+        date: new Date().toLocaleDateString() 
+    };
+    
+    appData.demandes.unshift(c); 
+    tech.statut = "VALIDÉ";
+    addNotification(tech.technicienId, `VOTRE BON ${c.id} EST PRÊT. TÉLÉCHARGEZ LE PDF.`);
+    save(); 
+    alert("COMMANDE ENVOYÉE AU MAGASIN ET BON TRANSMIS AU TECHNICIEN."); 
+    showSection("cockpit");
+}
+
+        function renderCoordCreationDirecte(container) {
+            container.innerHTML = `<div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl"><h3 class="mb-6 border-b-2 text-pink-600 uppercase font-black italic">Commande Directe (Manuelle)</h3><form onsubmit="handleDirectSubmit(event)" class="space-y-6"><div class="grid grid-cols-2 gap-4"><div><label class="text-[8px] text-slate-400">OPÉRATEUR</label><select id="d-op" onchange="refreshDirectMaterials()" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50"><option value="ITC">ITC</option><option value="OCI-CIC">OCI-CIC</option><option value="MOOV">MOOV</option><option value="MTN">MTN</option></select></div><div><label class="text-[8px] text-slate-400">MOTIF</label><input id="d-motif" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required /></div></div><div id="direct-items-list" class="space-y-3"></div><button type="button" onclick="addDirectRow()" class="text-indigo-600 text-[9px] uppercase border-b-2 border-indigo-50">+ ARTICLE</button><button type="submit" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] mt-8 uppercase font-black">Confirmer</button></form></div>`;
+            addDirectRow();
+        }
+
+        function addDirectRow() {
+            const op = document.getElementById('d-op').value;
+            const materials = appData.stock.filter(s => (op === "OCI-CIC" ? ["OCI", "CIC", "OCI-CIC"].includes(s.op) : s.op === op));
+            const div = document.createElement("div"); div.className = "flex gap-2 items-center direct-row bg-slate-50 p-3 rounded-xl transition hover:border-pink-200 border";
+            div.innerHTML = `<select class="flex-1 border p-2 rounded-lg text-[9px] art-l uppercase">${materials.map(s => `<option value="${s.label}">${s.label} ${op==='ITC'?'('+s.qty+' U)':''}</option>`).join("")}</select><input type="number" placeholder="QTÉ" class="w-24 border p-2 rounded-lg text-[9px] art-q" required min="1" /><button type="button" onclick="this.parentElement.remove()" class="text-red-500 px-2"><i class="fas fa-trash"></i></button>`;
+            document.getElementById("direct-items-list").appendChild(div);
+        }
+
+        function refreshDirectMaterials() { document.getElementById("direct-items-list").innerHTML = ""; addDirectRow(); }
+
+        function handleDirectSubmit(e) {
+            e.preventDefault();
+            const items = []; document.querySelectorAll(".direct-row").forEach(r => { items.push({ label: r.querySelector(".art-l").value, qty: parseInt(r.querySelector(".art-q").value) }); });
+            const c = { id: "CMD-D-"+Date.now().toString().slice(-4), demandeurOriginalId: currentUser.id, demandeurName: "COORDINATION", op: document.getElementById("d-op").value, items, motif: document.getElementById("d-motif").value.toUpperCase(), status: "EN ATTENTE GESTIONNAIRE", date: new Date().toLocaleDateString() };
+            appData.demandes.unshift(c); addNotification(2, `COMMANDE DIRECTE : ${c.id}`); save(); alert("TRANSMIS."); showSection("cockpit");
+        }
+
+        // --- RETOURS TERRAIN ---
+        function renderRetourForm(container) {
+            container.innerHTML = `<div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black"><h3 class="mb-6 uppercase text-orange-500 border-b-2 pb-2">Déclarer un Retour</h3><form onsubmit="handleRetourSubmit(event)" class="space-y-4"><input id="ret-label" type="text" placeholder="MATÉRIEL RENDU" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required /><div class="grid grid-cols-2 gap-4"><input id="ret-qty" type="number" placeholder="QTÉ" class="w-full border-2 p-3 rounded-xl text-xs" required min="1" /><select id="ret-etat" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-100"><option value="NEUF">NEUF</option><option value="DÉFECTUEUX">DÉFECTUEUX</option></select></div><textarea id="ret-motif" placeholder="MOTIF DU RETOUR..." class="w-full border-2 p-3 rounded-xl text-xs h-24 uppercase bg-slate-50" required></textarea><button type="submit" class="w-full bg-orange-500 text-white py-4 rounded-2xl text-[10px] uppercase font-black">Valider Retour</button></form></div>`;
+        }
+
+        function handleRetourSubmit(e) {
+            e.preventDefault();
+            const r = { id: "RET-"+Date.now().toString().slice(-4), techName: currentUser.name, label: document.getElementById("ret-label").value.toUpperCase(), qty: parseInt(document.getElementById("ret-qty").value), etat: document.getElementById("ret-etat").value, motif: document.getElementById("ret-motif").value.toUpperCase(), date: new Date().toLocaleDateString(), status: "EN ATTENTE" };
+            appData.retours.unshift(r); addNotification(2, `RETOUR : ${r.techName}`); save(); alert("RETOUR ENREGISTRÉ."); showSection("cockpit");
+        }
+
+        // --- GESTION MAGASIN ---
+        function renderDemandesGestionnaire(container) {
+            const data = appData.demandes.filter(d => d.status === "EN ATTENTE GESTIONNAIRE");
+            container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl"><h3 class="border-b-2 mb-6 uppercase text-yellow-600 font-black italic">Préparation Commandes</h3><div class="space-y-4">
+                ${data.map(d => `<div class="bg-slate-50 p-4 rounded-2xl flex justify-between items-center border hover:border-yellow-200 transition"><div><p class="font-black text-indigo-900">${d.id} | ${d.demandeurName}</p><p class="text-[7px] text-orange-500 uppercase italic">MOTIF : ${d.motif}</p></div><button onclick="prepSortie('${d.id}')" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow">Réserver</button></div>`).join("")}
+                ${data.length === 0 ? '<p class="text-center opacity-30 py-10">LISTE VIDE</p>' : ''}
+            </div></div>`;
+        }
+
+        function prepSortie(id) { const d = appData.demandes.find(x => x.id === id); d.status = "PRET"; save(); showSection("livraison"); }
+
+        function renderLivraisonForm(container) {
+            const data = appData.demandes.filter(d => d.status === "PRET");
+            container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl italic font-bold">
+                <h3 class="mb-6 uppercase border-b-2 pb-2 text-green-600 font-black italic font-black">Validation Sortie Physique</h3>
+                <div class="space-y-6">
+                    ${data.map(d => `<div class="bg-slate-50 p-6 rounded-2xl border-2 border-green-100 font-black"><p class="font-black uppercase text-indigo-900 mb-2">${d.id} | ${d.demandeurName}</p><ul class="text-[9px] text-slate-600 mb-4 list-disc list-inside uppercase">${d.items.map(i => `<li>${i.label} : ${i.qty} U</li>`).join("")}</ul><button onclick="finalSortie('${d.id}')" class="w-full bg-indigo-600 text-white py-3 rounded-xl text-[10px] uppercase font-black transition hover:bg-black">Confirmer Sortie Physique</button></div>`).join("")}
+                </div></div>`;
+        }
+
+        function finalSortie(id) {
+            const d = appData.demandes.find(x => x.id === id);
+            let stockInsuffisant = false;
+            d.items.forEach(i => { const s = appData.stock.find(st => st.label === i.label && st.op === d.op); if (!s || s.qty < i.qty) stockInsuffisant = true; });
+            if (stockInsuffisant) return alert("STOCK INSUFFISANT !");
+            d.items.forEach(i => { const s = appData.stock.find(st => st.label === i.label && st.op === d.op); if (s) s.qty -= i.qty; });
+            d.status = "LIVREE"; d.dateLivraison = new Date().toLocaleDateString();
+            addNotification(1, `AUDIT : SORTIE VALIDÉE (${d.id})`);
+            addNotification(d.demandeurOriginalId, `VOTRE MATÉRIEL EST DISPONIBLE (${d.id}).`);
+            save(); alert("TERMINÉ."); showSection("cockpit");
+        }
+
+        function renderGestionRetours(container) {
+            const pending = appData.retours.filter(r => r.status === "EN ATTENTE");
+            container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl"><h3 class="border-b-2 mb-6 uppercase text-orange-600 font-black italic">Validation Retours</h3><div class="space-y-4">
+                ${pending.map(r => `<div class="bg-slate-50 p-4 rounded-2xl border flex justify-between items-center"><div><p class="font-black text-indigo-900">${r.techName} [${r.etat}]</p><p class="text-[9px] uppercase">${r.qty}x ${r.label}</p></div><button onclick="validerRetour('${r.id}')" class="bg-green-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase">Réintégrer</button></div>`).join("")}
+            </div></div>`;
+        }
+
+        function validerRetour(id) {
+            const r = appData.retours.find(x => x.id === id);
+            if (r.etat === "NEUF") {
+                const s = appData.stock.find(st => st.label === r.label && st.op === "ITC");
+                if (s) s.qty += r.qty; else appData.stock.push({ op: "ITC", label: r.label, qty: r.qty, type: "RETOUR" });
+            }
+            r.status = "VALIDÉ"; addNotification(1, `AUDIT : RETOUR RÉINTÉGRÉ (${r.label})`); save(); alert("STOCK À JOUR."); showSection("gestion-retours");
+        }
+
+        // --- AUTRES ---
+        function renderReceptionForm(container) {
+            container.innerHTML = `<div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black"><h3 class="mb-8 uppercase border-b-2 text-indigo-600 italic">Mise en Stock</h3><form onsubmit="handleRec(event)" class="space-y-5"><select id="r-op" onchange="toggleQtyField(this.value)" class="w-full border-2 p-3 rounded-xl uppercase text-xs"><option value="ITC">ITC</option><option value="OCI-CIC">OCI-CIC</option><option value="MOOV">MOOV</option><option value="MTN">MTN</option></select><input id="r-type" type="text" placeholder="TYPE" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required /><input id="r-mat" type="text" placeholder="NOM" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required /><div id="qty-container"><input id="r-qty" type="number" class="w-full border-2 p-3 rounded-xl text-xs bg-slate-50" placeholder="QUANTITÉ" /></div><button class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] uppercase font-black transition hover:bg-black">Confirmer</button></form></div>`;
+            toggleQtyField('ITC');
+        }
+
+        function handleRec(e) { e.preventDefault(); const mat = { op: document.getElementById("r-op").value, label: document.getElementById("r-mat").value.toUpperCase(), qty: parseInt(document.getElementById("r-qty").value) || 0, type: document.getElementById("r-type").value.toUpperCase() }; const existing = appData.stock.find(s => s.op === mat.op && s.label === mat.label); if(existing && mat.op === 'ITC') existing.qty += mat.qty; else appData.stock.push(mat); addNotification(1, `TRAFIC : ENTRÉE STOCK (${mat.label})`); save(); alert("ENREGISTRÉ."); showSection("cockpit"); }
+        function toggleQtyField(v) { document.getElementById('qty-container').style.display = (v === 'ITC' ? 'block' : 'none'); }
+
+        function renderStock(opKey, container) {
+            const ops = opKey === "oci-cic" ? ["OCI", "CIC", "OCI-CIC"] : [opKey.toUpperCase()];
+            const stockEntite = appData.stock.filter(s => ops.includes(s.op));
+            container.innerHTML = `<div class="bg-white rounded-3xl shadow-xl overflow-hidden font-bold italic"><div class="p-6 bg-slate-900 text-white flex justify-between"><h3 class="text-xl uppercase font-black tracking-widest italic">STOCK ${opKey.toUpperCase()}</h3></div><div class="p-6"><table class="w-full text-left"><thead><tr class="text-[8px] text-slate-400 border-b uppercase font-black"><th>Type</th><th>Désignation</th><th class="text-center">Quantité</th></tr></thead><tbody>${stockEntite.map(s => `<tr class="border-b"><td class="py-4 text-slate-400 font-black">${s.type}</td><td class="py-4 text-indigo-900 font-black">${s.label}</td><td class="py-4 text-center font-black">${s.op==='ITC'?s.qty:'DISPONIBLE'}</td></tr>`).join("")}</tbody></table></div></div>`;
+        }
+
+        function renderTraficAudit(container) {
+            const notifs = appData.notifications.filter(n => n.userId === 1);
+            container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic uppercase"><h3 class="border-b-2 mb-6 text-blue-600 font-black tracking-tighter italic">Journal d'Audit</h3><div class="space-y-3">${notifs.map(n => `<div class="bg-slate-50 p-4 rounded-xl border-l-4 border-indigo-400"><p class="text-[9px] text-slate-800">${n.message}</p><p class="text-[7px] text-slate-400 mt-2">${n.date}</p></div>`).join("")}</div></div>`;
+        }
+
+        async function downloadPDF(id) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const d = appData.demandes.find(x => x.id === id);
+    
+    // 1. GÉNÉRATION DU QR CODE
+    document.getElementById("qrcode-temp").innerHTML = ""; // Nettoyage
+    new QRCode(document.getElementById("qrcode-temp"), {
+        text: d.id, // Le QR code contient l'identifiant du bon (ex: BS-1234)
+        width: 100,
+        height: 100
+    });
+
+    // On laisse un petit délai (500ms) pour que le navigateur génère l'image du QR Code
+    setTimeout(() => {
+        try {
+            const qrCanvas = document.querySelector("#qrcode-temp canvas");
+            const qrImage = qrCanvas.toDataURL("image/jpeg");
+
+            // 2. EN-TÊTE & LOGO
+            const logoUrl = "logo-ITC-NW-01-fond-blanc-01.jpg";
+            doc.addImage(logoUrl, 'JPEG', 15, 10, 40, 20);
+            
+            // Insertion du QR Code en haut à droite
+            doc.addImage(qrImage, 'JPEG', 165, 10, 25, 25);
+            
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(16);
+            doc.setTextColor(102, 34, 119); // Violet ITC
+            doc.text("BON DE SORTIE MATÉRIEL", 105, 22, { align: "center" });
+
+            // 3. BLOC D'INFOS (PROJET, COORDINATEUR, PRESTATAIRE)
+            doc.setDrawColor(200); 
+            doc.rect(15, 40, 180, 40); // Cadre des infos
+            
+            doc.setFontSize(9); 
+            doc.setTextColor(50);
+            doc.text(`RÉFÉRENCE : ${d.id}`, 20, 48);
+            doc.text(`PROJET / SITE : ${d.motif}`, 20, 58);
+            doc.text(`PRESTATAIRE / CLIENT : ${d.prestataire || 'ITC TELECOM'}`, 20, 68);
+            
+            doc.text(`DATE ÉMISSION : ${d.date}`, 120, 48);
+            doc.text(`COORDINATEUR : ${d.coordinateurNom || 'DIRECTION TECHNIQUE'}`, 120, 58);
+            doc.text(`TECHNICIEN : ${d.demandeurName}`, 120, 68);
+
+            // 4. TABLEAU DES ARTICLES (DEMANDÉ VS REÇU)
+            doc.autoTable({
+                startY: 85,
+                head: [['DÉSIGNATION DU MATÉRIEL', 'QTÉ DEMANDÉE', 'QTÉ REÇUE']],
+                body: d.items.map(i => [
+                    i.label.toUpperCase(), 
+                    i.qty, 
+                    d.status === "LIVREE" ? i.qty : "___" // Rempli uniquement si le magasinier a validé
+                ]),
+                theme: 'grid',
+                headStyles: { fillColor: [102, 34, 119], halign: 'center' },
+                columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' } }
+            });
+
+            // 5. ESPACE SIGNATURES
+            const finalY = doc.lastAutoTable.finalY + 20;
+            doc.setFont("helvetica", "bold");
+            doc.text("VISA GESTIONNAIRE", 35, finalY);
+            doc.text("VISA RÉCEPTIONNAIRE (TECH)", 135, finalY);
+            
+            doc.setDrawColor(102, 34, 119);
+            doc.rect(20, finalY + 5, 60, 25);  // Cadre Magasin
+            doc.rect(130, finalY + 5, 60, 25); // Cadre Tech
+
+            doc.save(`BS_ITC_${d.id}.pdf`);
+            
+        } catch (error) {
+            console.error(error);
+            alert("Erreur lors de la création du PDF. Assurez-vous que le fichier logo est présent.");
+        }
+    }, 500); 
+}
+        function markNotificationsAsRead() { if (!currentUser) return; appData.notifications.forEach(n => { if (n.userId === currentUser.id) n.lu = true; }); save(); updateNotifications(); }
+        function addNotification(u, m) { if(!appData.notifications) appData.notifications = []; appData.notifications.unshift({ userId: u, message: m, lu: false, date: new Date().toLocaleString() }); save(); updateNotifications(); }
+        function updateNotifications() {
+            if (!currentUser) return;
+            const count = appData.notifications.filter(n => n.userId === currentUser.id && !n.lu).length;
+            ["notif-coord", "notif-tech", "notif-superviseur", "notif-gest-coord"].forEach(id => { const el = document.getElementById(id); if(el) { el.innerText = count; el.classList.toggle("hidden", count === 0); }});
+        }
+        function deleteMaterial(op, label) { if (!confirm("VOULEZ-VOUS SUPPRIMER CET ARTICLE ?")) return; appData.stock = appData.stock.filter(s => !(s.op === op && s.label === label)); addNotification(1, `ALERTE : ARTICLE SUPPRIMÉ (${label})`); save(); showSection("cockpit"); }
+
+        // INITIALISATION
+        if (appData.currentUserId) {
+            currentUser = appData.users.find(u => u.id === appData.currentUserId);
+            if (currentUser) {
+                document.getElementById("login-screen").classList.add("hidden");
+                document.getElementById("main-app").classList.remove("hidden");
+                updateMenuVisibility(); updateUserInfo(); updateNotifications();
+                showSection(currentUser.role === 'Technicien' ? "tech-nouvelle-demande" : "cockpit");
+            }
+        }
+    </script>
+</body>
+</html>
