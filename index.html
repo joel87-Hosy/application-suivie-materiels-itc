@@ -680,59 +680,77 @@ function handleScanSuccess(id) {
 
         // --- COCKPIT & ALERTES ---
         function renderCockpit(container) {
-            const totalStock = appData.stock.filter(s => s.op === "ITC").reduce((a, b) => a + b.qty, 0);
-            const pending = appData.demandes.filter(d => d.status === "EN ATTENTE GESTIONNAIRE").length;
-            const alerts = appData.stock.filter(s => s.op === "ITC" && s.qty < 5).length;
+    // 1. SÉCURITÉ : On définit des listes vides par défaut si les données manquent
+    const stock = appData.stock || [];
+    const demandes = appData.demandes || [];
 
-            let html = `
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 font-black">
-                    <div class="bg-indigo-600 text-white p-6 rounded-3xl shadow-lg">
-                        <p class="text-[8px] opacity-60">STOCK TOTAL ITC</p>
-                        <p class="text-3xl font-black">${totalStock} U</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-yellow-500">
-                        <p class="text-[8px] text-slate-400 uppercase font-black">Commandes en attente</p>
-                        <p class="text-3xl text-slate-800">${pending}</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500">
-                        <p class="text-[8px] text-slate-400 uppercase font-black tracking-widest">Alertes Rupture</p>
-                        <p class="text-3xl text-red-600">${alerts}</p>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 italic font-bold">`;
-
-            ["ITC", "OCI-CIC", "MOOV", "MTN"].forEach(key => {
-                const group = appData.stock.filter(s => key === "OCI-CIC" ? ["OCI", "CIC", "OCI-CIC"].includes(s.op) : s.op === key);
-                html += `
-                    <div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 border-slate-200">
-                        <h3 class="text-xl font-black mb-6 uppercase text-indigo-900">${key}</h3>
-                        <div class="space-y-2">
+    // 2. CALCULS SÉCURISÉS
+    const totalStock = stock
+        .filter(s => s.op === "ITC")
+        .reduce((a, b) => a + (parseInt(b.qty) || 0), 0);
     
-${group.map(m => {
-    let badgeColor = (key === 'ITC' && m.qty < 5) ? 'text-red-600 bg-red-50' : 'text-indigo-600 bg-indigo-50';
-    return `<div class="flex justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">
-        <span class="w-1/2 truncate uppercase">${m.label}</span>
-        <div class="flex items-center gap-2">
-            <span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">${key==='ITC'?m.qty+' U':'DISPO'}</span>
-            
-            ${(currentUser.role === 'Gestionnaire' && key === 'ITC') ? 
-                `<button onclick="ouvrirModifStock('${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1">
-                    <i class="fas fa-edit"></i>
-                </button>` : ''}
+    const pending = demandes.filter(d => d.status === "EN ATTENTE GESTIONNAIRE").length;
+    
+    const alerts = stock.filter(s => s.op === "ITC" && (parseInt(s.qty) || 0) < 5).length;
 
-            ${currentUser.role === 'Gestionnaire' ? 
-                `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 hover:text-red-500 ml-1">
-                    <i class="fas fa-trash"></i>
-                </button>` : ''}
+    let html = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 font-black">
+            <div class="bg-indigo-600 text-white p-6 rounded-3xl shadow-lg">
+                <p class="text-[8px] opacity-60">STOCK TOTAL ITC</p>
+                <p class="text-3xl font-black">${totalStock} U</p>
+            </div>
+            <div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-yellow-500">
+                <p class="text-[8px] text-slate-400 uppercase font-black">Commandes en attente</p>
+                <p class="text-3xl text-slate-800">${pending}</p>
+            </div>
+            <div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500">
+                <p class="text-[8px] text-slate-400 uppercase font-black tracking-widest">Alertes Rupture</p>
+                <p class="text-3xl text-red-600">${alerts}</p>
+            </div>
         </div>
-    </div>`;
-}).join("")}
-                        </div>
-                    </div>`;
-            });
-            html += `</div>`; container.innerHTML = html;
-        }
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 italic font-bold">`;
 
+    // 3. AFFICHAGE DES GROUPES PAR OPÉRATEUR
+    ["ITC", "OCI-CIC", "MOOV", "MTN"].forEach(key => {
+        const group = stock.filter(s => 
+            key === "OCI-CIC" ? ["OCI", "CIC", "OCI-CIC"].includes(s.op) : s.op === key
+        );
+
+        html += `
+            <div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 border-slate-200">
+                <h3 class="text-xl font-black mb-6 uppercase text-indigo-900">${key}</h3>
+                <div class="space-y-2">
+                    ${group.length > 0 ? group.map(m => {
+                        let qtyVal = parseInt(m.qty) || 0;
+                        let badgeColor = (key === 'ITC' && qtyVal < 5) ? 'text-red-600 bg-red-50' : 'text-indigo-600 bg-indigo-50';
+                        
+                        return `
+                        <div class="flex justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">
+                            <span class="w-1/2 truncate uppercase">${m.label}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">
+                                    ${key === 'ITC' ? qtyVal + ' U' : 'DISPO'}
+                                </span>
+                                
+                                ${(currentUser.role === 'Gestionnaire' && key === 'ITC') ? 
+                                    `<button onclick="ouvrirModifStock('${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1">
+                                        <i class="fas fa-edit"></i>
+                                    </button>` : ''}
+
+                                ${currentUser.role === 'Gestionnaire' ? 
+                                    `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 hover:text-red-500 ml-1">
+                                        <i class="fas fa-trash"></i>
+                                    </button>` : ''}
+                            </div>
+                        </div>`;
+                    }).join("") : '<p class="text-[8px] text-slate-400 opacity-50">Aucun matériel répertorié</p>'}
+                </div>
+            </div>`;
+    });
+
+    html += `</div>`; 
+    container.innerHTML = html;
+}
         function ouvrirModifStock(label) {
     const item = appData.stock.find(s => s.label === label && s.op === "ITC");
     if (!item) return;
@@ -1026,12 +1044,42 @@ function addDirectRow() {
 
         // --- GESTION MAGASIN ---
         function renderDemandesGestionnaire(container) {
-            const data = appData.demandes.filter(d => d.status === "EN ATTENTE GESTIONNAIRE");
-            container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl"><h3 class="border-b-2 mb-6 uppercase text-yellow-600 font-black italic">Préparation Commandes</h3><div class="space-y-4">
-                ${data.map(d => `<div class="bg-slate-50 p-4 rounded-2xl flex justify-between items-center border hover:border-yellow-200 transition"><div><p class="font-black text-indigo-900">${d.id} | ${d.demandeurName}</p><p class="text-[7px] text-orange-500 uppercase italic">MOTIF : ${d.motif}</p></div><button onclick="prepSortie('${d.id}')" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow">Réserver</button></div>`).join("")}
-                ${data.length === 0 ? '<p class="text-center opacity-30 py-10">LISTE VIDE</p>' : ''}
-            </div></div>`;
-        }
+    // 1. SÉCURITÉ : On vérifie que appData existe et on crée une liste vide si demandes est absent
+    if (!appData) return;
+    const toutesLesDemandes = appData.demandes || [];
+
+    // 2. FILTRAGE : On récupère uniquement les bons en attente
+    const data = toutesLesDemandes.filter(d => d.status === "EN ATTENTE GESTIONNAIRE");
+
+    // 3. GÉNÉRATION DE L'INTERFACE
+    container.innerHTML = `
+        <div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic font-black">
+            <h3 class="border-b-2 mb-6 uppercase text-yellow-600 font-black italic">
+                Préparation Commandes
+            </h3>
+            
+            <div class="space-y-4">
+                ${data.map(d => `
+                    <div class="bg-slate-50 p-4 rounded-2xl flex justify-between items-center border hover:border-yellow-200 transition">
+                        <div>
+                            <p class="font-black text-indigo-900">${d.id} | ${d.demandeurName}</p>
+                            <p class="text-[7px] text-orange-500 uppercase italic">MOTIF : ${d.motif || 'NON PRÉCISÉ'}</p>
+                        </div>
+                        <button onclick="prepSortie('${d.id}')" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-indigo-700 transition">
+                            Réserver
+                        </button>
+                    </div>
+                `).join("")}
+                
+                ${data.length === 0 ? `
+                    <div class="text-center py-10">
+                        <i class="fas fa-inbox text-slate-200 text-3xl mb-3"></i>
+                        <p class="opacity-30 uppercase text-[10px]">Aucune commande en attente de préparation</p>
+                    </div>
+                ` : ''}
+            </div>
+        </div>`;
+}
 
         function prepSortie(id) { const d = appData.demandes.find(x => x.id === id); d.status = "PRET"; save(); showSection("livraison"); }
 
