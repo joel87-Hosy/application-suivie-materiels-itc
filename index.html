@@ -117,6 +117,7 @@
     </div>
 
     <script>
+        let currentSectionId = "cockpit"; // Par défaut on est sur le cockpit
 // CONFIGURATION FIREBASE
 const firebaseConfig = {
     apiKey: "AIzaSyD7P-6vY3yHQx7OFCs6th6gN6EURP89QUQ",
@@ -144,19 +145,52 @@ let appData = {
         { id: 8, name: "TECHNICIEN TERRAIN", role: "Technicien", email: "tech@itc.ci" }
     ]
 };
-// Écoute des changements sur Firebase
+// Écoute en temps réel des changements sur Firebase
+// Écoute en temps réel des changements sur Firebase
 db.ref('itc_data').on('value', (snapshot) => {
     const data = snapshot.val();
-    if (data) {
-        // On fusionne les données sans écraser les utilisateurs locaux
-        appData = { ...appData, ...data };
-        if (currentUser) {
-            updateNotifications();
-            // Optionnel : rafraîchir la vue actuelle si nécessaire
+    
+    // On vérifie que les données existent et que l'utilisateur est connecté
+    if (data && currentUser) {
+        appData = data; // Mise à jour de la mémoire locale
+        updateNotifications(); // Met à jour les petites pastilles rouges
+        
+        const container = document.getElementById("app-container");
+
+        // --- LOGIQUE DE RAFRAÎCHISSEMENT INTELLIGENT ---
+        // On ne redessine que la section que l'utilisateur est en train de regarder
+        
+        if (currentSectionId === "cockpit") {
+            renderCockpit(container);
+        } 
+        else if (currentSectionId === "stats-consommation") {
+            renderStatsConsommation(container); // <--- AJOUTÉ : Pour que les stats s'actualisent
+        } 
+        else if (currentSectionId === "trafic-audit") {
+            renderTraficAudit(container);
         }
+        else if (currentSectionId === "coord-demandes-tech") {
+            renderCoordFluxTech(container); // <--- AJOUTÉ : Pour la coordinatrice
+        }
+        else if (currentSectionId === "demandes-coordonnatrice") {
+            renderDemandesGestionnaire(container); // <--- AJOUTÉ : Pour le magasinier
+        }
+        else if (currentSectionId === "tech-mes-demandes") {
+            renderTechMesDemandes(container); // <--- AJOUTÉ : Pour le technicien
+        }
+        else if (currentSectionId === "livraison") {
+            renderLivraisonForm(container);
+        }
+        else if (currentSectionId === "gestion-retours") {
+            renderGestionRetours(container);
+        }
+        else if (currentSectionId.startsWith("stock-")) {
+            renderStock(currentSectionId.replace("stock-", ""), container);
+        }
+        
+        console.log("Mise à jour temps réel appliquée sur : " + currentSectionId);
     }
 });
-
 function save() {
     db.ref('itc_data').set(appData);
 }
@@ -195,14 +229,42 @@ function save() {
 // Persistance de la session
 firebase.auth().onAuthStateChanged((user) => {
     if (user) {
-        const profile = appData.users.find(u => u.email === user.email);
+        // 1. Sécurité : On vérifie que les données de l'application sont bien chargées
+        if (!appData || !appData.users) {
+            console.warn("Attente du chargement des données ITC...");
+            // On peut forcer un petit délai ou attendre le prochain cycle du listener
+            return; 
+        }
+
+        // 2. Recherche du profil avec sécurité sur l'email
+        const profile = appData.users.find(u => u.email.toLowerCase() === user.email.toLowerCase());
+
         if (profile) {
             currentUser = profile;
+            
+            // 3. Mise à jour de l'interface
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("main-app").classList.remove("hidden");
-            updateMenuVisibility(); updateUserInfo(); updateNotifications();
+            
+            // 4. Initialisation des composants
+            updateMenuVisibility(); 
+            updateUserInfo(); 
+            updateNotifications();
+            
+            // 5. Affichage de la section par défaut (Cockpit)
             showSection("cockpit");
+            
+            console.log("Utilisateur ITC connecté : " + currentUser.nom);
+        } else {
+            console.error("Profil introuvable pour cet email : " + user.email);
+            // Optionnel : déconnecter si l'email n'est pas autorisé dans l'ERP
+            // firebase.auth().signOut();
         }
+    } else {
+        // Gestion de la déconnexion : on affiche le login
+        document.getElementById("login-screen").classList.remove("hidden");
+        document.getElementById("main-app").classList.add("hidden");
+        currentUser = null;
     }
 });
 function logout() {
@@ -340,30 +402,76 @@ function renderStatsConsommation(container) {
 
         // --- SECTION ROUTER ---
         function showSection(id) {
-            const container = document.getElementById("app-container");
-            document.getElementById("view-title").innerText = id.toUpperCase().replace(/-/g, " ");
-            container.innerHTML = "";
+    // 1. MISE À JOUR DE LA VARIABLE GLOBALE (Crucial pour le rafraîchissement Firebase)
+    // Assure-toi que cette variable s'appelle BIEN 'currentSectionId' partout dans ton script
+    currentSectionId = id; 
 
-            if (id === "cockpit") renderCockpit(container);
-            else if (id === "tech-nouvelle-demande") renderTechDemandeForm(container);
-            else if (id === "tech-mes-demandes") renderTechMesDemandes(container);
-            else if (id === "tech-retour-materiel") renderRetourForm(container);
-            else if (id === "coord-demandes-tech") renderCoordFluxTech(container);
-            else if (id === "coord-creation-directe") renderCoordCreationDirecte(container);
-            else if (id === "coord-excel") renderCoordExcelUpload(container);
-            else if (id === "demandes-coordonnatrice") renderDemandesGestionnaire(container);
-            else if (id === "livraison") renderLivraisonForm(container);
-            else if (id === "gestion-retours") renderGestionRetours(container);
-            else if (id === "trafic-audit") renderTraficAudit(container);
-            else if (id === "reception") renderReceptionForm(container);
-            else if (id.startsWith("stock-")) renderStock(id.replace("stock-", ""), container);
-            // À ajouter dans la liste des if/else de showSection
-            else if (id === "scanner-physique") renderScanner(container);
-            else if (id === "stats-consommation") renderStatsConsommation(container);
+    const container = document.getElementById("app-container");
+    const viewTitle = document.getElementById("view-title");
 
-            if (["coord-demandes-tech", "demandes-coordonnatrice", "tech-mes-demandes", "coord-excel", "trafic-audit"].includes(id)) markNotificationsAsRead();
-        }
+    // 2. MISE À JOUR DU TITRE DE L'EN-TÊTE
+    viewTitle.innerText = id.toUpperCase().replace(/-/g, " ");
 
+    // 3. NETTOYAGE DE L'ÉCRAN (Évite les superpositions)
+    container.innerHTML = "";
+
+    // 4. AIGUILLAGE LOGIQUE (Mapping complet de l'ERP)
+    if (id === "cockpit") {
+        renderCockpit(container);
+    } 
+    else if (id === "stats-consommation") {
+        renderStatsConsommation(container);
+    } 
+    else if (id === "trafic-audit") {
+        renderTraficAudit(container);
+    }
+    else if (id === "tech-nouvelle-demande") {
+        renderTechDemandeForm(container);
+    } 
+    else if (id === "tech-mes-demandes") {
+        renderTechMesDemandes(container);
+    } 
+    else if (id === "tech-retour-materiel") {
+        renderRetourForm(container);
+    } 
+    else if (id === "coord-demandes-tech") {
+        renderCoordFluxTech(container);
+    } 
+    else if (id === "coord-creation-directe") {
+        renderCoordCreationDirecte(container);
+    } 
+    else if (id === "coord-excel") {
+        renderCoordExcelUpload(container);
+    } 
+    else if (id === "demandes-coordonnatrice") {
+        renderDemandesGestionnaire(container);
+    } 
+    else if (id === "reception") {
+        renderReceptionForm(container);
+    }
+    else if (id === "livraison") {
+        renderLivraisonForm(container);
+    } 
+    else if (id === "gestion-retours") {
+        renderGestionRetours(container);
+    } 
+    else if (id === "scanner-physique") {
+        renderScanner(container);
+    }
+    else if (id.startsWith("stock-")) {
+        renderStock(id.replace("stock-", ""), container);
+    }
+    else {
+        // Sécurité si un ID est mal orthographié dans le HTML
+        container.innerHTML = `<div class="p-10 text-center opacity-50 uppercase font-black">Section "${id}" en cours de déploiement...</div>`;
+    }
+
+    // 5. GESTION DES NOTIFICATIONS (Marquer comme lu)
+    const sectionsANotifs = ["coord-demandes-tech", "demandes-coordonnatrice", "tech-mes-demandes", "coord-excel", "trafic-audit"];
+    if (sectionsANotifs.includes(id)) {
+        markNotificationsAsRead();
+    }
+}
         // --- AUTOMATISATION EXCEL (COORDINATRICE) ---
         function renderCoordExcelUpload(container) {
             container.innerHTML = `
@@ -818,18 +926,83 @@ function renderCoordFluxTech(container) {
     showSection("cockpit");
 }
 
-        function renderCoordCreationDirecte(container) {
-            container.innerHTML = `<div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl"><h3 class="mb-6 border-b-2 text-pink-600 uppercase font-black italic">Commande Directe (Manuelle)</h3><form onsubmit="handleDirectSubmit(event)" class="space-y-6"><div class="grid grid-cols-2 gap-4"><div><label class="text-[8px] text-slate-400">OPÉRATEUR</label><select id="d-op" onchange="refreshDirectMaterials()" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50"><option value="ITC">ITC</option><option value="OCI-CIC">OCI-CIC</option><option value="MOOV">MOOV</option><option value="MTN">MTN</option></select></div><div><label class="text-[8px] text-slate-400">MOTIF</label><input id="d-motif" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required /></div></div><div id="direct-items-list" class="space-y-3"></div><button type="button" onclick="addDirectRow()" class="text-indigo-600 text-[9px] uppercase border-b-2 border-indigo-50">+ ARTICLE</button><button type="submit" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] mt-8 uppercase font-black">Confirmer</button></form></div>`;
-            addDirectRow();
-        }
+function renderCoordCreationDirecte(container) {
+    container.innerHTML = `
+        <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold font-black">
+            <h3 class="mb-6 border-b-2 text-pink-600 uppercase italic">Commande Directe (Manuelle)</h3>
+            
+            <form onsubmit="handleDirectSubmit(event)" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[8px] text-slate-400 uppercase">Opérateur Source</label>
+                        <select id="d-op" onchange="refreshDirectMaterials()" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50 outline-none">
+                            <option value="ITC">ITC</option>
+                            <option value="OCI-CIC">OCI-CIC</option>
+                            <option value="MOOV">MOOV</option>
+                            <option value="MTN">MTN</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[8px] text-slate-400 uppercase">Projet / Motif de sortie</label>
+                        <input id="d-motif" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" placeholder="EX: CHANTIER PLATEAU" required />
+                    </div>
+                </div>
 
-        function addDirectRow() {
-            const op = document.getElementById('d-op').value;
-            const materials = appData.stock.filter(s => (op === "OCI-CIC" ? ["OCI", "CIC", "OCI-CIC"].includes(s.op) : s.op === op));
-            const div = document.createElement("div"); div.className = "flex gap-2 items-center direct-row bg-slate-50 p-3 rounded-xl transition hover:border-pink-200 border";
-            div.innerHTML = `<select class="flex-1 border p-2 rounded-lg text-[9px] art-l uppercase">${materials.map(s => `<option value="${s.label}">${s.label} ${op==='ITC'?'('+s.qty+' U)':''}</option>`).join("")}</select><input type="number" placeholder="QTÉ" class="w-24 border p-2 rounded-lg text-[9px] art-q" required min="1" /><button type="button" onclick="this.parentElement.remove()" class="text-red-500 px-2"><i class="fas fa-trash"></i></button>`;
-            document.getElementById("direct-items-list").appendChild(div);
-        }
+                <div id="direct-items-list" class="space-y-3">
+                    </div>
+
+                <button type="button" onclick="addDirectRow()" class="text-indigo-600 text-[9px] uppercase font-black border-b-2 border-indigo-50 mt-4">
+                    <i class="fas fa-plus mr-1"></i> Ajouter un article
+                </button>
+
+                <button type="submit" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] mt-8 uppercase font-black shadow-lg hover:bg-black transition">
+                    Confirmer la commande
+                </button>
+            </form>
+        </div>`;
+    
+    // On ajoute une première ligne vide au démarrage
+    addDirectRow();
+}
+
+function addDirectRow() {
+    const div = document.createElement("div");
+    div.className = "flex flex-col md:flex-row gap-2 items-end direct-row bg-slate-50 p-3 rounded-xl border transition hover:border-pink-200";
+    
+    div.innerHTML = `
+        <div class="flex-1 w-full">
+            <label class="text-[7px] text-slate-400 uppercase">Catégorie</label>
+            <select class="w-full border p-2 rounded-lg text-[9px] art-type uppercase bg-white" required>
+                <option value="" disabled selected>-- TYPE --</option>
+                <option value="MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES">MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES</option>
+                <option value="CABLES FIBRES OPTIQUES SOUTERRAINS">CÂBLES FIBRES OPTIQUES SOUTERRAINS</option>
+                <option value="CABLES FIBRES OPTIQUES AÉRIENS">CÂBLES FIBRES OPTIQUES AÉRIENS</option>
+                <option value="MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS">MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS</option>
+                <option value="MATÉRIELS DE PROTECTION ET DE RACCORDEMENT">MATÉRIELS DE PROTECTION ET DE RACCORDEMENT</option>
+                <option value="MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO">MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO</option>
+                <option value="CONNECTIQUES FO">CONNECTIQUES FO</option>
+                <option value="MATÉRIELS D'ÉTIQUETAGE">MATÉRIELS D'ÉTIQUETAGE</option>
+                <option value="MATÉRIELS GÉNIE CIVIL (GC)">MATÉRIELS GÉNIE CIVIL (GC)</option>
+            </select>
+        </div>
+
+        <div class="flex-1 w-full">
+            <label class="text-[7px] text-slate-400 uppercase">Désignation</label>
+            <input type="text" placeholder="NOM DE L'ARTICLE" class="w-full border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
+        </div>
+
+        <div class="w-24">
+            <label class="text-[7px] text-slate-400 uppercase">Quantité</label>
+            <input type="number" placeholder="QTÉ" class="w-full border p-2 rounded-lg text-[9px] art-q" required min="1" />
+        </div>
+
+        <button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2 hover:bg-red-50 rounded-lg transition">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    
+    document.getElementById("direct-items-list").appendChild(div);
+}
 
         function refreshDirectMaterials() { document.getElementById("direct-items-list").innerHTML = ""; addDirectRow(); }
 
@@ -901,9 +1074,56 @@ function renderCoordFluxTech(container) {
 
         // --- AUTRES ---
         function renderReceptionForm(container) {
-            container.innerHTML = `<div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black"><h3 class="mb-8 uppercase border-b-2 text-indigo-600 italic">Mise en Stock</h3><form onsubmit="handleRec(event)" class="space-y-5"><select id="r-op" onchange="toggleQtyField(this.value)" class="w-full border-2 p-3 rounded-xl uppercase text-xs"><option value="ITC">ITC</option><option value="OCI-CIC">OCI-CIC</option><option value="MOOV">MOOV</option><option value="MTN">MTN</option></select><input id="r-type" type="text" placeholder="TYPE" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required /><input id="r-mat" type="text" placeholder="NOM" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required /><div id="qty-container"><input id="r-qty" type="number" class="w-full border-2 p-3 rounded-xl text-xs bg-slate-50" placeholder="QUANTITÉ" /></div><button class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] uppercase font-black transition hover:bg-black">Confirmer</button></form></div>`;
-            toggleQtyField('ITC');
-        }
+    container.innerHTML = `
+        <div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black">
+            <h3 class="mb-8 uppercase border-b-2 text-indigo-600 italic">Mise en Stock Matériel</h3>
+            
+            <form onsubmit="handleRec(event)" class="space-y-5">
+                <div>
+                    <label class="text-[8px] text-slate-400 uppercase ml-1">Opérateur</label>
+                    <select id="r-op" onchange="toggleQtyField(this.value)" class="w-full border-2 p-3 rounded-xl uppercase text-xs bg-white outline-none focus:border-indigo-500">
+                        <option value="ITC">ITC</option>
+                        <option value="OCI-CIC">OCI-CIC</option>
+                        <option value="MOOV">MOOV</option>
+                        <option value="MTN">MTN</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-[8px] text-slate-400 uppercase ml-1">Type de Matériel</label>
+                    <select id="r-type" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50 outline-none focus:border-indigo-500" required>
+                        <option value="" disabled selected>-- CHOISIR UN TYPE --</option>
+                        <option value="MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES">MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES</option>
+                        <option value="CABLES FIBRES OPTIQUES SOUTERRAINS">CÂBLES FIBRES OPTIQUES SOUTERRAINS</option>
+                        <option value="CABLES FIBRES OPTIQUES AÉRIENS">CÂBLES FIBRES OPTIQUES AÉRIENS</option>
+                        <option value="MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS">MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS</option>
+                        <option value="MATÉRIELS DE PROTECTION ET DE RACCORDEMENT">MATÉRIELS DE PROTECTION ET DE RACCORDEMENT</option>
+                        <option value="MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO">MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO</option>
+                        <option value="CONNECTIQUES FO">CONNECTIQUES FO</option>
+                        <option value="MATÉRIELS D'ÉTIQUETAGE">MATÉRIELS D'ÉTIQUETAGE</option>
+                        <option value="MATÉRIELS GÉNIE CIVIL (GC)">MATÉRIELS GÉNIE CIVIL (GC)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-[8px] text-slate-400 uppercase ml-1">Désignation</label>
+                    <input id="r-mat" type="text" placeholder="NOM DE L'ARTICLE" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50 outline-none focus:border-indigo-500" required />
+                </div>
+
+                <div id="qty-container">
+                    <label class="text-[8px] text-slate-400 uppercase ml-1">Quantité</label>
+                    <input id="r-qty" type="number" class="w-full border-2 p-3 rounded-xl text-xs bg-slate-50 outline-none focus:border-indigo-500" placeholder="NOMBRE D'UNITÉS" />
+                </div>
+
+                <button type="submit" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] uppercase font-black transition hover:bg-black shadow-lg">
+                    Confirmer l'Entrée
+                </button>
+            </form>
+        </div>`;
+    
+    // On réinitialise l'affichage de la quantité selon la sélection par défaut (ITC)
+    toggleQtyField('ITC');
+}
 
         function handleRec(e) { e.preventDefault(); const mat = { op: document.getElementById("r-op").value, label: document.getElementById("r-mat").value.toUpperCase(), qty: parseInt(document.getElementById("r-qty").value) || 0, type: document.getElementById("r-type").value.toUpperCase() }; const existing = appData.stock.find(s => s.op === mat.op && s.label === mat.label); if(existing && mat.op === 'ITC') existing.qty += mat.qty; else appData.stock.push(mat); addNotification(1, `TRAFIC : ENTRÉE STOCK (${mat.label})`); save(); alert("ENREGISTRÉ."); showSection("cockpit"); }
         function toggleQtyField(v) { document.getElementById('qty-container').style.display = (v === 'ITC' ? 'block' : 'none'); }
@@ -961,10 +1181,27 @@ function renderCoordFluxTech(container) {
         function markNotificationsAsRead() { if (!currentUser) return; appData.notifications.forEach(n => { if (n.userId === currentUser.id) n.lu = true; }); save(); updateNotifications(); }
         function addNotification(u, m) { if(!appData.notifications) appData.notifications = []; appData.notifications.unshift({ userId: u, message: m, lu: false, date: new Date().toLocaleString() }); save(); updateNotifications(); }
         function updateNotifications() {
-            if (!currentUser) return;
-            const count = appData.notifications.filter(n => n.userId === currentUser.id && !n.lu).length;
-            ["notif-coord", "notif-tech", "notif-superviseur", "notif-gest-coord"].forEach(id => { const el = document.getElementById(id); if(el) { el.innerText = count; el.classList.toggle("hidden", count === 0); }});
+    // 1. Sécurité : Si l'utilisateur n'est pas là ou si les données ne sont pas chargées
+    if (!currentUser || !appData) return;
+
+    // 2. Sécurité CRUCIALE : On utilise une liste vide [] si 'notifications' est absent
+    const notifications = appData.notifications || [];
+    
+    // 3. Calcul du nombre de notifs non lues pour cet utilisateur précis
+    const count = notifications.filter(n => n.userId === currentUser.id && !n.lu).length;
+
+    // 4. Mise à jour des pastilles (badges) dans l'interface
+    const badgeIds = ["notif-coord", "notif-tech", "notif-superviseur", "notif-gest-coord"];
+    
+    badgeIds.forEach(id => { 
+        const el = document.getElementById(id); 
+        if (el) { 
+            el.innerText = count; 
+            // On affiche le badge seulement si count > 0, sinon on le cache
+            el.classList.toggle("hidden", count === 0); 
         }
+    });
+}
         function deleteMaterial(op, label) {
     if (!confirm("ATTENTION : VOULEZ-VOUS SUPPRIMER DÉFINITIVEMENT CET ARTICLE DU STOCK ?")) return;
     
