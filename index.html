@@ -205,8 +205,25 @@ firebase.auth().onAuthStateChanged((user) => {
         }
     }
 });
-        function logout() { appData.currentUserId = null; save(); location.reload(); }
+function logout() {
+    // 1. Déconnexion de Firebase Auth
+    firebase.auth().signOut().then(() => {
+        // 2. Nettoyage des données locales
+        appData.currentUserId = null;
+        currentUser = null;
+        
+        // 3. Optionnel : Nettoyer le localStorage si tu l'utilises pour le backup
+        localStorage.removeItem("itc_erp_local_backup");
 
+        // 4. Redirection forcée vers le login (sans recharger forcément toute la page)
+        document.getElementById("main-app").classList.add("hidden");
+        document.getElementById("login-screen").classList.remove("hidden");
+        
+        console.log("Déconnexion réussie.");
+    }).catch((error) => {
+        console.error("Erreur lors de la déconnexion :", error);
+    });
+}
         function resetPassword() {
     const email = document.getElementById("login-email").value.trim();
 
@@ -975,26 +992,29 @@ function renderCoordFluxTech(container) {
             }
         }
 
-       // --- GESTION DE LA SESSION (FIN DU SCRIPT) ---
-       firebase.auth().onAuthStateChanged((user) => {
-            if (user) {
-                // L'utilisateur est déjà connecté via Firebase
-                const userProfile = appData.users.find(u => u.email === user.email);
-                if (userProfile) {
-                    currentUser = userProfile;
-                    document.getElementById("login-screen").classList.add("hidden");
-                    document.getElementById("main-app").classList.remove("hidden");
-                    updateMenuVisibility();
-                    updateUserInfo();
-                    // On reste sur la section actuelle ou cockpit
-                    showSection("cockpit");
-                }
-            } else {
-                // Personne n'est connecté, on force le retour au login
-                document.getElementById("login-screen").classList.remove("hidden");
-                document.getElementById("main-app").classList.add("hidden");
+        firebase.auth().onAuthStateChanged((user) => {
+    if (user) {
+        // Un utilisateur est présent dans le cache Firebase
+        const userProfile = appData.users.find(u => u.email === user.email);
+        if (userProfile) {
+            currentUser = userProfile;
+            document.getElementById("login-screen").classList.add("hidden");
+            document.getElementById("main-app").classList.remove("hidden");
+            updateMenuVisibility();
+            updateUserInfo();
+            updateNotifications();
+            // On n'appelle showSection("cockpit") que si on est sur l'écran de login
+            if (document.getElementById("app-container").innerHTML === "") {
+                showSection("cockpit");
             }
-        });
+        }
+    } else {
+        // AUCUN utilisateur : On force l'affichage du login
+        document.getElementById("login-screen").classList.remove("hidden");
+        document.getElementById("main-app").classList.add("hidden");
+        currentUser = null;
+    }
+});
     </script>
 </body>
 </html>
