@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITC Telecom ERP | Automation & Stock Expert</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-auth-compat.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
@@ -31,6 +34,9 @@
                 <input id="login-email" type="email" placeholder="EMAIL PROFESSIONNEL" class="w-full border-2 p-3 rounded-xl text-xs uppercase outline-none" required />
                 <input id="login-password" type="password" placeholder="MOT DE PASSE" class="w-full border-2 p-3 rounded-xl text-xs outline-none" required />
                 <button type="submit" class="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-lg">AUTHENTIFICATION</button>
+                <p onclick="resetPassword()" class="text-[9px] text-center text-indigo-600 cursor-pointer mt-4 hover:underline italic">
+                    Mot de passe oublié ?
+                </p>
             </form>
         </div>
     </div>
@@ -51,6 +57,9 @@
                         <p class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50">Contrôle</p>
                         <div onclick="showSection('trafic-audit'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
                             <i class="fas fa-exchange-alt w-5 text-blue-400"></i> Journal d'Audit <span id="notif-superviseur" class="notification-badge hidden">0</span>
+                            <div onclick="showSection('stats-consommation'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic font-black text-green-400">
+                                <i class="fas fa-chart-pie w-5"></i> Stats Consommation
+                            </div>
                         </div>
                     </div>
 
@@ -108,45 +117,113 @@
     </div>
 
     <script>
-        // --- BASE DE DONNÉES ---
-        const initialUsers = [
-            { id: 1, name: "AHONON ROGER", role: "Superviseur", email: "roger.ahonon@itc.ci", password: "admin123" },
-            { id: 2, name: "S. KOFFI", role: "Gestionnaire", email: "koffi@itc.ci", password: "gest123" },
-            { id: 7, name: "COORDINATRICE", role: "Coordinatrice", email: "coord@itc.ci", password: "coord123" },
-            { id: 8, name: "TECHNICIEN TERRAIN", role: "Technicien", email: "tech@itc.ci", password: "tech123" }
-        ];
-
-    let appData = JSON.parse(localStorage.getItem("itc_erp_v6_qr")) || {
-    stock: [], 
-    demandes: [], 
-    techDemandes: [], 
-    retours: [], 
-    notifications: [], 
-    scansDuJour: [], // Unique et bien placé
-    derniereDateScan: null, // Unique et bien placé
-    currentUserId: null, 
-    users: initialUsers // Une seule fois à la fin
+// CONFIGURATION FIREBASE
+const firebaseConfig = {
+    apiKey: "AIzaSyD7P-6vY3yHQx7OFCs6th6gN6EURP89QUQ",
+    authDomain: "itc-erp.firebaseapp.com",
+    databaseURL: "https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "itc-erp",
+    storageBucket: "itc-erp.firebasestorage.app",
+    messagingSenderId: "870100539481",
+    appId: "1:870100539481:web:e12d817a9a44e867e97948",
+    measurementId: "G-HMRDVGSWHM"
 };
 
-        let currentUser = null;
-        function save() { 
-    localStorage.setItem("itc_erp_v6_qr", JSON.stringify(appData)); 
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// L'unique déclaration de currentUser pour toute l'app
+let currentUser = null; 
+let appData = {
+    stock: [], demandes: [], techDemandes: [], retours: [],
+    notifications: [], scansDuJour: [], derniereDateScan: null,
+    users: [
+        { id: 1, name: "AHONON ROGER", role: "Superviseur", email: "roger.ahonon@itc.ci" },
+        { id: 2, name: "GESTIONNAIRE", role: "Gestionnaire", email: "gest@itc.ci" },
+        { id: 7, name: "COORDINATRICE", role: "Coordinatrice", email: "coord@itc.ci" },
+        { id: 8, name: "TECHNICIEN TERRAIN", role: "Technicien", email: "tech@itc.ci" }
+    ]
+};
+// Écoute des changements sur Firebase
+db.ref('itc_data').on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+        // On fusionne les données sans écraser les utilisateurs locaux
+        appData = { ...appData, ...data };
+        if (currentUser) {
+            updateNotifications();
+            // Optionnel : rafraîchir la vue actuelle si nécessaire
+        }
+    }
+});
+
+function save() {
+    db.ref('itc_data').set(appData);
 }
+    
+    // On garde quand même une copie locale par sécurité
+    localStorage.setItem("itc_erp_v6_qr", JSON.stringify(appData));
+
 
         // --- AUTH ---
-        function handleLogin(e) {
-            e.preventDefault();
-            const email = document.getElementById("login-email").value.toLowerCase().trim();
-            const password = document.getElementById("login-password").value.trim();
-            const user = appData.users.find(u => u.email === email && u.password === password);
-            if (!user) return alert("ACCÈS REFUSÉ");
-            currentUser = user; appData.currentUserId = user.id; save();
+        async function handleLogin(e) {
+    e.preventDefault();
+    const email = document.getElementById("login-email").value.toLowerCase().trim();
+    const password = document.getElementById("login-password").value.trim();
+
+    try {
+        const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+        const userProfile = appData.users.find(u => u.email === email);
+        
+        if (userProfile) {
+            currentUser = userProfile;
+            document.getElementById("login-screen").classList.add("hidden");
+            document.getElementById("main-app").classList.remove("hidden");
+            
+            updateMenuVisibility();
+            updateUserInfo();
+            updateNotifications();
+            
+            // Redirection intelligente
+            showSection(currentUser.role === 'Technicien' ? "tech-nouvelle-demande" : "cockpit");
+        }
+    } catch (error) {
+        alert("ÉCHEC D'AUTHENTIFICATION : " + error.message);
+    }
+}
+
+// Persistance de la session
+firebase.auth().onAuthStateChanged((user) => {
+    if (user) {
+        const profile = appData.users.find(u => u.email === user.email);
+        if (profile) {
+            currentUser = profile;
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("main-app").classList.remove("hidden");
             updateMenuVisibility(); updateUserInfo(); updateNotifications();
-            showSection(currentUser.role === 'Technicien' ? "tech-nouvelle-demande" : "cockpit");
+            showSection("cockpit");
         }
+    }
+});
         function logout() { appData.currentUserId = null; save(); location.reload(); }
+
+        function resetPassword() {
+    const email = document.getElementById("login-email").value.trim();
+
+    if (!email) {
+        alert("Veuillez d'abord saisir votre adresse email dans le champ ci-dessus.");
+        return;
+    }
+
+    firebase.auth().sendPasswordResetEmail(email)
+        .then(() => {
+            alert("Un email de réinitialisation a été envoyé à : " + email + ". Vérifiez vos courriers indésirables (spams).");
+        })
+        .catch((error) => {
+            console.error(error);
+            alert("Erreur : " + error.message);
+        });
+}
 
         function updateMenuVisibility() {
             const r = currentUser.role;
@@ -173,6 +250,77 @@
     }
 }
 
+function renderStatsConsommation(container) {
+    const moisActuel = new Date().getMonth();
+    const anneeActuelle = new Date().getFullYear();
+
+    // 1. Filtrer les bons livrés ce mois-ci
+    const livraisonsMois = appData.demandes.filter(d => {
+        if (d.status !== "LIVREE" || !d.dateLivraison) return false;
+        const [jour, mois, annee] = d.dateLivraison.split('/');
+        return (parseInt(mois) - 1) === moisActuel && parseInt(annee) === anneeActuelle;
+    });
+
+    // 2. Calculer par Technicien et par Équipe
+    const statsTech = {};
+    const statsEquipe = {};
+
+    livraisonsMois.forEach(d => {
+        const nom = d.demandeurName;
+        const equipe = d.prestataire || "SANS ÉQUIPE";
+        const totalItems = d.items.reduce((sum, i) => sum + i.qty, 0);
+
+        statsTech[nom] = (statsTech[nom] || 0) + totalItems;
+        statsEquipe[equipe] = (statsEquipe[equipe] || 0) + totalItems;
+    });
+
+    // 3. Interface visuelle
+    container.innerHTML = `
+    <div class="space-y-8">
+        <h3 class="text-xl font-black uppercase text-indigo-900 border-b-4 border-indigo-600 pb-2 italic">
+            Rapport de Consommation - ${new Date().toLocaleString('fr-FR', { month: 'long', year: 'numeric' })}
+        </h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="bg-white p-6 rounded-3xl shadow-xl">
+                <h4 class="text-indigo-600 mb-4 uppercase font-black border-b pb-2 text-[9px]">Top Consommation par Équipe (Unités)</h4>
+                <div class="space-y-4">
+                    ${Object.entries(statsEquipe).sort((a,b) => b[1] - a[1]).map(([eq, val]) => `
+                        <div>
+                            <div class="flex justify-between text-[9px] mb-1"><span>${eq}</span><span class="font-black">${val} U</span></div>
+                            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                <div class="bg-indigo-500 h-full" style="width: ${Math.min(val, 100)}%"></div>
+                            </div>
+                        </div>
+                    `).join("") || '<p class="text-[8px] text-slate-400">Aucune donnée ce mois-ci</p>'}
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-3xl shadow-xl">
+                <h4 class="text-pink-600 mb-4 uppercase font-black border-b pb-2 text-[9px]">Consommation par Technicien</h4>
+                <div class="space-y-3">
+                    ${Object.entries(statsTech).sort((a,b) => b[1] - a[1]).map(([nom, val]) => `
+                        <div class="flex justify-between items-center bg-slate-50 p-3 rounded-xl border-l-4 border-pink-500">
+                            <span class="text-[9px] font-black">${nom}</span>
+                            <span class="bg-pink-100 text-pink-700 px-3 py-1 rounded-lg text-[8px] font-black">${val} ARTICLES</span>
+                        </div>
+                    `).join("") || '<p class="text-[8px] text-slate-400">Aucune donnée</p>'}
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex gap-4">
+            <button onclick="window.print()" class="bg-slate-900 text-white px-6 py-3 rounded-xl text-[8px] font-black uppercase shadow-lg">
+                <i class="fas fa-print mr-2"></i> Imprimer le rapport mensuel
+            </button>
+
+            <button onclick="exportStatsToExcel()" class="bg-green-600 text-white px-6 py-3 rounded-xl text-[8px] font-black uppercase shadow-lg">
+                <i class="fas fa-file-excel mr-2"></i> Exporter en Excel (.xlsx)
+            </button>
+        </div>
+    </div>`;
+} // <--- C'est cette accolade qui manquait !
+
         // --- SECTION ROUTER ---
         function showSection(id) {
             const container = document.getElementById("app-container");
@@ -194,6 +342,7 @@
             else if (id.startsWith("stock-")) renderStock(id.replace("stock-", ""), container);
             // À ajouter dans la liste des if/else de showSection
             else if (id === "scanner-physique") renderScanner(container);
+            else if (id === "stats-consommation") renderStatsConsommation(container);
 
             if (["coord-demandes-tech", "demandes-coordonnatrice", "tech-mes-demandes", "coord-excel", "trafic-audit"].includes(id)) markNotificationsAsRead();
         }
@@ -369,6 +518,40 @@ function handleScanSuccess(id) {
             const c = { id: "EXCEL-"+Date.now().toString().slice(-4), demandeurOriginalId: currentUser.id, demandeurName: "COORDINATION (AUTO)", op: "ITC", items, motif: motifComplet.toUpperCase(), status: "EN ATTENTE GESTIONNAIRE", date: new Date().toLocaleDateString() };
             appData.demandes.unshift(c); addNotification(2, `COMMANDE VIA EXCEL : ${c.id}`); save(); alert("COMMANDE ÉMISE."); showSection("cockpit");
         }
+
+        function exportStatsToExcel() {
+    const moisNom = new Date().toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+    
+    // 1. Préparer les données pour l'onglet Équipes
+    const dataEquipes = [["ÉQUIPE", "TOTAL ARTICLES CONSOMMÉS"]];
+    const livraisonsMois = appData.demandes.filter(d => d.status === "LIVREE"); // Filtre simplifié pour l'exemple
+    
+    const statsEquipe = {};
+    livraisonsMois.forEach(d => {
+        const eq = d.prestataire || "SANS ÉQUIPE";
+        const qty = d.items.reduce((sum, i) => sum + i.qty, 0);
+        statsEquipe[eq] = (statsEquipe[eq] || 0) + qty;
+    });
+    Object.entries(statsEquipe).forEach(([eq, qty]) => dataEquipes.push([eq, qty]));
+
+    // 2. Préparer les données pour l'onglet Détails Techniciens
+    const dataTechs = [["TECHNICIEN", "PROJET/SITE", "DATE LIVRAISON", "NOMBRE D'ARTICLES"]];
+    livraisonsMois.forEach(d => {
+        const qty = d.items.reduce((sum, i) => sum + i.qty, 0);
+        dataTechs.push([d.demandeurName, d.motif, d.dateLivraison, qty]);
+    });
+
+    // 3. Création du classeur Excel
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.aoa_to_sheet(dataEquipes);
+    const ws2 = XLSX.utils.aoa_to_sheet(dataTechs);
+
+    XLSX.utils.book_append_sheet(wb, ws1, "Résumé Équipes");
+    XLSX.utils.book_append_sheet(wb, ws2, "Détails Techniciens");
+
+    // 4. Téléchargement du fichier
+    XLSX.writeFile(wb, `RAPPORT_CONSO_ITC_${moisNom.toUpperCase()}.xlsx`);
+}
 
         // --- COCKPIT & ALERTES ---
         function renderCockpit(container) {
@@ -719,82 +902,44 @@ function renderCoordFluxTech(container) {
             container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic uppercase"><h3 class="border-b-2 mb-6 text-blue-600 font-black tracking-tighter italic">Journal d'Audit</h3><div class="space-y-3">${notifs.map(n => `<div class="bg-slate-50 p-4 rounded-xl border-l-4 border-indigo-400"><p class="text-[9px] text-slate-800">${n.message}</p><p class="text-[7px] text-slate-400 mt-2">${n.date}</p></div>`).join("")}</div></div>`;
         }
 
+
+
         async function downloadPDF(id) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     const d = appData.demandes.find(x => x.id === id);
     
-    // 1. GÉNÉRATION DU QR CODE
-    document.getElementById("qrcode-temp").innerHTML = ""; // Nettoyage
-    new QRCode(document.getElementById("qrcode-temp"), {
-        text: d.id, // Le QR code contient l'identifiant du bon (ex: BS-1234)
-        width: 100,
-        height: 100
-    });
+    // Nettoyer et générer le QR Code en mémoire
+    const qrContainer = document.getElementById("qrcode-temp");
+    qrContainer.innerHTML = "";
+    new QRCode(qrContainer, { text: d.id, width: 100, height: 100 });
 
-    // On laisse un petit délai (500ms) pour que le navigateur génère l'image du QR Code
+    // Laisser 500ms au navigateur pour dessiner le QR Code
     setTimeout(() => {
         try {
-            const qrCanvas = document.querySelector("#qrcode-temp canvas");
+            const qrCanvas = qrContainer.querySelector("canvas");
             const qrImage = qrCanvas.toDataURL("image/jpeg");
 
-            // 2. EN-TÊTE & LOGO
-            const logoUrl = "logo-ITC-NW-01-fond-blanc-01.jpg";
-            doc.addImage(logoUrl, 'JPEG', 15, 10, 40, 20);
-            
-            // Insertion du QR Code en haut à droite
+            // Design du PDF
+            doc.addImage("logo-ITC-NW-01-fond-blanc-01.jpg", 'JPEG', 15, 10, 40, 20);
             doc.addImage(qrImage, 'JPEG', 165, 10, 25, 25);
             
-            doc.setFont("helvetica", "bold");
             doc.setFontSize(16);
-            doc.setTextColor(102, 34, 119); // Violet ITC
             doc.text("BON DE SORTIE MATÉRIEL", 105, 22, { align: "center" });
 
-            // 3. BLOC D'INFOS (PROJET, COORDINATEUR, PRESTATAIRE)
-            doc.setDrawColor(200); 
-            doc.rect(15, 40, 180, 40); // Cadre des infos
-            
-            doc.setFontSize(9); 
-            doc.setTextColor(50);
-            doc.text(`RÉFÉRENCE : ${d.id}`, 20, 48);
-            doc.text(`PROJET / SITE : ${d.motif}`, 20, 58);
-            doc.text(`PRESTATAIRE / CLIENT : ${d.prestataire || 'ITC TELECOM'}`, 20, 68);
-            
-            doc.text(`DATE ÉMISSION : ${d.date}`, 120, 48);
-            doc.text(`COORDINATEUR : ${d.coordinateurNom || 'DIRECTION TECHNIQUE'}`, 120, 58);
-            doc.text(`TECHNICIEN : ${d.demandeurName}`, 120, 68);
-
-            // 4. TABLEAU DES ARTICLES (DEMANDÉ VS REÇU)
             doc.autoTable({
                 startY: 85,
-                head: [['DÉSIGNATION DU MATÉRIEL', 'QTÉ DEMANDÉE', 'QTÉ REÇUE']],
-                body: d.items.map(i => [
-                    i.label.toUpperCase(), 
-                    i.qty, 
-                    d.status === "LIVREE" ? i.qty : "___" // Rempli uniquement si le magasinier a validé
-                ]),
+                head: [['DÉSIGNATION', 'DEMANDÉ', 'REÇU']],
+                body: d.items.map(i => [i.label, i.qty, d.status === "LIVREE" ? i.qty : "___"]),
                 theme: 'grid',
-                headStyles: { fillColor: [102, 34, 119], halign: 'center' },
-                columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' } }
+                headStyles: { fillColor: [102, 34, 119] }
             });
 
-            // 5. ESPACE SIGNATURES
-            const finalY = doc.lastAutoTable.finalY + 20;
-            doc.setFont("helvetica", "bold");
-            doc.text("VISA GESTIONNAIRE", 35, finalY);
-            doc.text("VISA RÉCEPTIONNAIRE (TECH)", 135, finalY);
-            
-            doc.setDrawColor(102, 34, 119);
-            doc.rect(20, finalY + 5, 60, 25);  // Cadre Magasin
-            doc.rect(130, finalY + 5, 60, 25); // Cadre Tech
-
             doc.save(`BS_ITC_${d.id}.pdf`);
-            
-        } catch (error) {
-            console.error(error);
-            alert("Erreur lors de la création du PDF. Assurez-vous que le fichier logo est présent.");
+        } catch (e) {
+            alert("Erreur PDF : vérifiez que le logo est accessible.");
         }
-    }, 500); 
+    }, 500);
 }
         function markNotificationsAsRead() { if (!currentUser) return; appData.notifications.forEach(n => { if (n.userId === currentUser.id) n.lu = true; }); save(); updateNotifications(); }
         function addNotification(u, m) { if(!appData.notifications) appData.notifications = []; appData.notifications.unshift({ userId: u, message: m, lu: false, date: new Date().toLocaleString() }); save(); updateNotifications(); }
@@ -829,6 +974,27 @@ function renderCoordFluxTech(container) {
                 showSection(currentUser.role === 'Technicien' ? "tech-nouvelle-demande" : "cockpit");
             }
         }
+
+       // --- GESTION DE LA SESSION (FIN DU SCRIPT) ---
+       firebase.auth().onAuthStateChanged((user) => {
+            if (user) {
+                // L'utilisateur est déjà connecté via Firebase
+                const userProfile = appData.users.find(u => u.email === user.email);
+                if (userProfile) {
+                    currentUser = userProfile;
+                    document.getElementById("login-screen").classList.add("hidden");
+                    document.getElementById("main-app").classList.remove("hidden");
+                    updateMenuVisibility();
+                    updateUserInfo();
+                    // On reste sur la section actuelle ou cockpit
+                    showSection("cockpit");
+                }
+            } else {
+                // Personne n'est connecté, on force le retour au login
+                document.getElementById("login-screen").classList.remove("hidden");
+                document.getElementById("main-app").classList.add("hidden");
+            }
+        });
     </script>
 </body>
 </html>
