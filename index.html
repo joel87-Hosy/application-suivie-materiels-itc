@@ -533,6 +533,21 @@ function renderStatsConsommation(container) {
     // Vérification de la date à l'ouverture du scanner
     verifierReinitialisationQuotidienne();
 
+    // --- MODIFICATION AJOUTÉE ICI ---
+    // 1. Sécurité : On s'assure que appData existe
+    if (!appData) return; 
+
+    // 2. On récupère la liste des demandes de manière sécurisée
+    const demandes = appData.demandes || [];
+
+    // 3. Si aucune demande n'existe, on affiche un message et ON ARRÊTE LÀ (return)
+    // Cela évite de lancer la caméra inutilement.
+    if (demandes.length === 0) {
+        container.innerHTML = `<p class="p-10 text-center opacity-50 uppercase font-black">Aucune donnée à scanner pour le moment</p>`;
+        return;
+    }
+    // --------------------------------
+
     container.innerHTML = `
         <div class="max-w-md mx-auto space-y-4">
             <div class="bg-white p-6 rounded-3xl shadow-xl text-center">
@@ -554,9 +569,11 @@ function renderStatsConsommation(container) {
                     <span class="text-[8px] bg-slate-700 px-2 py-0.5 rounded">${new Date().toLocaleDateString()}</span>
                 </div>
                 <div class="space-y-3 max-h-40 overflow-y-auto custom-scrollbar">
-                    ${appData.scansDuJour.length === 0 ? 
+                    ${ 
+                        // J'ai aussi ajouté la sécurité (|| []) ici pour éviter une autre erreur potentielle
+                        (appData.scansDuJour || []).length === 0 ? 
                         '<p class="text-center py-4 text-slate-600 text-[8px] uppercase">Aucun scan aujourd\'hui</p>' : 
-                        appData.scansDuJour.map(s => `
+                        (appData.scansDuJour || []).map(s => `
                             <div class="flex justify-between items-center bg-slate-800 p-3 rounded-xl border-l-2 border-pink-500">
                                 <div>
                                     <p class="text-pink-400 text-[9px] font-black">${s.id}</p>
@@ -569,10 +586,10 @@ function renderStatsConsommation(container) {
                 </div>
             </div>
 
-            <button onclick="showSection('cockpit')" class="w-full text-slate-400 text-[8px] uppercase font-black text-center">Retour au tableau de bord</button>
+            <button onclick="showSection('cockpit')" class="w-full text-slate-400 text-[8px] uppercase font-black text-center py-2 transition hover:text-slate-600">Retour au tableau de bord</button>
         </div>`;
 
-    // ... (Code d'initialisation Html5Qrcode et Torch identique au précédent)
+    // --- Initialisation de la caméra (ne s'exécute que si le 'return' plus haut n'a pas été déclenché) ---
     const html5QrCode = new Html5Qrcode("reader");
     let isTorchOn = false;
     const qrCodeSuccessCallback = (decodedText) => {
@@ -586,6 +603,10 @@ function renderStatsConsommation(container) {
             html5QrCode.applyVideoConstraints({ advanced: [{ torch: isTorchOn }] }).catch(e => {});
             torchBtn.innerHTML = isTorchOn ? '<i class="fas fa-lightbulb"></i> Éteindre' : '<i class="fas fa-lightbulb"></i> Allumer';
         });
+    }).catch(err => {
+        // Gestion d'erreur si la caméra ne démarre pas
+        console.error("Erreur caméra:", err);
+        container.innerHTML = `<p class="text-red-500 text-center p-10 font-black">Impossible d'accéder à la caméra.</p>`;
     });
 }
 
@@ -1084,13 +1105,23 @@ function addDirectRow() {
         function prepSortie(id) { const d = appData.demandes.find(x => x.id === id); d.status = "PRET"; save(); showSection("livraison"); }
 
         function renderLivraisonForm(container) {
-            const data = appData.demandes.filter(d => d.status === "PRET");
-            container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl italic font-bold">
-                <h3 class="mb-6 uppercase border-b-2 pb-2 text-green-600 font-black italic font-black">Validation Sortie Physique</h3>
-                <div class="space-y-6">
-                    ${data.map(d => `<div class="bg-slate-50 p-6 rounded-2xl border-2 border-green-100 font-black"><p class="font-black uppercase text-indigo-900 mb-2">${d.id} | ${d.demandeurName}</p><ul class="text-[9px] text-slate-600 mb-4 list-disc list-inside uppercase">${d.items.map(i => `<li>${i.label} : ${i.qty} U</li>`).join("")}</ul><button onclick="finalSortie('${d.id}')" class="w-full bg-indigo-600 text-white py-3 rounded-xl text-[10px] uppercase font-black transition hover:bg-black">Confirmer Sortie Physique</button></div>`).join("")}
-                </div></div>`;
-        }
+    const demandes = appData.demandes || []; // Gilet de sauvetage
+    const aLivrer = demandes.filter(d => d.status === "PREPAREE");
+    
+    container.innerHTML = `
+        <div class="bg-white p-8 rounded-3xl shadow-xl italic font-black">
+            <h3 class="text-green-600 border-b-2 mb-6 uppercase">Sortie Physique (Scanner)</h3>
+            <div class="space-y-4">
+                ${aLivrer.map(d => `
+                    <div class="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border">
+                        <span class="text-xs">${d.id} - ${d.demandeurName}</span>
+                        <button onclick="validerLivraison('${d.id}')" class="bg-green-600 text-white px-4 py-2 rounded-lg text-[9px] uppercase">Confirmer Sortie</button>
+                    </div>
+                `).join("")}
+                ${aLivrer.length === 0 ? '<p class="text-center opacity-30 py-5">AUCUN BON PRÊT</p>' : ''}
+            </div>
+        </div>`;
+}
 
         function finalSortie(id) {
             const d = appData.demandes.find(x => x.id === id);
@@ -1105,11 +1136,18 @@ function addDirectRow() {
         }
 
         function renderGestionRetours(container) {
-            const pending = appData.retours.filter(r => r.status === "EN ATTENTE");
-            container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl"><h3 class="border-b-2 mb-6 uppercase text-orange-600 font-black italic">Validation Retours</h3><div class="space-y-4">
-                ${pending.map(r => `<div class="bg-slate-50 p-4 rounded-2xl border flex justify-between items-center"><div><p class="font-black text-indigo-900">${r.techName} [${r.etat}]</p><p class="text-[9px] uppercase">${r.qty}x ${r.label}</p></div><button onclick="validerRetour('${r.id}')" class="bg-green-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase">Réintégrer</button></div>`).join("")}
-            </div></div>`;
-        }
+    const retours = appData.retours || []; // Sécurité
+    const enAttente = retours.filter(r => r.status === "EN ATTENTE");
+
+    container.innerHTML = `
+        <div class="bg-white p-8 rounded-3xl shadow-xl italic font-black">
+            <h3 class="text-orange-600 border-b-2 mb-6 uppercase">Gestion des Retours Chantier</h3>
+            <div class="space-y-4">
+                ${enAttente.map(r => `...`).join("")}
+                ${enAttente.length === 0 ? '<p class="text-center opacity-30 py-5 font-black">AUCUN RETOUR À TRAITER</p>' : ''}
+            </div>
+        </div>`;
+}
 
         function validerRetour(id) {
             const r = appData.retours.find(x => x.id === id);
@@ -1176,11 +1214,24 @@ function addDirectRow() {
         function handleRec(e) { e.preventDefault(); const mat = { op: document.getElementById("r-op").value, label: document.getElementById("r-mat").value.toUpperCase(), qty: parseInt(document.getElementById("r-qty").value) || 0, type: document.getElementById("r-type").value.toUpperCase() }; const existing = appData.stock.find(s => s.op === mat.op && s.label === mat.label); if(existing && mat.op === 'ITC') existing.qty += mat.qty; else appData.stock.push(mat); addNotification(1, `TRAFIC : ENTRÉE STOCK (${mat.label})`); save(); alert("ENREGISTRÉ."); showSection("cockpit"); }
         function toggleQtyField(v) { document.getElementById('qty-container').style.display = (v === 'ITC' ? 'block' : 'none'); }
 
-        function renderStock(opKey, container) {
-            const ops = opKey === "oci-cic" ? ["OCI", "CIC", "OCI-CIC"] : [opKey.toUpperCase()];
-            const stockEntite = appData.stock.filter(s => ops.includes(s.op));
-            container.innerHTML = `<div class="bg-white rounded-3xl shadow-xl overflow-hidden font-bold italic"><div class="p-6 bg-slate-900 text-white flex justify-between"><h3 class="text-xl uppercase font-black tracking-widest italic">STOCK ${opKey.toUpperCase()}</h3></div><div class="p-6"><table class="w-full text-left"><thead><tr class="text-[8px] text-slate-400 border-b uppercase font-black"><th>Type</th><th>Désignation</th><th class="text-center">Quantité</th></tr></thead><tbody>${stockEntite.map(s => `<tr class="border-b"><td class="py-4 text-slate-400 font-black">${s.type}</td><td class="py-4 text-indigo-900 font-black">${s.label}</td><td class="py-4 text-center font-black">${s.op==='ITC'?s.qty:'DISPONIBLE'}</td></tr>`).join("")}</tbody></table></div></div>`;
-        }
+        function renderStock(operateur, container) {
+    const stock = appData.stock || []; // Sécurité
+    const items = stock.filter(s => s.op === operateur);
+
+    container.innerHTML = `
+        <div class="bg-white p-8 rounded-3xl shadow-xl italic font-black">
+            <h3 class="text-indigo-600 border-b-2 mb-6 uppercase">Détail Stock : ${operateur}</h3>
+            <div class="grid grid-cols-1 gap-3">
+                ${items.map(m => `
+                    <div class="flex justify-between p-3 bg-slate-50 rounded-xl border">
+                        <span class="text-xs uppercase">${m.label}</span>
+                        <span class="font-black text-indigo-600">${m.qty} U</span>
+                    </div>
+                `).join("")}
+                ${items.length === 0 ? '<p class="text-center py-10 opacity-30">STOCKS VIDES</p>' : ''}
+            </div>
+        </div>`;
+}
 
         function renderTraficAudit(container) {
             const notifs = appData.notifications.filter(n => n.userId === 1);
@@ -1226,7 +1277,22 @@ function addDirectRow() {
         }
     }, 500);
 }
-        function markNotificationsAsRead() { if (!currentUser) return; appData.notifications.forEach(n => { if (n.userId === currentUser.id) n.lu = true; }); save(); updateNotifications(); }
+function markNotificationsAsRead() {
+    if (!appData || !appData.notifications) return; // Sécurité totale
+
+    appData.notifications.forEach(n => {
+        if (n.userId === currentUser.id) n.lu = true;
+    });
+    save();
+}function markNotificationsAsRead() {
+    if (!appData || !appData.notifications) return; // Sécurité totale
+
+    appData.notifications.forEach(n => {
+        if (n.userId === currentUser.id) n.lu = true;
+    });
+    save();
+    updateNotifications;
+}
         function addNotification(u, m) { if(!appData.notifications) appData.notifications = []; appData.notifications.unshift({ userId: u, message: m, lu: false, date: new Date().toLocaleString() }); save(); updateNotifications(); }
         function updateNotifications() {
     // 1. Sécurité : Si l'utilisateur n'est pas là ou si les données ne sont pas chargées
