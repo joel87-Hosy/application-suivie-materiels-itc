@@ -1491,7 +1491,40 @@ function addDirectRow() {
     toggleQtyField('ITC');
 }
 
-        function handleRec(e) { e.preventDefault(); const mat = { op: document.getElementById("r-op").value, label: document.getElementById("r-mat").value.toUpperCase(), qty: parseInt(document.getElementById("r-qty").value) || 0, type: document.getElementById("r-type").value.toUpperCase() }; const existing = appData.stock.find(s => s.op === mat.op && s.label === mat.label); if(existing && mat.op === 'ITC') existing.qty += mat.qty; else appData.stock.push(mat); addNotification(1, `TRAFIC : ENTRÉE STOCK (${mat.label})`); save(); alert("ENREGISTRÉ."); showSection("cockpit"); }
+function handleRec(e) {
+    e.preventDefault();
+
+    // 1. SÉCURITÉ : On s'assure que appData et appData.stock existent
+    if (!appData) appData = {};
+    if (!appData.stock) appData.stock = [];
+
+    const mat = {
+        op: document.getElementById("r-op").value,
+        label: document.getElementById("r-mat").value.toUpperCase().trim(),
+        qty: parseInt(document.getElementById("r-qty").value) || 0,
+        type: document.getElementById("r-type").value.toUpperCase()
+    };
+
+    // 2. RECHERCHE SÉCURISÉE : On cherche si l'article existe déjà pour cet opérateur
+    const existing = appData.stock.find(s => s.op === mat.op && s.label === mat.label);
+
+    if (existing && mat.op === 'ITC') {
+        // Si c'est du stock ITC, on additionne la quantité
+        existing.qty = (parseInt(existing.qty) || 0) + mat.qty;
+    } else {
+        // Sinon, on crée une nouvelle entrée dans le stock
+        appData.stock.push(mat);
+    }
+
+    // 3. AUDIT & SAUVEGARDE
+    addNotification(1, `TRAFIC : ENTRÉE STOCK (${mat.label}) - QUANTITÉ : ${mat.qty}`);
+    save(); // Envoi vers Firebase
+    
+    alert("ENTRÉE EN STOCK RÉUSSIE.");
+    
+    // 4. RETOUR AU COCKPIT
+    showSection("cockpit");
+}
         function toggleQtyField(v) { document.getElementById('qty-container').style.display = (v === 'ITC' ? 'block' : 'none'); }
 
         function renderStock(opKey, container) {
