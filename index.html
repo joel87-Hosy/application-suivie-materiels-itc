@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITC Telecom ERP | Automation & Stock Expert</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
@@ -87,27 +88,28 @@
                             <i class="fas fa-envelope-open-text w-5 text-yellow-500"></i> Commandes <span id="notif-gest-coord" class="notification-badge hidden">0</span>
                         </div>
                     
+                        <div onclick="showSection('rapport-hebdo'); toggleSidebarMobile();" 
+                         class="cursor-pointer py-3 px-8 my-1 bg-blue-900/30 hover:bg-blue-600 rounded-xl flex items-center transition duration-200 italic text-blue-300 font-black border border-blue-500/30">
+                         <i class="fas fa-file-invoice w-6 text-blue-400"></i>
+                          <span class="ml-2">RAPPORT HEBDOMADAIRE</span>
+                        </div>
+                    
                         <div onclick="showSection('sortie-physique'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 text-red-400 hover:text-white flex items-center transition italic font-black">
-                            <i class="fas fa-minus-circle w-5"></i> Sortie Bon Physique
+                            <i class="fas fa-minus-circle w-5 mr-2"></i> Sortie Bon Physique
                         </div>
                     
                         <div onclick="showSection('reception'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
                             <i class="fas fa-download w-5 text-green-400"></i> Entrée Stock
                         </div>
                     
-                        <div onclick="showSection('livraison'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
-                            <i class="fas fa-truck-loading w-5 text-indigo-400"></i> Sortie Physique
-                        </div>
-                    
-                        <div onclick="showSection('gestion-retours'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
-                            <i class="fas fa-undo-alt w-5 text-orange-500"></i> Valider Retours
+                        <div onclick="showSection('livraison'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-indigo-400">
+                            <i class="fas fa-truck-loading w-5"></i> Sortie Physique
                         </div>
                     
                         <div onclick="showSection('scanner-physique'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic font-black text-pink-400 border-l-2 border-pink-500 ml-2 mt-1">
                             <i class="fas fa-qrcode w-5"></i> Scanner Bon (Cam)
                         </div>
                     </div>
-                    
                     <div id="section-stock-disponible" class="mt-6 border-t border-slate-800 pt-4">
                         <p class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50">Consultation Stock</p>
                         <div onclick="showSection('stock-itc'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-box w-5 text-indigo-400"></i> STOCK ITC</div>
@@ -324,15 +326,43 @@ function logout() {
         });
 }
 
-        function updateMenuVisibility() {
-            const r = currentUser.role;
-            document.getElementById("menu-superviseur").classList.toggle("hidden", r !== "Superviseur");
-            document.getElementById("menu-technicien").classList.toggle("hidden", r !== "Technicien");
-            document.getElementById("menu-coordinatrice").classList.toggle("hidden", r !== "Coordinatrice");
-            document.getElementById("menu-gestionnaire").classList.toggle("hidden", r !== "Gestionnaire");
-            document.getElementById("section-stock-disponible").classList.toggle("hidden", r === "Technicien");
-            document.getElementById("menu-cockpit").classList.toggle("hidden", r === "Technicien");
+function updateMenuVisibility() {
+    if (!currentUser || !currentUser.role) return;
+    
+    const r = currentUser.role;
+
+    // Gestion du menu Superviseur
+    const menuSup = document.getElementById("menu-superviseur");
+    if (menuSup) menuSup.classList.toggle("hidden", r !== "Superviseur");
+
+    // Gestion du menu Technicien
+    const menuTech = document.getElementById("menu-technicien");
+    if (menuTech) menuTech.classList.toggle("hidden", r !== "Technicien");
+
+    // Gestion du menu Coordinatrice
+    const menuCoord = document.getElementById("menu-coordinatrice");
+    if (menuCoord) menuCoord.classList.toggle("hidden", r !== "Coordinatrice");
+
+    // Gestion du menu Gestionnaire (MAGASIN)
+    const menuGest = document.getElementById("menu-gestionnaire");
+    if (menuGest) {
+        // On force la suppression de 'hidden' si c'est le gestionnaire
+        if (r === "Gestionnaire") {
+            menuGest.classList.remove("hidden");
+        } else {
+            menuGest.classList.add("hidden");
         }
+    }
+
+    // Gestion des sections communes
+    const secStock = document.getElementById("section-stock-disponible");
+    if (secStock) secStock.classList.toggle("hidden", r === "Technicien");
+
+    const menuCockpit = document.getElementById("menu-cockpit");
+    if (menuCockpit) menuCockpit.classList.toggle("hidden", r === "Technicien");
+    
+    console.log("Menus mis à jour pour le rôle : " + r);
+}
         function updateUserInfo() {
             document.getElementById("user-name").innerText = currentUser.name;
             document.getElementById("user-role-badge").innerText = currentUser.role.toUpperCase();
@@ -724,20 +754,14 @@ function confirmerImportExcel(itemsString) {
 }
         // --- SECTION ROUTER ---
         function showSection(id) {
-    // 1. MISE À JOUR DE LA VARIABLE GLOBALE (Crucial pour le rafraîchissement Firebase)
-    // Assure-toi que cette variable s'appelle BIEN 'currentSectionId' partout dans ton script
     currentSectionId = id; 
-
     const container = document.getElementById("app-container");
     const viewTitle = document.getElementById("view-title");
 
-    // 2. MISE À JOUR DU TITRE DE L'EN-TÊTE
     viewTitle.innerText = id.toUpperCase().replace(/-/g, " ");
-
-    // 3. NETTOYAGE DE L'ÉCRAN (Évite les superpositions)
     container.innerHTML = "";
 
-    // 4. AIGUILLAGE LOGIQUE (Mapping complet de l'ERP)
+    // --- AIGUILLAGE LOGIQUE ---
     if (id === "cockpit") {
         renderCockpit(container);
     } 
@@ -780,21 +804,24 @@ function confirmerImportExcel(itemsString) {
     else if (id === "scanner-physique") {
         renderScanner(container);
     }
+    // AJOUT : Sortie Physique
+    else if (id === "sortie-physique") {
+        viewTitle.innerText = "SORTIE SUR BON PHYSIQUE";
+        renderSortiePhysiqueForm();
+    }
+    // AJOUT : Rapport Hebdomadaire
+    else if (id === "rapport-hebdo") {
+        renderRapportHebdo();
+    }
     else if (id.startsWith("stock-")) {
         renderStock(id.replace("stock-", ""), container);
     }
     else {
-        // Sécurité si un ID est mal orthographié dans le HTML
         container.innerHTML = `<div class="p-10 text-center opacity-50 uppercase font-black">Section "${id}" en cours de déploiement...</div>`;
     }
 
-    if (id === "sortie-physique") {
-        viewTitle.innerText = "SORTIE SUR BON PHYSIQUE";
-        renderSortiePhysiqueForm(); // Appelle la fonction que nous avons créée
-    }
-
-    // 5. GESTION DES NOTIFICATIONS (Marquer comme lu)
-    const sectionsANotifs = ["coord-demandes-tech", "demandes-coordonnatrice", "tech-mes-demandes", "coord-excel", "trafic-audit"];
+    // 5. GESTION DES NOTIFICATIONS
+    const sectionsANotifs = ["coord-demandes-tech", "demandes-coordonnatrice", "tech-mes-demandes", "coord-excel", "trafic-audit", "rapport-hebdo"];
     if (sectionsANotifs.includes(id)) {
         markNotificationsAsRead();
     }
@@ -979,6 +1006,166 @@ function renderExcelOrderForm(items) {
         console.error("Erreur caméra:", err);
         container.innerHTML = `<p class="text-red-500 text-center p-10 font-black">Impossible d'accéder à la caméra.</p>`;
     });
+}
+
+// 1. Variable globale pour le graphique (à placer au début de votre balise script)
+let myChart = null;
+
+function renderRapportHebdo() {
+    const container = document.getElementById("app-container");
+    const moisActuel = new Date().getMonth();
+    
+    container.innerHTML = `
+        <div class="space-y-6">
+            <div class="bg-white p-6 rounded-3xl shadow-xl border-b-4 border-blue-600">
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                    <h3 class="text-xl font-black uppercase text-slate-800 italic">
+                        <i class="fas fa-chart-line mr-2 text-blue-600"></i> Performance Flux Magasin
+                    </h3>
+                    <div class="flex gap-2">
+                        <select id="filter-month" onchange="updateRapportHebdo()" class="border-2 p-2 rounded-xl text-[10px] font-black uppercase outline-none bg-slate-50">
+                            ${["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
+                                .map((m, i) => `<option value="${i}" ${i === moisActuel ? 'selected' : ''}>${m}</option>`).join("")}
+                        </select>
+                        <button onclick="exportHebdoExcel()" class="bg-green-600 text-white px-4 py-2 rounded-xl text-[8px] font-black uppercase shadow-sm">Excel</button>
+                        <button onclick="exportHebdoPDF()" class="bg-red-600 text-white px-4 py-2 rounded-xl text-[8px] font-black uppercase shadow-sm">PDF</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-3xl shadow-xl border-2 border-slate-100 h-[300px]">
+                <canvas id="fluxChart"></canvas>
+            </div>
+
+            <div id="hebdo-content" class="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-slate-100"></div>
+        </div>
+    `;
+    updateRapportHebdo();
+}
+
+function updateRapportHebdo() {
+    const month = parseInt(document.getElementById("filter-month").value);
+    const content = document.getElementById("hebdo-content");
+    
+    let allMovements = [];
+
+    // Récupération des Sorties (Bons Livrés)
+    (appData.demandes || []).forEach(d => {
+        if (d.status === "LIVREE" && d.dateLivraison) {
+            const parts = d.dateLivraison.split('/');
+            if (parseInt(parts[1]) - 1 === month) {
+                allMovements.push({
+                    date: d.dateLivraison,
+                    type: "SORTIE",
+                    op: d.op || "ITC",
+                    item: d.items.map(i => i.label).join(", "),
+                    qty: d.items.reduce((sum, i) => sum + (parseInt(i.qty) || 0), 0),
+                    dest: d.demandeurName || "N/A"
+                });
+            }
+        }
+    });
+
+   // Dans updateRapportHebdo, remplacez la boucle des entrées par celle-ci :
+(appData.notifications || []).forEach(n => {
+    // On cherche le mot clé que vous utilisez dans handleRec
+    if (n.message.includes("TRAFIC : ENTRÉE STOCK")) {
+        const dateParts = n.date.split(' ')[0].split('/'); // Récupère DD/MM/YYYY
+        const m = parseInt(dateParts[1]) - 1;
+        
+        if (m === month) {
+            const qtyMatch = n.message.match(/QUANTITÉ\s*:\s*(\d+)/i);
+            allMovements.push({
+                date: dateParts[0] + "/" + dateParts[1] + "/" + dateParts[2],
+                type: "ENTRÉE",
+                op: "ITC",
+                item: n.message.split('(')[1]?.split(')')[0] || "Matériel",
+                qty: qtyMatch ? parseInt(qtyMatch[1]) : 0,
+                dest: "MAGASIN CENTRAL"
+            });
+        }
+    }
+});
+
+    // Tri par date
+    allMovements.sort((a, b) => b.date.localeCompare(a.date));
+
+    let html = `
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="bg-slate-900 text-white text-[8px] uppercase font-black italic">
+                    <th class="p-4">Date</th><th class="p-4">Type</th><th class="p-4">Opérateur</th>
+                    <th class="p-4">Matériel</th><th class="p-4">Qté</th><th class="p-4">Destinataire</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-[9px] font-bold">
+                ${allMovements.map(m => `
+                    <tr>
+                        <td class="p-4">${m.date}</td>
+                        <td class="p-4 ${m.type === 'SORTIE' ? 'text-red-500' : 'text-green-500'}">${m.type}</td>
+                        <td class="p-4">${m.op}</td>
+                        <td class="p-4">${m.item}</td>
+                        <td class="p-4 font-black">${m.qty} U</td>
+                        <td class="p-4 text-slate-500">${m.dest}</td>
+                    </tr>
+                `).join("")}
+            </tbody>
+        </table>`;
+    
+    content.innerHTML = allMovements.length > 0 ? html : `<p class="p-10 text-center opacity-30">AUCUNE DONNÉE</p>`;
+    generateFluxChart(allMovements);
+}
+
+function generateFluxChart(data) {
+    const canvas = document.getElementById('fluxChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    const totalEntrees = data.filter(m => m.type === "ENTRÉE").reduce((sum, m) => sum + m.qty, 0);
+    const totalSorties = data.filter(m => m.type === "SORTIE").reduce((sum, m) => sum + m.qty, 0);
+
+    if (myChart) myChart.destroy();
+
+    myChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['MOUVEMENTS'],
+            datasets: [
+                { label: 'Entrées', data: [totalEntrees], backgroundColor: '#22c55e', borderRadius: 8 },
+                { label: 'Sorties', data: [totalSorties], backgroundColor: '#ef4444', borderRadius: 8 }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+}
+function exportHebdoExcel() {
+    const monthName = document.getElementById("filter-month").options[document.getElementById("filter-month").selectedIndex].text;
+    const table = document.querySelector("#hebdo-content table");
+    const wb = XLSX.utils.table_to_book(table);
+    XLSX.writeFile(wb, `RAPPORT_MAGASIN_${monthName}_2026.xlsx`);
+}
+
+function exportHebdoPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('l', 'mm', 'a4'); // Mode paysage pour plus de colonnes
+    const monthName = document.getElementById("filter-month").options[document.getElementById("filter-month").selectedIndex].text;
+
+    doc.setFontSize(14);
+    doc.text(`RAPPORT MENSUEL DES FLUX MAGASIN - ${monthName.toUpperCase()} 2026`, 14, 15);
+    
+    doc.autoTable({
+        html: '#hebdo-content table',
+        startY: 25,
+        theme: 'grid',
+        headStyles: { fillColor: [30, 41, 59], fontSize: 8 },
+        styles: { fontSize: 7, fontStyle: 'bold' }
+    });
+
+    doc.save(`RAPPORT_FLUX_${monthName}.pdf`);
 }
 
 function handleScanSuccess(id) {
