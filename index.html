@@ -327,41 +327,46 @@ function logout() {
 }
 
 function updateMenuVisibility() {
-    if (!currentUser || !currentUser.role) return;
+    if (!currentUser || !currentUser.role) {
+        console.error("Erreur : Aucun utilisateur ou rôle détecté.");
+        return;
+    }
     
-    const r = currentUser.role;
+    // On transforme le rôle en MAJUSCULES pour éviter les erreurs de saisie
+    const r = currentUser.role.trim().toUpperCase();
+    console.log("Rôle détecté (sécurisé) :", r);
 
-    // Gestion du menu Superviseur
+    // 1. Menu Superviseur
     const menuSup = document.getElementById("menu-superviseur");
-    if (menuSup) menuSup.classList.toggle("hidden", r !== "Superviseur");
+    if (menuSup) menuSup.classList.toggle("hidden", r !== "SUPERVISEUR");
 
-    // Gestion du menu Technicien
+    // 2. Menu Technicien
     const menuTech = document.getElementById("menu-technicien");
-    if (menuTech) menuTech.classList.toggle("hidden", r !== "Technicien");
+    if (menuTech) menuTech.classList.toggle("hidden", r !== "TECHNICIEN");
 
-    // Gestion du menu Coordinatrice
+    // 3. Menu Coordinatrice
     const menuCoord = document.getElementById("menu-coordinatrice");
-    if (menuCoord) menuCoord.classList.toggle("hidden", r !== "Coordinatrice");
+    if (menuCoord) menuCoord.classList.toggle("hidden", r !== "COORDINATRICE");
 
-    // Gestion du menu Gestionnaire (MAGASIN)
+    // 4. Menu Gestionnaire (MAGASIN) - On vérifie plusieurs variantes possibles
     const menuGest = document.getElementById("menu-gestionnaire");
     if (menuGest) {
-        // On force la suppression de 'hidden' si c'est le gestionnaire
-        if (r === "Gestionnaire") {
+        if (r === "GESTIONNAIRE" || r === "MAGASINIER" || r === "GEST") {
             menuGest.classList.remove("hidden");
+            console.log("Menu Gestionnaire affiché.");
         } else {
             menuGest.classList.add("hidden");
         }
     }
 
-    // Gestion des sections communes
+    // 5. Sections Communes (Consultation Stock & Cockpit)
     const secStock = document.getElementById("section-stock-disponible");
-    if (secStock) secStock.classList.toggle("hidden", r === "Technicien");
+    if (secStock) secStock.classList.toggle("hidden", r === "TECHNICIEN");
 
     const menuCockpit = document.getElementById("menu-cockpit");
-    if (menuCockpit) menuCockpit.classList.toggle("hidden", r === "Technicien");
+    if (menuCockpit) menuCockpit.classList.toggle("hidden", r === "TECHNICIEN");
     
-    console.log("Menus mis à jour pour le rôle : " + r);
+    console.log("Mise à jour des menus terminée.");
 }
         function updateUserInfo() {
             document.getElementById("user-name").innerText = currentUser.name;
@@ -758,8 +763,10 @@ function confirmerImportExcel(itemsString) {
     const container = document.getElementById("app-container");
     const viewTitle = document.getElementById("view-title");
 
+    // Nettoyage et préparation
     viewTitle.innerText = id.toUpperCase().replace(/-/g, " ");
     container.innerHTML = "";
+    container.scrollTop = 0; // Remet le défilement en haut
 
     // --- AIGUILLAGE LOGIQUE ---
     if (id === "cockpit") {
@@ -804,14 +811,14 @@ function confirmerImportExcel(itemsString) {
     else if (id === "scanner-physique") {
         renderScanner(container);
     }
-    // AJOUT : Sortie Physique
+    // CORRECTION : Ajout du container manquant
     else if (id === "sortie-physique") {
         viewTitle.innerText = "SORTIE SUR BON PHYSIQUE";
-        renderSortiePhysiqueForm();
+        renderSortiePhysiqueForm(container); 
     }
-    // AJOUT : Rapport Hebdomadaire
+    // CORRECTION : Appel propre du rapport
     else if (id === "rapport-hebdo") {
-        renderRapportHebdo();
+        renderRapportHebdo(container);
     }
     else if (id.startsWith("stock-")) {
         renderStock(id.replace("stock-", ""), container);
@@ -820,7 +827,7 @@ function confirmerImportExcel(itemsString) {
         container.innerHTML = `<div class="p-10 text-center opacity-50 uppercase font-black">Section "${id}" en cours de déploiement...</div>`;
     }
 
-    // 5. GESTION DES NOTIFICATIONS
+    // 5. GESTION DES NOTIFICATIONS (Après le rendu)
     const sectionsANotifs = ["coord-demandes-tech", "demandes-coordonnatrice", "tech-mes-demandes", "coord-excel", "trafic-audit", "rapport-hebdo"];
     if (sectionsANotifs.includes(id)) {
         markNotificationsAsRead();
