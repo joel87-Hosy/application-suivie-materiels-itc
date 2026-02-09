@@ -1150,12 +1150,33 @@ function generateFluxChart(data) {
     });
 }
 function exportHebdoExcel() {
-    const monthName = document.getElementById("filter-month").options[document.getElementById("filter-month").selectedIndex].text;
-    const table = document.querySelector("#hebdo-content table");
-    const wb = XLSX.utils.table_to_book(table);
-    XLSX.writeFile(wb, `RAPPORT_MAGASIN_${monthName}_2026.xlsx`);
-}
+    // 1. On récupère le conteneur du rapport
+    const content = document.getElementById("hebdo-content");
+    const table = content ? content.querySelector("table") : null;
 
+    // 2. Vérification de sécurité : Si le tableau n'existe pas, on arrête tout proprement
+    if (!table) {
+        alert("⚠️ IMPOSSIBLE D'EXPORTER : Il n'y a aucune donnée affichée dans le tableau pour ce mois.");
+        return;
+    }
+
+    // 3. Récupération du nom du mois pour nommer le fichier
+    const monthSelect = document.getElementById("filter-month");
+    const monthName = monthSelect.options[monthSelect.selectedIndex].text;
+
+    try {
+        // 4. Conversion du tableau HTML en classeur Excel
+        const wb = XLSX.utils.table_to_book(table, { sheet: "Flux Magasin ITC" });
+        
+        // 5. Génération et téléchargement du fichier
+        XLSX.writeFile(wb, `RAPPORT_FLUX_ITC_${monthName}_2026.xlsx`);
+        
+        console.log("✅ Export Excel réussi !");
+    } catch (err) {
+        console.error("Erreur Excel:", err);
+        alert("Erreur lors de la génération du fichier Excel.");
+    }
+}
 function exportHebdoPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('l', 'mm', 'a4'); // Mode paysage pour plus de colonnes
