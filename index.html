@@ -82,17 +82,30 @@
 
                     <div id="menu-gestionnaire" class="mt-6 hidden">
                         <p class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50">Magasin</p>
-                        <div onclick="showSection('demandes-coordonnatrice'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic"><i class="fas fa-envelope-open-text w-5 text-yellow-500"></i> Commandes <span id="notif-gest-coord" class="notification-badge hidden">0</span></div>
-                        <div onclick="showSection('reception'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-download w-5 text-green-400"></i> Entrée Stock</div>
-                        <div onclick="showSection('livraison'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-truck-loading w-5 text-indigo-400"></i> Sortie Physique</div>
-                        <div onclick="showSection('gestion-retours'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-undo-alt w-5 text-orange-500"></i> Valider Retours</div>
-                        <div onclick="showSection('scanner-physique'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic font-black text-pink-400 border-l-2 border-pink-500 ml-2 mt-1">
-                          <i class="fas fa-qrcode w-5"></i> Scanner Bon (Cam)
-                      </div>
+                        
+                        <div onclick="showSection('demandes-coordonnatrice'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic">
+                            <i class="fas fa-envelope-open-text w-5 text-yellow-500"></i> Commandes <span id="notif-gest-coord" class="notification-badge hidden">0</span>
+                        </div>
                     
-                        <button onclick="renderSortiePhysiqueForm();  toggleSidebarMobile();" class="bg-red-500 text-white p-4 rounded-xl text-[10px] font-black uppercase shadow-md">
-                          <i class="fas fa-minus-circle mr-2"></i> Nouvelle Sortie (Bon Physique)
-                        </button>
+                        <div onclick="showSection('sortie-physique'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 text-red-400 hover:text-white flex items-center transition italic font-black">
+                            <i class="fas fa-minus-circle w-5"></i> Sortie Bon Physique
+                        </div>
+                    
+                        <div onclick="showSection('reception'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
+                            <i class="fas fa-download w-5 text-green-400"></i> Entrée Stock
+                        </div>
+                    
+                        <div onclick="showSection('livraison'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
+                            <i class="fas fa-truck-loading w-5 text-indigo-400"></i> Sortie Physique
+                        </div>
+                    
+                        <div onclick="showSection('gestion-retours'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
+                            <i class="fas fa-undo-alt w-5 text-orange-500"></i> Valider Retours
+                        </div>
+                    
+                        <div onclick="showSection('scanner-physique'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic font-black text-pink-400 border-l-2 border-pink-500 ml-2 mt-1">
+                            <i class="fas fa-qrcode w-5"></i> Scanner Bon (Cam)
+                        </div>
                     </div>
                     
                     <div id="section-stock-disponible" class="mt-6 border-t border-slate-800 pt-4">
