@@ -479,6 +479,7 @@ function renderStatsConsommation(container) {
 }
 
 function renderSortiePhysiqueForm() {
+    const saved = JSON.parse(localStorage.getItem("draft_sortie")) || { items: [{label: '', qty: ''}] };
     const container = document.getElementById("app-container");
     container.innerHTML = `
         <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
@@ -1285,6 +1286,49 @@ function handleScanSuccess(id) {
     XLSX.writeFile(wb, `RAPPORT_CONSO_ITC_${moisNom.toUpperCase()}.xlsx`);
 }
 
+// Sauvegarde locale des champs de réception
+function saveReceptionDraft() {
+    const draft = {
+        op: document.getElementById("r-op")?.value,
+        type: document.getElementById("r-type")?.value,
+        mat: document.getElementById("r-mat")?.value,
+        qty: document.getElementById("r-qty")?.value
+    };
+    localStorage.setItem("draft_reception", JSON.stringify(draft));
+}
+
+// Écouteur global pour détecter la saisie
+document.addEventListener('input', (e) => {
+    if (["r-op", "r-type", "r-mat", "r-qty"].includes(e.target.id)) {
+        saveReceptionDraft();
+    }
+});
+
+function saveSortieDraft() {
+    const items = [];
+    document.querySelectorAll(".art-row-sortie").forEach(row => {
+        items.push({
+            label: row.querySelector(".art-l").value,
+            qty: row.querySelector(".art-q").value
+        });
+    });
+
+    const draft = {
+        op: document.getElementById("s-op")?.value,
+        tech: document.getElementById("s-tech")?.value,
+        ref: document.getElementById("s-ref")?.value,
+        items: items
+    };
+    localStorage.setItem("draft_sortie", JSON.stringify(draft));
+}
+
+// On écoute les changements dans la section sortie
+document.addEventListener('input', (e) => {
+    if (e.target.closest('#app-container') && currentSectionId === 'sortie-physique') {
+        saveSortieDraft();
+    }
+});
+
         // --- COCKPIT & ALERTES ---
         function renderCockpit(container) {
     // 1. SÉCURITÉ : On définit des listes vides par défaut si les données manquent
@@ -1779,6 +1823,8 @@ function addDirectRow() {
 
         // --- AUTRES ---
         function renderReceptionForm(container) {
+            // Récupérer le brouillon s'il existe
+    const saved = JSON.parse(localStorage.getItem("draft_reception")) || {};
     container.innerHTML = `
         <div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black">
             <h3 class="mb-8 uppercase border-b-2 text-indigo-600 italic">Mise en Stock Matériel</h3>
