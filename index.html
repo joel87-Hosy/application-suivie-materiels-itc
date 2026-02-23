@@ -1,6 +1,6 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
-<head>
+  <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITC Telecom ERP | Automation & Stock Expert</title>
@@ -15,453 +15,821 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
     <style>
-        .sidebar-transition { transition: transform 0.3s ease-in-out; }
-        @media (max-width: 1024px) { .sidebar-hidden { transform: translateX(-100%); } }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #ec4899; border-radius: 10px; }
-        .notification-badge { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: bold; }
+      .sidebar-transition {
+        transition: transform 0.3s ease-in-out;
+      }
+      @media (max-width: 1024px) {
+        .sidebar-hidden {
+          transform: translateX(-100%);
+        }
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #1e293b;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #ec4899;
+        border-radius: 10px;
+      }
+      .notification-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: #ef4444;
+        color: white;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: bold;
+      }
     </style>
-</head>
-<body class="bg-slate-100 font-sans text-slate-800 overflow-hidden uppercase italic font-bold text-[10px]">
-    <audio id="beep-sound" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" preload="auto"></audio>
-    <div id="qrcode-temp" style="display:none;"></div>
-    <div id="login-screen" class="fixed inset-0 bg-slate-900 flex items-center justify-center z-[100]">
-        <div class="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full mx-4 text-center border-t-4 border-pink-500">
-            <img src="logo-ITC-NW-01-fond-blanc-01.jpg" alt="Logo ITC" class="h-20 mx-auto mb-4" />
-            <h2 class="text-xl font-black text-slate-900 mb-8 tracking-tighter italic">SÉCURITÉ ERP GLOBAL</h2>
-            <form onsubmit="handleLogin(event)" class="space-y-4">
-                <input id="login-email" type="email" placeholder="EMAIL PROFESSIONNEL" class="w-full border-2 p-3 rounded-xl text-xs uppercase outline-none" required />
-                <input id="login-password" type="password" placeholder="MOT DE PASSE" class="w-full border-2 p-3 rounded-xl text-xs outline-none" required />
-                <button type="submit" class="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-lg">AUTHENTIFICATION</button>
-                <p onclick="resetPassword()" class="text-[9px] text-center text-indigo-600 cursor-pointer mt-4 hover:underline italic">
-                    Mot de passe oublié ?
-                </p>
-            </form>
-        </div>
+  </head>
+  <body
+    class="bg-slate-100 font-sans text-slate-800 overflow-hidden uppercase italic font-bold text-[10px]"
+  >
+    <audio
+      id="beep-sound"
+      src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"
+      preload="auto"
+    ></audio>
+    <div id="qrcode-temp" style="display: none"></div>
+    <div
+      id="login-screen"
+      class="fixed inset-0 bg-slate-900 flex items-center justify-center z-[100]"
+    >
+      <div
+        class="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full mx-4 text-center border-t-4 border-pink-500"
+      >
+        <img
+          src="logo-ITC-NW-01-fond-blanc-01.jpg"
+          alt="Logo ITC"
+          class="h-20 mx-auto mb-4"
+        />
+        <h2
+          class="text-xl font-black text-slate-900 mb-8 tracking-tighter italic"
+        >
+          SÉCURITÉ ERP GLOBAL
+        </h2>
+        <form onsubmit="handleLogin(event)" class="space-y-4">
+          <input
+            id="login-email"
+            type="email"
+            placeholder="EMAIL PROFESSIONNEL"
+            class="w-full border-2 p-3 rounded-xl text-xs uppercase outline-none"
+            required
+          />
+          <input
+            id="login-password"
+            type="password"
+            placeholder="MOT DE PASSE"
+            class="w-full border-2 p-3 rounded-xl text-xs outline-none"
+            required
+          />
+          <button
+            type="submit"
+            class="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-lg"
+          >
+            AUTHENTIFICATION
+          </button>
+          <p
+            onclick="resetPassword()"
+            class="text-[9px] text-center text-indigo-600 cursor-pointer mt-4 hover:underline italic"
+          >
+            Mot de passe oublié ?
+          </p>
+        </form>
+      </div>
     </div>
 
     <div id="main-app" class="hidden">
-        <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/60 z-40 hidden lg:hidden"></div>
-        <div class="flex h-screen overflow-hidden">
-            <aside id="sidebar" class="fixed lg:relative w-72 bg-slate-900 text-white h-full z-50 sidebar-transition sidebar-hidden lg:transform-none shadow-2xl flex flex-col">
-                <div class="p-4 bg-white border-b border-slate-800 flex flex-col items-center shrink-0">
-                    <img src="logo-ITC-NW-01-fond-blanc-01.jpg" alt="Logo ITC" class="h-16 lg:h-20 object-contain" />
-                </div>
-                <nav class="flex-1 mt-4 overflow-y-auto custom-scrollbar pb-10">
-                    <div id="menu-cockpit" onclick="showSection('cockpit'); toggleSidebarMobile();" class="cursor-pointer py-3 px-6 flex items-center hover:bg-slate-800 transition">
-                        <i class="fas fa-chart-line w-6 text-pink-500"></i><span class="ml-2">Tableau de Bord</span>
-                    </div>
+      <div
+        id="sidebar-overlay"
+        onclick="toggleSidebar()"
+        class="fixed inset-0 bg-black/60 z-40 hidden lg:hidden"
+      ></div>
+      <div class="flex h-screen overflow-hidden">
+        <aside
+          id="sidebar"
+          class="fixed lg:relative w-72 bg-slate-900 text-white h-full z-50 sidebar-transition sidebar-hidden lg:transform-none shadow-2xl flex flex-col"
+        >
+          <div
+            class="p-4 bg-white border-b border-slate-800 flex flex-col items-center shrink-0"
+          >
+            <img
+              src="logo-ITC-NW-01-fond-blanc-01.jpg"
+              alt="Logo ITC"
+              class="h-16 lg:h-20 object-contain"
+            />
+          </div>
+          <nav class="flex-1 mt-4 overflow-y-auto custom-scrollbar pb-10">
+            <div
+              id="menu-cockpit"
+              onclick="
+                showSection('cockpit');
+                toggleSidebarMobile();
+              "
+              class="cursor-pointer py-3 px-6 flex items-center hover:bg-slate-800 transition"
+            >
+              <i class="fas fa-chart-line w-6 text-pink-500"></i
+              ><span class="ml-2">Tableau de Bord</span>
+            </div>
 
-                    <div id="menu-superviseur" class="mt-6 hidden">
-                        <p class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50">Contrôle</p>
-                        
-                        <div onclick="showSection('trafic-audit'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
-                            <i class="fas fa-exchange-alt w-5 text-blue-400"></i> Journal d'Audit <span id="notif-superviseur" class="notification-badge hidden">0</span>
-                        </div> <div onclick="showSection('stats-consommation'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic font-black text-green-400">
-                            <i class="fas fa-chart-pie w-5"></i> Stats Consommation
-                        </div>
-                    </div>
-                    <div id="menu-technicien" class="mt-6 hidden">
-                        <p class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50">Opérations Terrain</p>
-                        <div onclick="showSection('tech-nouvelle-demande'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-plus-circle w-5 text-green-500"></i> Demander Matériel</div>
-                        <div onclick="showSection('tech-retour-materiel'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-undo w-5 text-orange-400"></i> Retour de Stock</div>
-                        <div onclick="showSection('tech-mes-demandes'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic"><i class="fas fa-file-download w-5 text-pink-500"></i> Mes Bons <span id="notif-tech" class="notification-badge hidden">0</span></div>
-                    </div>
+            <div id="menu-superviseur" class="mt-6 hidden">
+              <p
+                class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50"
+              >
+                Contrôle
+              </p>
 
-                    <div id="menu-coordinatrice" class="mt-6 hidden">
-                        <p class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50">Gestion Flux</p>
-                        <div onclick="showSection('coord-demandes-tech'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic"><i class="fas fa-inbox w-5 text-orange-500"></i> Flux Tech <span id="notif-coord" class="notification-badge hidden">0</span></div>
-                        <div onclick="showSection('coord-creation-directe'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-plus-square w-5 text-pink-400"></i> Commande Directe</div>
-                        <input type="file" id="excel-upload" accept=".xlsx, .xls" class="hidden" onchange="processExcel(event)" />
-                        <button onclick="document.getElementById('excel-upload').click()" class="bg-green-600 text-white py-4 rounded-2xl text-[10px] uppercase font-black shadow-lg hover:bg-green-700 transition w-full mb-4">
-                            <i class="fas fa-file-excel mr-2"></i> Importer Commande via Excel
-                        </button>
-                    </div>
+              <div
+                onclick="
+                  showSection('trafic-audit');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-exchange-alt w-5 text-blue-400"></i> Journal
+                d'Audit
+                <span id="notif-superviseur" class="notification-badge hidden"
+                  >0</span
+                >
+              </div>
+              <div
+                onclick="
+                  showSection('stats-consommation');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic font-black text-green-400"
+              >
+                <i class="fas fa-chart-pie w-5"></i> Stats Consommation
+              </div>
+            </div>
+            <div id="menu-technicien" class="mt-6 hidden">
+              <p
+                class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50"
+              >
+                Opérations Terrain
+              </p>
+              <div
+                onclick="
+                  showSection('tech-nouvelle-demande');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-plus-circle w-5 text-green-500"></i> Demander
+                Matériel
+              </div>
+              <div
+                onclick="
+                  showSection('tech-retour-materiel');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-undo w-5 text-orange-400"></i> Retour de Stock
+              </div>
+              <div
+                onclick="
+                  showSection('tech-mes-demandes');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic"
+              >
+                <i class="fas fa-file-download w-5 text-pink-500"></i> Mes Bons
+                <span id="notif-tech" class="notification-badge hidden">0</span>
+              </div>
+            </div>
 
-                    <div id="menu-gestionnaire" class="mt-6 hidden">
-                        <p class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50">Magasin</p>
-                        
-                        <div onclick="showSection('demandes-coordonnatrice'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic">
-                            <i class="fas fa-envelope-open-text w-5 text-yellow-500"></i> Commandes <span id="notif-gest-coord" class="notification-badge hidden">0</span>
-                        </div>
-                    
-                        <div onclick="showSection('rapport-hebdo'); toggleSidebarMobile();" 
-                         class="cursor-pointer py-3 px-8 my-1 bg-blue-900/30 hover:bg-blue-600 rounded-xl flex items-center transition duration-200 italic text-blue-300 font-black border border-blue-500/30">
-                         <i class="fas fa-file-invoice w-6 text-blue-400"></i>
-                          <span class="ml-2">RAPPORT HEBDOMADAIRE</span>
-                        </div>
-                    
-                        <div onclick="showSection('sortie-physique'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 text-red-400 hover:text-white flex items-center transition italic font-black">
-                            <i class="fas fa-minus-circle w-5 mr-2"></i> Sortie Bon Physique
-                        </div>
-                    
-                        <div onclick="showSection('reception'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
-                            <i class="fas fa-download w-5 text-green-400"></i> Entrée Stock
-                        </div>
-                    
-                        <div onclick="showSection('livraison'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-indigo-400">
-                            <i class="fas fa-truck-loading w-5"></i> Sortie Physique
-                        </div>
-                    
-                        <div onclick="showSection('scanner-physique'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic font-black text-pink-400 border-l-2 border-pink-500 ml-2 mt-1">
-                            <i class="fas fa-qrcode w-5"></i> Scanner Bon (Cam)
-                        </div>
-                    </div>
-                    <div id="section-stock-disponible" class="mt-6 border-t border-slate-800 pt-4">
-                        <p class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50">Consultation Stock</p>
-                        <div onclick="showSection('stock-itc'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-box w-5 text-indigo-400"></i> STOCK ITC</div>
-                        <div onclick="showSection('stock-oci-cic'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-box w-5 text-green-400"></i> OCI-CIC</div>
-                        <div onclick="showSection('stock-moov'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-box w-5 text-yellow-400"></i> MOOV</div>
-                        <div onclick="showSection('stock-mtn'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"><i class="fas fa-box w-5 text-red-400"></i> MTN</div>
-                    </div>
-                    
-                </nav>
-                <div class="p-4 border-t border-slate-800"><button onclick="logout()" class="w-full bg-red-600 text-white py-2 rounded-xl text-xs font-black uppercase hover:bg-red-700 transition">Déconnexion</button></div>
-            </aside>
+            <div id="menu-coordinatrice" class="mt-6 hidden">
+              <p
+                class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50"
+              >
+                Gestion Flux
+              </p>
+              <div
+                onclick="
+                  showSection('coord-demandes-tech');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic"
+              >
+                <i class="fas fa-inbox w-5 text-orange-500"></i> Flux Tech
+                <span id="notif-coord" class="notification-badge hidden"
+                  >0</span
+                >
+              </div>
+              <div
+                onclick="
+                  showSection('coord-creation-directe');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-plus-square w-5 text-pink-400"></i> Commande
+                Directe
+              </div>
+              <input
+                type="file"
+                id="excel-upload"
+                accept=".xlsx, .xls"
+                class="hidden"
+                onchange="processExcel(event)"
+              />
+              <button
+                onclick="document.getElementById('excel-upload').click()"
+                class="bg-green-600 text-white py-4 rounded-2xl text-[10px] uppercase font-black shadow-lg hover:bg-green-700 transition w-full mb-4"
+              >
+                <i class="fas fa-file-excel mr-2"></i> Importer Commande via
+                Excel
+              </button>
+            </div>
 
-            <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <header class="h-16 bg-white border-b flex items-center justify-between px-8 shadow-sm shrink-0 font-black italic">
-                    <div class="flex items-center">
-                        <button onclick="toggleSidebar()" class="lg:hidden mr-4 text-slate-600 text-xl p-2 rounded-md hover:bg-slate-100 transition"><i class="fas fa-bars"></i></button>
-                        <h2 id="view-title" class="font-black text-slate-500 tracking-widest uppercase italic text-[10px]">ERP DASHBOARD</h2>
-                    </div>
-                    <div class="text-right">
-                        <p id="user-role-badge" class="text-[8px] font-black text-white bg-pink-600 px-2 py-0.5 rounded uppercase mb-1">RÔLE</p>
-                        <p id="user-name" class="text-slate-800 italic">UTILISATEUR</p>
-                    </div>
-                </header>
-                <div id="app-container" class="p-8 overflow-y-auto flex-1 h-full"></div>
-            </main>
-        </div>
+            <div id="menu-gestionnaire" class="mt-6 hidden">
+              <p
+                class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50"
+              >
+                Magasin
+              </p>
+
+              <div
+                onclick="
+                  showSection('demandes-coordonnatrice');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition relative italic"
+              >
+                <i class="fas fa-envelope-open-text w-5 text-yellow-500"></i>
+                Commandes
+                <span id="notif-gest-coord" class="notification-badge hidden"
+                  >0</span
+                >
+              </div>
+
+              <div
+                onclick="
+                  showSection('rapport-hebdo');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-3 px-8 my-1 bg-blue-900/30 hover:bg-blue-600 rounded-xl flex items-center transition duration-200 italic text-blue-300 font-black border border-blue-500/30"
+              >
+                <i class="fas fa-file-invoice w-6 text-blue-400"></i>
+                <span class="ml-2">RAPPORT HEBDOMADAIRE</span>
+              </div>
+
+              <div
+                onclick="
+                  showSection('sortie-physique');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 text-red-400 hover:text-white flex items-center transition italic font-black"
+              >
+                <i class="fas fa-minus-circle w-5 mr-2"></i> Sortie Bon Physique
+              </div>
+
+              <div
+                onclick="
+                  showSection('rapports-sorties');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-clipboard-list w-5 text-indigo-400"></i>
+                Rapports Sorties
+              </div>
+
+              <div
+                onclick="
+                  showSection('reception');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-download w-5 text-green-400"></i> Entrée Stock
+              </div>
+
+              <div
+                onclick="
+                  showSection('livraison');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-indigo-400"
+              >
+                <i class="fas fa-truck-loading w-5"></i> Sortie Physique
+              </div>
+
+              <div
+                onclick="
+                  showSection('scanner-physique');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic font-black text-pink-400 border-l-2 border-pink-500 ml-2 mt-1"
+              >
+                <i class="fas fa-qrcode w-5"></i> Scanner Bon (Cam)
+              </div>
+            </div>
+            <div
+              id="section-stock-disponible"
+              class="mt-6 border-t border-slate-800 pt-4"
+            >
+              <p
+                class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50"
+              >
+                Consultation Stock
+              </p>
+              <div
+                onclick="
+                  showSection('stock-itc');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-box w-5 text-indigo-400"></i> STOCK ITC
+              </div>
+              <div
+                onclick="
+                  showSection('stock-oci-cic');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-box w-5 text-green-400"></i> OCI-CIC
+              </div>
+              <div
+                onclick="
+                  showSection('stock-moov');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-box w-5 text-yellow-400"></i> MOOV
+              </div>
+              <div
+                onclick="
+                  showSection('stock-mtn');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-box w-5 text-red-400"></i> MTN
+              </div>
+            </div>
+          </nav>
+          <div class="p-4 border-t border-slate-800">
+            <button
+              onclick="logout()"
+              class="w-full bg-red-600 text-white py-2 rounded-xl text-xs font-black uppercase hover:bg-red-700 transition"
+            >
+              Déconnexion
+            </button>
+          </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <header
+            class="h-16 bg-white border-b flex items-center justify-between px-8 shadow-sm shrink-0 font-black italic"
+          >
+            <div class="flex items-center">
+              <button
+                onclick="toggleSidebar()"
+                class="lg:hidden mr-4 text-slate-600 text-xl p-2 rounded-md hover:bg-slate-100 transition"
+              >
+                <i class="fas fa-bars"></i>
+              </button>
+              <h2
+                id="view-title"
+                class="font-black text-slate-500 tracking-widest uppercase italic text-[10px]"
+              >
+                ERP DASHBOARD
+              </h2>
+            </div>
+            <div class="text-right">
+              <p
+                id="user-role-badge"
+                class="text-[8px] font-black text-white bg-pink-600 px-2 py-0.5 rounded uppercase mb-1"
+              >
+                RÔLE
+              </p>
+              <p id="user-name" class="text-slate-800 italic">UTILISATEUR</p>
+            </div>
+          </header>
+          <div
+            id="app-container"
+            class="p-8 overflow-y-auto flex-1 h-full"
+          ></div>
+        </main>
+      </div>
     </div>
 
     <script>
-        let currentSectionId = "cockpit"; // Par défaut on est sur le cockpit
-// CONFIGURATION FIREBASE
-const firebaseConfig = {
-    apiKey: "AIzaSyD7P-6vY3yHQx7OFCs6th6gN6EURP89QUQ",
-    authDomain: "itc-erp.firebaseapp.com",
-    databaseURL: "https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "itc-erp",
-    storageBucket: "itc-erp.firebasestorage.app",
-    messagingSenderId: "870100539481",
-    appId: "1:870100539481:web:e12d817a9a44e867e97948",
-    measurementId: "G-HMRDVGSWHM"
-};
+      let currentSectionId = "cockpit"; // Par défaut on est sur le cockpit
+      // CONFIGURATION FIREBASE
+      const firebaseConfig = {
+        apiKey: "AIzaSyD7P-6vY3yHQx7OFCs6th6gN6EURP89QUQ",
+        authDomain: "itc-erp.firebaseapp.com",
+        databaseURL:
+          "https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "itc-erp",
+        storageBucket: "itc-erp.firebasestorage.app",
+        messagingSenderId: "870100539481",
+        appId: "1:870100539481:web:e12d817a9a44e867e97948",
+        measurementId: "G-HMRDVGSWHM",
+      };
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.database();
 
-// L'unique déclaration de currentUser pour toute l'app
-let currentUser = null; 
-let appData = {
-    stock: [], demandes: [], techDemandes: [], retours: [],
-    notifications: [], scansDuJour: [], derniereDateScan: null,
-    users: [
-        { id: 1, name: "AHONON ROGER", role: "Superviseur", email: "roger.ahonon@itc.ci" },
-        { id: 2, name: "GESTIONNAIRE", role: "Gestionnaire", email: "gest@itc.ci" },
-        { id: 7, name: "COORDINATRICE", role: "Coordinatrice", email: "coord@itc.ci" },
-        { id: 8, name: "TECHNICIEN TERRAIN", role: "Technicien", email: "tech@itc.ci" }
-    ]
-};
-// Écoute en temps réel des changements sur Firebase
-// Écoute en temps réel des changements sur Firebase
-db.ref('itc_data').on('value', (snapshot) => {
-    const data = snapshot.val();
-    
-    // On vérifie que les données existent et que l'utilisateur est connecté
-    if (data && currentUser) {
-        appData = data; // Mise à jour de la mémoire locale
-        updateNotifications(); // Met à jour les petites pastilles rouges
-        
-        const container = document.getElementById("app-container");
+      // L'unique déclaration de currentUser pour toute l'app
+      let currentUser = null;
+      let appData = {
+        stock: [],
+        demandes: [],
+        techDemandes: [],
+        retours: [],
+        notifications: [],
+        scansDuJour: [],
+        derniereDateScan: null,
+        users: [
+          {
+            id: 1,
+            name: "AHONON ROGER",
+            role: "Superviseur",
+            email: "roger.ahonon@itc.ci",
+          },
+          {
+            id: 2,
+            name: "GESTIONNAIRE",
+            role: "Gestionnaire",
+            email: "gest@itc.ci",
+          },
+          {
+            id: 7,
+            name: "COORDINATRICE",
+            role: "Coordinatrice",
+            email: "coord@itc.ci",
+          },
+          {
+            id: 8,
+            name: "TECHNICIEN TERRAIN",
+            role: "Technicien",
+            email: "tech@itc.ci",
+          },
+        ],
+      };
+      // Écoute en temps réel des changements sur Firebase
+      // Écoute en temps réel des changements sur Firebase
+      db.ref("itc_data").on("value", (snapshot) => {
+        const data = snapshot.val();
 
-        // --- LOGIQUE DE RAFRAÎCHISSEMENT INTELLIGENT ---
-        // On ne redessine que la section que l'utilisateur est en train de regarder
-        
-        if (currentSectionId === "cockpit") {
+        // On vérifie que les données existent et que l'utilisateur est connecté
+        if (data && currentUser) {
+          appData = data; // Mise à jour de la mémoire locale
+          updateNotifications(); // Met à jour les petites pastilles rouges
+
+          const container = document.getElementById("app-container");
+
+          // --- LOGIQUE DE RAFRAÎCHISSEMENT INTELLIGENT ---
+          // On ne redessine que la section que l'utilisateur est en train de regarder
+
+          if (currentSectionId === "cockpit") {
             renderCockpit(container);
-        } 
-        else if (currentSectionId === "stats-consommation") {
+          } else if (currentSectionId === "stats-consommation") {
             renderStatsConsommation(container); // <--- AJOUTÉ : Pour que les stats s'actualisent
-        } 
-        else if (currentSectionId === "trafic-audit") {
+          } else if (currentSectionId === "trafic-audit") {
             renderTraficAudit(container);
-        }
-        else if (currentSectionId === "coord-demandes-tech") {
+          } else if (currentSectionId === "coord-demandes-tech") {
             renderCoordFluxTech(container); // <--- AJOUTÉ : Pour la coordinatrice
-        }
-        else if (currentSectionId === "demandes-coordonnatrice") {
+          } else if (currentSectionId === "demandes-coordonnatrice") {
             renderDemandesGestionnaire(container); // <--- AJOUTÉ : Pour le magasinier
-        }
-        else if (currentSectionId === "tech-mes-demandes") {
+          } else if (currentSectionId === "tech-mes-demandes") {
             renderTechMesDemandes(container); // <--- AJOUTÉ : Pour le technicien
-        }
-        else if (currentSectionId === "livraison") {
+          } else if (currentSectionId === "livraison") {
             renderLivraisonForm(container);
-        }
-        else if (currentSectionId === "gestion-retours") {
+          } else if (currentSectionId === "gestion-retours") {
             renderGestionRetours(container);
-        }
-        else if (currentSectionId.startsWith("stock-")) {
+          } else if (currentSectionId.startsWith("stock-")) {
             renderStock(currentSectionId.replace("stock-", ""), container);
+          }
+
+          console.log(
+            "Mise à jour temps réel appliquée sur : " + currentSectionId,
+          );
         }
-        
-        console.log("Mise à jour temps réel appliquée sur : " + currentSectionId);
-    }
-});
-function save() {
-    db.ref('itc_data').set(appData);
-}
-    
-    // On garde quand même une copie locale par sécurité
-    localStorage.setItem("itc_erp_v6_qr", JSON.stringify(appData));
+      });
+      function save() {
+        db.ref("itc_data").set(appData);
+      }
 
+      // On garde quand même une copie locale par sécurité
+      localStorage.setItem("itc_erp_v6_qr", JSON.stringify(appData));
 
-        // --- AUTH ---
-        async function handleLogin(e) {
-    e.preventDefault();
-    const email = document.getElementById("login-email").value.toLowerCase().trim();
-    const password = document.getElementById("login-password").value.trim();
+      // --- AUTH ---
+      async function handleLogin(e) {
+        e.preventDefault();
+        const email = document
+          .getElementById("login-email")
+          .value.toLowerCase()
+          .trim();
+        const password = document.getElementById("login-password").value.trim();
 
-    try {
-        const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
-        const userProfile = appData.users.find(u => u.email === email);
-        
-        if (userProfile) {
+        try {
+          const userCredential = await firebase
+            .auth()
+            .signInWithEmailAndPassword(email, password);
+          const userProfile = appData.users.find((u) => u.email === email);
+
+          if (userProfile) {
             currentUser = userProfile;
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("main-app").classList.remove("hidden");
-            
+
             updateMenuVisibility();
             updateUserInfo();
             updateNotifications();
-            
-            // Redirection intelligente
-            showSection(currentUser.role === 'Technicien' ? "tech-nouvelle-demande" : "cockpit");
-        }
-    } catch (error) {
-        alert("ÉCHEC D'AUTHENTIFICATION : " + error.message);
-    }
-}
 
-// Persistance de la session
-firebase.auth().onAuthStateChanged((user) => {
-    if (user) {
-        // 1. Sécurité : On vérifie que les données de l'application sont bien chargées
-        if (!appData || !appData.users) {
+            // Redirection intelligente
+            showSection(
+              currentUser.role === "Technicien"
+                ? "tech-nouvelle-demande"
+                : "cockpit",
+            );
+          }
+        } catch (error) {
+          alert("ÉCHEC D'AUTHENTIFICATION : " + error.message);
+        }
+      }
+
+      // Persistance de la session
+      firebase.auth().onAuthStateChanged((user) => {
+        if (user) {
+          // 1. Sécurité : On vérifie que les données de l'application sont bien chargées
+          if (!appData || !appData.users) {
             console.warn("Attente du chargement des données ITC...");
             // On peut forcer un petit délai ou attendre le prochain cycle du listener
-            return; 
-        }
+            return;
+          }
 
-        // 2. Recherche du profil avec sécurité sur l'email
-        const profile = appData.users.find(u => u.email.toLowerCase() === user.email.toLowerCase());
+          // 2. Recherche du profil avec sécurité sur l'email
+          const profile = appData.users.find(
+            (u) => u.email.toLowerCase() === user.email.toLowerCase(),
+          );
 
-        if (profile) {
+          if (profile) {
             currentUser = profile;
-            
+
             // 3. Mise à jour de l'interface
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("main-app").classList.remove("hidden");
-            
+
             // 4. Initialisation des composants
-            updateMenuVisibility(); 
-            updateUserInfo(); 
+            updateMenuVisibility();
+            updateUserInfo();
             updateNotifications();
-            
+
             // 5. Affichage de la section par défaut (Cockpit)
             showSection("cockpit");
-            
+
             console.log("Utilisateur ITC connecté : " + currentUser.nom);
-        } else {
+          } else {
             console.error("Profil introuvable pour cet email : " + user.email);
             // Optionnel : déconnecter si l'email n'est pas autorisé dans l'ERP
             // firebase.auth().signOut();
+          }
+        } else {
+          // Gestion de la déconnexion : on affiche le login
+          document.getElementById("login-screen").classList.remove("hidden");
+          document.getElementById("main-app").classList.add("hidden");
+          currentUser = null;
         }
-    } else {
-        // Gestion de la déconnexion : on affiche le login
-        document.getElementById("login-screen").classList.remove("hidden");
-        document.getElementById("main-app").classList.add("hidden");
-        currentUser = null;
-    }
-});
-function logout() {
-    // 1. Déconnexion de Firebase Auth
-    firebase.auth().signOut().then(() => {
-        // 2. Nettoyage des données locales
-        appData.currentUserId = null;
-        currentUser = null;
-        
-        // 3. Optionnel : Nettoyer le localStorage si tu l'utilises pour le backup
-        localStorage.removeItem("itc_erp_local_backup");
+      });
+      function logout() {
+        // 1. Déconnexion de Firebase Auth
+        firebase
+          .auth()
+          .signOut()
+          .then(() => {
+            // 2. Nettoyage des données locales
+            appData.currentUserId = null;
+            currentUser = null;
 
-        // 4. Redirection forcée vers le login (sans recharger forcément toute la page)
-        document.getElementById("main-app").classList.add("hidden");
-        document.getElementById("login-screen").classList.remove("hidden");
-        
-        console.log("Déconnexion réussie.");
-    }).catch((error) => {
-        console.error("Erreur lors de la déconnexion :", error);
-    });
-}
-        function resetPassword() {
-    const email = document.getElementById("login-email").value.trim();
+            // 3. Optionnel : Nettoyer le localStorage si tu l'utilises pour le backup
+            localStorage.removeItem("itc_erp_local_backup");
 
-    if (!email) {
-        alert("Veuillez d'abord saisir votre adresse email dans le champ ci-dessus.");
-        return;
-    }
+            // 4. Redirection forcée vers le login (sans recharger forcément toute la page)
+            document.getElementById("main-app").classList.add("hidden");
+            document.getElementById("login-screen").classList.remove("hidden");
 
-    firebase.auth().sendPasswordResetEmail(email)
-        .then(() => {
-            alert("Un email de réinitialisation a été envoyé à : " + email + ". Vérifiez vos courriers indésirables (spams).");
-        })
-        .catch((error) => {
+            console.log("Déconnexion réussie.");
+          })
+          .catch((error) => {
+            console.error("Erreur lors de la déconnexion :", error);
+          });
+      }
+      function resetPassword() {
+        const email = document.getElementById("login-email").value.trim();
+
+        if (!email) {
+          alert(
+            "Veuillez d'abord saisir votre adresse email dans le champ ci-dessus.",
+          );
+          return;
+        }
+
+        firebase
+          .auth()
+          .sendPasswordResetEmail(email)
+          .then(() => {
+            alert(
+              "Un email de réinitialisation a été envoyé à : " +
+                email +
+                ". Vérifiez vos courriers indésirables (spams).",
+            );
+          })
+          .catch((error) => {
             console.error(error);
             alert("Erreur : " + error.message);
-        });
-}
+          });
+      }
 
-function updateMenuVisibility() {
-    if (!currentUser || !currentUser.role) {
-        console.error("Erreur : Aucun utilisateur ou rôle détecté.");
-        return;
-    }
-    
-    // On transforme le rôle en MAJUSCULES pour éviter les erreurs de saisie
-    const r = currentUser.role.trim().toUpperCase();
-    console.log("Rôle détecté (sécurisé) :", r);
+      function updateMenuVisibility() {
+        if (!currentUser || !currentUser.role) {
+          console.error("Erreur : Aucun utilisateur ou rôle détecté.");
+          return;
+        }
 
-    // 1. Menu Superviseur
-    const menuSup = document.getElementById("menu-superviseur");
-    if (menuSup) menuSup.classList.toggle("hidden", r !== "SUPERVISEUR");
+        // On transforme le rôle en MAJUSCULES pour éviter les erreurs de saisie
+        const r = currentUser.role.trim().toUpperCase();
+        console.log("Rôle détecté (sécurisé) :", r);
 
-    // 2. Menu Technicien
-    const menuTech = document.getElementById("menu-technicien");
-    if (menuTech) menuTech.classList.toggle("hidden", r !== "TECHNICIEN");
+        // 1. Menu Superviseur
+        const menuSup = document.getElementById("menu-superviseur");
+        if (menuSup) menuSup.classList.toggle("hidden", r !== "SUPERVISEUR");
 
-    // 3. Menu Coordinatrice
-    const menuCoord = document.getElementById("menu-coordinatrice");
-    if (menuCoord) menuCoord.classList.toggle("hidden", r !== "COORDINATRICE");
+        // 2. Menu Technicien
+        const menuTech = document.getElementById("menu-technicien");
+        if (menuTech) menuTech.classList.toggle("hidden", r !== "TECHNICIEN");
 
-    // 4. Menu Gestionnaire (MAGASIN) - On vérifie plusieurs variantes possibles
-    const menuGest = document.getElementById("menu-gestionnaire");
-    if (menuGest) {
-        if (r === "GESTIONNAIRE" || r === "MAGASINIER" || r === "GEST") {
+        // 3. Menu Coordinatrice
+        const menuCoord = document.getElementById("menu-coordinatrice");
+        if (menuCoord)
+          menuCoord.classList.toggle("hidden", r !== "COORDINATRICE");
+
+        // 4. Menu Gestionnaire (MAGASIN) - On vérifie plusieurs variantes possibles
+        const menuGest = document.getElementById("menu-gestionnaire");
+        if (menuGest) {
+          if (r === "GESTIONNAIRE" || r === "MAGASINIER" || r === "GEST") {
             menuGest.classList.remove("hidden");
             console.log("Menu Gestionnaire affiché.");
-        } else {
+          } else {
             menuGest.classList.add("hidden");
+          }
         }
-    }
 
-    // 5. Sections Communes (Consultation Stock & Cockpit)
-    const secStock = document.getElementById("section-stock-disponible");
-    if (secStock) secStock.classList.toggle("hidden", r === "TECHNICIEN");
+        // 5. Sections Communes (Consultation Stock & Cockpit)
+        const secStock = document.getElementById("section-stock-disponible");
+        if (secStock) secStock.classList.toggle("hidden", r === "TECHNICIEN");
 
-    const menuCockpit = document.getElementById("menu-cockpit");
-    if (menuCockpit) menuCockpit.classList.toggle("hidden", r === "TECHNICIEN");
-    
-    console.log("Mise à jour des menus terminée.");
-}
-        function updateUserInfo() {
-            document.getElementById("user-name").innerText = currentUser.name;
-            document.getElementById("user-role-badge").innerText = currentUser.role.toUpperCase();
+        const menuCockpit = document.getElementById("menu-cockpit");
+        if (menuCockpit)
+          menuCockpit.classList.toggle("hidden", r === "TECHNICIEN");
+
+        console.log("Mise à jour des menus terminée.");
+      }
+      function updateUserInfo() {
+        document.getElementById("user-name").innerText = currentUser.name;
+        document.getElementById("user-role-badge").innerText =
+          currentUser.role.toUpperCase();
+      }
+      function toggleSidebar() {
+        document.getElementById("sidebar").classList.toggle("sidebar-hidden");
+        document.getElementById("sidebar-overlay").classList.toggle("hidden");
+      }
+      function toggleSidebarMobile() {
+        if (window.innerWidth < 1024) toggleSidebar();
+      }
+
+      function verifierReinitialisationQuotidienne() {
+        const aujourdhui = new Date().toLocaleDateString();
+        if (appData.derniereDateScan !== aujourdhui) {
+          appData.scansDuJour = []; // On vide l'historique
+          appData.derniereDateScan = aujourdhui; // On met à jour la date
+          save();
         }
-        function toggleSidebar() { document.getElementById("sidebar").classList.toggle("sidebar-hidden"); document.getElementById("sidebar-overlay").classList.toggle("hidden"); }
-        function toggleSidebarMobile() { if (window.innerWidth < 1024) toggleSidebar(); }
+      }
 
-        function verifierReinitialisationQuotidienne() {
-    const aujourdhui = new Date().toLocaleDateString();
-    if (appData.derniereDateScan !== aujourdhui) {
-        appData.scansDuJour = []; // On vide l'historique
-        appData.derniereDateScan = aujourdhui; // On met à jour la date
-        save();
-    }
-}
+      function renderStatsConsommation(container) {
+        const moisActuel = new Date().getMonth();
+        const anneeActuelle = new Date().getFullYear();
 
-function renderStatsConsommation(container) {
-    const moisActuel = new Date().getMonth();
-    const anneeActuelle = new Date().getFullYear();
+        // 1. SÉCURITÉ : On s'assure que la liste existe avant de filtrer
+        const sourceDemandes =
+          appData && appData.demandes ? appData.demandes : [];
 
-    // 1. SÉCURITÉ : On s'assure que la liste existe avant de filtrer
-    const sourceDemandes = (appData && appData.demandes) ? appData.demandes : [];
+        // 2. FILTRAGE ROBUSTE
+        const livraisonsMois = sourceDemandes.filter((d) => {
+          // On vérifie que le bon est livré et qu'il a une date
+          if (d.status !== "LIVREE" || !d.dateLivraison) return false;
 
-    // 2. FILTRAGE ROBUSTE
-    const livraisonsMois = sourceDemandes.filter(d => {
-        // On vérifie que le bon est livré et qu'il a une date
-        if (d.status !== "LIVREE" || !d.dateLivraison) return false;
-        
-        // Gestion intelligente de la date (accepte "05/02/2026" ET "2026-02-05")
-        const parts = d.dateLivraison.includes('/') ? d.dateLivraison.split('/') : d.dateLivraison.split('-');
-        
-        let m, a;
-        if (parts[0].length === 4) { // Format YYYY-MM-DD
-             m = parseInt(parts[1]) - 1;
-             a = parseInt(parts[0]);
-        } else { // Format DD/MM/YYYY
-             m = parseInt(parts[1]) - 1;
-             a = parseInt(parts[2]);
-        }
-        
-        return m === moisActuel && a === anneeActuelle;
-    });
+          // Gestion intelligente de la date (accepte "05/02/2026" ET "2026-02-05")
+          const parts = d.dateLivraison.includes("/")
+            ? d.dateLivraison.split("/")
+            : d.dateLivraison.split("-");
 
-    // 3. CALCULS SÉCURISÉS (Items)
-    const statsTech = {};
-    const statsEquipe = {};
+          let m, a;
+          if (parts[0].length === 4) {
+            // Format YYYY-MM-DD
+            m = parseInt(parts[1]) - 1;
+            a = parseInt(parts[0]);
+          } else {
+            // Format DD/MM/YYYY
+            m = parseInt(parts[1]) - 1;
+            a = parseInt(parts[2]);
+          }
 
-    livraisonsMois.forEach(d => {
-        const nom = d.demandeurName || "INCONNU";
-        const equipe = d.prestataire || "SANS ÉQUIPE";
-        
-        // Sécurité : si d.items est vide, on prend une liste vide []
-        const items = d.items || [];
-        
-        // Sécurité : on s'assure que la quantité est bien un chiffre
-        const totalItems = items.reduce((sum, i) => sum + (parseInt(i.qty) || 0), 0);
+          return m === moisActuel && a === anneeActuelle;
+        });
 
-        statsTech[nom] = (statsTech[nom] || 0) + totalItems;
-        statsEquipe[equipe] = (statsEquipe[equipe] || 0) + totalItems;
-    });
+        // 3. CALCULS SÉCURISÉS (Items)
+        const statsTech = {};
+        const statsEquipe = {};
 
-    // 4. INTERFACE VISUELLE
-    container.innerHTML = `
+        livraisonsMois.forEach((d) => {
+          const nom = d.demandeurName || "INCONNU";
+          const equipe = d.prestataire || "SANS ÉQUIPE";
+
+          // Sécurité : si d.items est vide, on prend une liste vide []
+          const items = d.items || [];
+
+          // Sécurité : on s'assure que la quantité est bien un chiffre
+          const totalItems = items.reduce(
+            (sum, i) => sum + (parseInt(i.qty) || 0),
+            0,
+          );
+
+          statsTech[nom] = (statsTech[nom] || 0) + totalItems;
+          statsEquipe[equipe] = (statsEquipe[equipe] || 0) + totalItems;
+        });
+
+        // 4. INTERFACE VISUELLE
+        container.innerHTML = `
     <div class="space-y-8 h-full overflow-y-auto custom-scrollbar p-2">
         <h3 class="text-xl font-black uppercase text-indigo-900 border-b-4 border-indigo-600 pb-2 italic">
-            Rapport de Consommation - ${new Date().toLocaleString('fr-FR', { month: 'long', year: 'numeric' })}
+            Rapport de Consommation - ${new Date().toLocaleString("fr-FR", { month: "long", year: "numeric" })}
         </h3>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="bg-white p-6 rounded-3xl shadow-xl">
                 <h4 class="text-indigo-600 mb-4 uppercase font-black border-b pb-2 text-[9px]">Top Consommation par Équipe (Unités)</h4>
                 <div class="space-y-4">
-                    ${Object.entries(statsEquipe).length > 0 ? 
-                        Object.entries(statsEquipe).sort((a,b) => b[1] - a[1]).map(([eq, val]) => `
+                    ${
+                      Object.entries(statsEquipe).length > 0
+                        ? Object.entries(statsEquipe)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(
+                              ([eq, val]) => `
                         <div>
                             <div class="flex justify-between text-[9px] mb-1"><span>${eq}</span><span class="font-black">${val} U</span></div>
                             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                                 <div class="bg-indigo-500 h-full" style="width: ${Math.min(val, 100)}%"></div>
                             </div>
                         </div>
-                    `).join("") : '<p class="text-[8px] text-slate-400 text-center py-4">Aucune donnée ce mois-ci</p>'}
+                    `,
+                            )
+                            .join("")
+                        : '<p class="text-[8px] text-slate-400 text-center py-4">Aucune donnée ce mois-ci</p>'
+                    }
                 </div>
             </div>
 
             <div class="bg-white p-6 rounded-3xl shadow-xl">
                 <h4 class="text-pink-600 mb-4 uppercase font-black border-b pb-2 text-[9px]">Consommation par Technicien</h4>
                 <div class="space-y-3">
-                    ${Object.entries(statsTech).length > 0 ? 
-                        Object.entries(statsTech).sort((a,b) => b[1] - a[1]).map(([nom, val]) => `
+                    ${
+                      Object.entries(statsTech).length > 0
+                        ? Object.entries(statsTech)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(
+                              ([nom, val]) => `
                         <div class="flex justify-between items-center bg-slate-50 p-3 rounded-xl border-l-4 border-pink-500">
                             <span class="text-[9px] font-black">${nom}</span>
                             <span class="bg-pink-100 text-pink-700 px-3 py-1 rounded-lg text-[8px] font-black">${val} ARTICLES</span>
                         </div>
-                    `).join("") : '<p class="text-[8px] text-slate-400 text-center py-4">Aucune donnée</p>'}
+                    `,
+                            )
+                            .join("")
+                        : '<p class="text-[8px] text-slate-400 text-center py-4">Aucune donnée</p>'
+                    }
                 </div>
             </div>
         </div>
@@ -476,12 +844,14 @@ function renderStatsConsommation(container) {
             </button>
         </div>
     </div>`;
-}
+      }
 
-function renderSortiePhysiqueForm() {
-    const saved = JSON.parse(localStorage.getItem("draft_sortie")) || { items: [{label: '', qty: ''}] };
-    const container = document.getElementById("app-container");
-    container.innerHTML = `
+      function renderSortiePhysiqueForm() {
+        const saved = JSON.parse(localStorage.getItem("draft_sortie")) || {
+          items: [{ label: "", qty: "" }],
+        };
+        const container = document.getElementById("app-container");
+        container.innerHTML = `
         <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
             <h3 class="mb-8 border-b-4 border-red-600 pb-2 text-red-900 uppercase font-black italic">
                 <i class="fas fa-file-signature mr-2"></i> Sortie sur Bon Physique
@@ -522,154 +892,299 @@ function renderSortiePhysiqueForm() {
                 </div>
             </form>
         </div>`;
-}
+      }
 
-// Fonction pour ajouter une ligne d'article dynamiquement
-function addArticleRowSortie() {
-    const div = document.createElement('div');
-    div.className = "flex gap-2 items-center art-row-sortie bg-slate-50 p-2 rounded-xl border";
-    div.innerHTML = `
+      // Fonction pour ajouter une ligne d'article dynamiquement
+      function addArticleRowSortie() {
+        const div = document.createElement("div");
+        div.className =
+          "flex gap-2 items-center art-row-sortie bg-slate-50 p-2 rounded-xl border";
+        div.innerHTML = `
         <input type="text" placeholder="DÉSIGNATION" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
         <input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />
         <button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>
     `;
-    document.getElementById('sortie-items-list').appendChild(div);
-}
+        document.getElementById("sortie-items-list").appendChild(div);
+      }
 
-function handleSortiePhysique(e) {
-    e.preventDefault();
-    
-    if (!appData.stock) appData.stock = [];
-    
-    const op = document.getElementById("s-op").value;
-    const ref = document.getElementById("s-ref").value.toUpperCase();
-    const tech = document.getElementById("s-tech").value.toUpperCase();
-    const rows = document.querySelectorAll(".art-row-sortie");
-    
-    let logs = [];
-    let errors = [];
+      function handleSortiePhysique(e) {
+        e.preventDefault();
 
-    rows.forEach(row => {
-        const label = row.querySelector(".art-l").value.toUpperCase().trim();
-        const qty = parseInt(row.querySelector(".art-q").value) || 0;
+        if (!appData.stock) appData.stock = [];
 
-        // Trouver l'article en stock pour cet opérateur
-        const itemInStock = appData.stock.find(s => s.op === op && s.label === label);
+        const op = document.getElementById("s-op").value;
+        const ref = document.getElementById("s-ref").value.toUpperCase();
+        const tech = document.getElementById("s-tech").value.toUpperCase();
+        const rows = document.querySelectorAll(".art-row-sortie");
 
-        if (itemInStock) {
+        let logs = [];
+        let errors = [];
+
+        rows.forEach((row) => {
+          const label = row.querySelector(".art-l").value.toUpperCase().trim();
+          const qty = parseInt(row.querySelector(".art-q").value) || 0;
+
+          // Trouver l'article en stock pour cet opérateur
+          const itemInStock = appData.stock.find(
+            (s) => s.op === op && s.label === label,
+          );
+
+          if (itemInStock) {
             if (itemInStock.qty >= qty) {
-                itemInStock.qty -= qty;
-                logs.push(`${label} (-${qty})`);
+              itemInStock.qty -= qty;
+              logs.push(`${label} (-${qty})`);
             } else {
-                errors.push(`Stock insuffisant pour ${label} (Dispo: ${itemInStock.qty})`);
+              errors.push(
+                `Stock insuffisant pour ${label} (Dispo: ${itemInStock.qty})`,
+              );
             }
-        } else {
+          } else {
             errors.push(`L'article ${label} n'existe pas en stock pour ${op}`);
+          }
+        });
+
+        if (errors.length > 0) {
+          alert("ERREURS :\n" + errors.join("\n"));
+          return; // On arrête tout si une erreur de stock survient
         }
-    });
 
-    if (errors.length > 0) {
-        alert("ERREURS :\n" + errors.join("\n"));
-        return; // On arrête tout si une erreur de stock survient
-    }
+        // Enregistrement de l'activité
+        addNotification(
+          1,
+          `SORTIE PHYSIQUE : ${ref} par ${tech}. Articles : ${logs.join(", ")}`,
+        );
+        // Créer un rapport de sortie et le stocker
+        if (!appData.sorties) appData.sorties = [];
+        const sortieRecord = {
+          id: `SORTIE-${Date.now()}`,
+          ref,
+          op,
+          tech,
+          items: rowsToItems(rows),
+          logs,
+          date: new Date().toLocaleString(),
+          createdBy: currentUser ? currentUser.name : "ANONYME",
+        };
+        appData.sorties.push(sortieRecord);
+        save(); // Sauvegarde Firebase
 
-    // Enregistrement de l'activité
-    addNotification(1, `SORTIE PHYSIQUE : ${ref} par ${tech}. Articles : ${logs.join(", ")}`);
-    save(); // Sauvegarde Firebase
-    
-    alert("SORTIE DE STOCK ENREGISTRÉE AVEC SUCCÈS.");
-    showSection("cockpit");
-}
+        alert("SORTIE DE STOCK ENREGISTRÉE AVEC SUCCÈS.");
+        showSection("cockpit");
+      }
 
-// --- FONCTION PRINCIPALE : TRAITEMENT DU FICHIER ---
-function analyzeExcelData(workbook) {
-    let globalResult = {
-        motif: "IMPORT MULTI-FEUILLES",
-        items: []
-    };
+      // Helper : convertir les lignes DOM en objets items
+      function rowsToItems(rows) {
+        const items = [];
+        rows.forEach((row) => {
+          const label = row.querySelector(".art-l").value.toUpperCase().trim();
+          const qty = parseInt(row.querySelector(".art-q").value) || 0;
+          items.push({ label, qty });
+        });
+        return items;
+      }
 
-    workbook.SheetNames.forEach(sheetName => {
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        
-        // --- LOGIQUE FEUILLE 1 : STRUCTURE PROJET (Capture 1) ---
-        let isSheet1 = rows.some(r => r.includes("Opération") || r.includes("Désignation"));
-        
-        if (isSheet1) {
+      // --- FONCTION PRINCIPALE : TRAITEMENT DU FICHIER ---
+      function analyzeExcelData(workbook) {
+        let globalResult = {
+          motif: "IMPORT MULTI-FEUILLES",
+          items: [],
+        };
+
+        workbook.SheetNames.forEach((sheetName) => {
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+          // --- LOGIQUE FEUILLE 1 : STRUCTURE PROJET (Capture 1) ---
+          let isSheet1 = rows.some(
+            (r) => r.includes("Opération") || r.includes("Désignation"),
+          );
+
+          if (isSheet1) {
             rows.forEach((row, i) => {
-                // Récupération du motif (Opération)
-                if (String(row[1]).includes("Opération")) globalResult.motif = row[2] || globalResult.motif;
-                
-                // Extraction du matériel (Cherche la colonne Désignation et Quantité)
-                // On détecte la ligne d'entête "Désignation"
-                if (row.includes("Désignation") && row.includes("Quantité")) {
-                    let colDesc = row.indexOf("Désignation");
-                    let colQty = row.indexOf("Quantité");
-                    
-                    for (let j = i + 1; j < rows.length; j++) {
-                        let r = rows[j];
-                        if (r[colDesc] && !isNaN(parseFloat(r[colQty])) && !String(r[colDesc]).includes("Total")) {
-                            globalResult.items.push({
-                                label: String(r[colDesc]).trim().toUpperCase() + " (F1)",
-                                qty: parseFloat(r[colQty])
-                            });
-                        }
-                    }
-                }
-            });
-        }
+              // Récupération du motif (Opération)
+              if (String(row[1]).includes("Opération"))
+                globalResult.motif = row[2] || globalResult.motif;
 
-        // --- LOGIQUE FEUILLE 2 : STRUCTURE TECHNIQUE (Capture 2) ---
-        let isSheet2 = rows.some(r => r.includes("PUMP") || r.includes("Code Article"));
-        
-        if (isSheet2) {
+              // Extraction du matériel (Cherche la colonne Désignation et Quantité)
+              // On détecte la ligne d'entête "Désignation"
+              if (row.includes("Désignation") && row.includes("Quantité")) {
+                let colDesc = row.indexOf("Désignation");
+                let colQty = row.indexOf("Quantité");
+
+                for (let j = i + 1; j < rows.length; j++) {
+                  let r = rows[j];
+                  if (
+                    r[colDesc] &&
+                    !isNaN(parseFloat(r[colQty])) &&
+                    !String(r[colDesc]).includes("Total")
+                  ) {
+                    globalResult.items.push({
+                      label: String(r[colDesc]).trim().toUpperCase() + " (F1)",
+                      qty: parseFloat(r[colQty]),
+                    });
+                  }
+                }
+              }
+            });
+          }
+
+          // --- LOGIQUE FEUILLE 2 : STRUCTURE TECHNIQUE (Capture 2) ---
+          let isSheet2 = rows.some(
+            (r) => r.includes("PUMP") || r.includes("Code Article"),
+          );
+
+          if (isSheet2) {
             let colMap = { code: -1, desc: -1, qty: -1 };
             let headerIdx = -1;
 
             for (let i = 0; i < Math.min(rows.length, 20); i++) {
-                let row = rows[i];
-                row.forEach((cell, idx) => {
-                    let txt = String(cell).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s/g, "");
-                    if (txt.includes("CODEART")) colMap.code = idx;
-                    if (txt.includes("DESC")) colMap.desc = idx;
-                    if (txt.includes("QUANT")) colMap.qty = idx;
-                });
-                if (colMap.desc !== -1 && colMap.qty !== -1) { headerIdx = i; break; }
+              let row = rows[i];
+              row.forEach((cell, idx) => {
+                let txt = String(cell)
+                  .toUpperCase()
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g, "")
+                  .replace(/\s/g, "");
+                if (txt.includes("CODEART")) colMap.code = idx;
+                if (txt.includes("DESC")) colMap.desc = idx;
+                if (txt.includes("QUANT")) colMap.qty = idx;
+              });
+              if (colMap.desc !== -1 && colMap.qty !== -1) {
+                headerIdx = i;
+                break;
+              }
             }
 
             if (headerIdx !== -1) {
-                for (let i = headerIdx + 1; i < rows.length; i++) {
-                    let r = rows[i];
-                    if (!r || String(r[colMap.desc]).includes("Total")) break;
-                    
-                    let qty = parseFloat(String(r[colMap.qty]).replace(/[^0-9.,]/g, "").replace(',', '.'));
-                    if (r[colMap.desc] && !isNaN(qty) && qty > 0) {
-                        globalResult.items.push({
-                            label: String(r[colMap.desc]).trim().toUpperCase() + (r[colMap.code] ? ` [${r[colMap.code]}]` : '') + " (F2)",
-                            qty: qty
-                        });
-                    }
+              for (let i = headerIdx + 1; i < rows.length; i++) {
+                let r = rows[i];
+                if (!r || String(r[colMap.desc]).includes("Total")) break;
+
+                let qty = parseFloat(
+                  String(r[colMap.qty])
+                    .replace(/[^0-9.,]/g, "")
+                    .replace(",", "."),
+                );
+                if (r[colMap.desc] && !isNaN(qty) && qty > 0) {
+                  globalResult.items.push({
+                    label:
+                      String(r[colMap.desc]).trim().toUpperCase() +
+                      (r[colMap.code] ? ` [${r[colMap.code]}]` : "") +
+                      " (F2)",
+                    qty: qty,
+                  });
                 }
+              }
             }
+          }
+        });
+
+        return globalResult;
+      }
+
+      // Rend la liste des rapports de sorties pour le gestionnaire
+      function renderRapportsSorties(container) {
+        if (!appData.sorties) appData.sorties = [];
+        const sorties = appData.sorties.slice().reverse();
+
+        let html = `
+    <div class="max-w-5xl mx-auto bg-white p-8 rounded-3xl shadow-xl">
+        <h3 class="mb-6 uppercase text-indigo-600 font-black">Rapports - Sorties Bon Physique</h3>
+        <div class="mb-4 text-right">
+            <button onclick="exportAllSortiesPDF()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-[9px] font-black">Exporter Tout (PDF)</button>
+        </div>
+        <div class="space-y-4">
+            ${
+              sorties.length > 0
+                ? sorties
+                    .map(
+                      (s) => `
+                <div class="p-4 rounded-xl border bg-slate-50 flex justify-between items-start">
+                    <div>
+                        <p class="text-[9px] font-black">Réf: ${s.ref} — ${s.date}</p>
+                        <p class="text-[8px] text-slate-600">Opérateur: ${s.op} • Destinataire: ${s.tech} • Par: ${s.createdBy}</p>
+                        <ul class="mt-2 text-[9px] list-disc pl-4">
+                            ${s.items.map((i) => `<li>${i.label} — ${i.qty} U</li>`).join("")}
+                        </ul>
+                    </div>
+                    <div class="text-right">
+                        <button onclick="exportSortiePDF('${s.id}')" class="bg-pink-600 text-white px-3 py-2 rounded-lg text-[9px] font-black mr-2">PDF</button>
+                    </div>
+                </div>
+            `,
+                    )
+                    .join("")
+                : `<p class="text-[9px] text-slate-400 italic">Aucun rapport de sortie enregistré.</p>`
+            }
+        </div>
+    </div>`;
+
+        container.innerHTML = html;
+      }
+
+      function exportSortiePDF(id) {
+        const s = (appData.sorties || []).find((x) => x.id === id);
+        if (!s) return alert("Rapport introuvable");
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(12);
+        doc.text(`Rapport de Sortie - ${s.ref}`, 14, 20);
+        doc.setFontSize(10);
+        doc.text(`ID: ${s.id}`, 14, 28);
+        doc.text(`Date: ${s.date}`, 14, 34);
+        doc.text(`Opérateur: ${s.op}`, 14, 40);
+        doc.text(`Destinataire: ${s.tech}`, 14, 46);
+        doc.text(`Confirmé par: ${s.createdBy}`, 14, 52);
+        const body = s.items.map((it) => [it.label, String(it.qty)]);
+        doc.autoTable({
+          startY: 60,
+          head: [["Désignation", "Quantité"]],
+          body,
+        });
+        doc.save(`${s.id}.pdf`);
+      }
+
+      function exportAllSortiesPDF() {
+        const sorties = appData.sorties || [];
+        if (sorties.length === 0) return alert("Aucun rapport à exporter");
+        // Prépare une concaténation simple : un PDF par sortie fusionné basiquement en séquence
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        let y = 20;
+        sorties.forEach((s, idx) => {
+          if (idx > 0) doc.addPage();
+          doc.setFontSize(12);
+          doc.text(`Rapport de Sortie - ${s.ref}`, 14, 20);
+          doc.setFontSize(10);
+          doc.text(`ID: ${s.id}`, 14, 28);
+          doc.text(`Date: ${s.date}`, 14, 34);
+          doc.text(`Opérateur: ${s.op}`, 14, 40);
+          doc.text(`Destinataire: ${s.tech}`, 14, 46);
+          doc.text(`Confirmé par: ${s.createdBy}`, 14, 52);
+          const body = s.items.map((it) => [it.label, String(it.qty)]);
+          doc.autoTable({
+            startY: 60,
+            head: [["Désignation", "Quantité"]],
+            body,
+          });
+        });
+        doc.save(`Rapports_Sorties_${Date.now()}.pdf`);
+      }
+      // --- APERÇU ET VALIDATION ---
+      // --- APERÇU ET VALIDATION (VERSION POPUP MODALE) ---
+      function showExcelPreview(data) {
+        let modal = document.getElementById("excel-preview-modal");
+        if (!modal) {
+          modal = document.createElement("div");
+          modal.id = "excel-preview-modal";
+          modal.className =
+            "fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4 backdrop-blur-sm";
+          document.body.appendChild(modal);
         }
-    });
 
-    return globalResult;
-}
-// --- APERÇU ET VALIDATION ---
-// --- APERÇU ET VALIDATION (VERSION POPUP MODALE) ---
-function showExcelPreview(data) {
-    let modal = document.getElementById("excel-preview-modal");
-    if (!modal) {
-        modal = document.createElement("div");
-        modal.id = "excel-preview-modal";
-        modal.className = "fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4 backdrop-blur-sm";
-        document.body.appendChild(modal);
-    }
+        window.tempExcelItems = data.items;
 
-    window.tempExcelItems = data.items;
-
-    modal.innerHTML = `
+        modal.innerHTML = `
         <div class="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] italic font-bold">
             <div class="p-6 bg-slate-900 text-white flex justify-between items-center">
                 <h3 class="text-xl font-black uppercase text-green-400">Vérification Import Excel</h3>
@@ -682,12 +1197,16 @@ function showExcelPreview(data) {
                         <tr><th class="p-3">Désignation</th><th class="p-3 text-center">Quantité</th></tr>
                     </thead>
                     <tbody>
-                        ${data.items.map(it => `
+                        ${data.items
+                          .map(
+                            (it) => `
                             <tr class="border-b">
                                 <td class="p-3 uppercase">${it.label}</td>
                                 <td class="p-3 text-center text-indigo-600 font-black">${it.qty}</td>
                             </tr>
-                        `).join("")}
+                        `,
+                          )
+                          .join("")}
                     </tbody>
                 </table>
             </div>
@@ -696,147 +1215,147 @@ function showExcelPreview(data) {
                 <button onclick="validerImportFinal()" class="flex-1 bg-green-600 text-white py-3 rounded-xl uppercase font-black shadow-lg">Confirmer la Commande</button>
             </div>
         </div>`;
-    modal.classList.remove("hidden");
-}
+        modal.classList.remove("hidden");
+      }
 
-function closeExcelModal() { document.getElementById("excel-preview-modal").classList.add("hidden"); }
+      function closeExcelModal() {
+        document.getElementById("excel-preview-modal").classList.add("hidden");
+      }
 
-function validerImportFinal() {
-    if (!window.tempExcelItems) return;
-    confirmerImportExcel(window.tempExcelItems);
-    closeExcelModal();
-}
-// --- PETITES FONCTIONS UTILITAIRES POUR LA MODALE ---
+      function validerImportFinal() {
+        if (!window.tempExcelItems) return;
+        confirmerImportExcel(window.tempExcelItems);
+        closeExcelModal();
+      }
+      // --- PETITES FONCTIONS UTILITAIRES POUR LA MODALE ---
 
-function closeExcelModal() {
-    const modal = document.getElementById("excel-preview-modal");
-    if (modal) modal.classList.add("hidden");
-}
+      function closeExcelModal() {
+        const modal = document.getElementById("excel-preview-modal");
+        if (modal) modal.classList.add("hidden");
+      }
 
-function validerImportFinal() {
-    // On récupère les données stockées temporairement
-    if (!window.tempExcelItems) return;
-    
-    // On appelle ta fonction de sauvegarde existante
-    // Note : on passe JSON.stringify car ton ancienne fonction l'attendait peut-être, 
-    // ou on modifie confirmerImportExcel pour accepter l'objet direct.
-    // Voici la version compatible :
-    confirmerImportExcel(window.tempExcelItems);
-    
-    // On ferme la modale
-    closeExcelModal();
-}
+      function validerImportFinal() {
+        // On récupère les données stockées temporairement
+        if (!window.tempExcelItems) return;
 
-// --- ENREGISTREMENT DANS FIREBASE ---
-function confirmerImportExcel(itemsString) {
-    // Si itemsString est passé comme objet direct par JS, pas besoin de parse
-    const items = typeof itemsString === 'string' ? JSON.parse(itemsString) : itemsString;
-    const motif = document.getElementById("preview-motif").value || "Import Excel";
+        // On appelle ta fonction de sauvegarde existante
+        // Note : on passe JSON.stringify car ton ancienne fonction l'attendait peut-être,
+        // ou on modifie confirmerImportExcel pour accepter l'objet direct.
+        // Voici la version compatible :
+        confirmerImportExcel(window.tempExcelItems);
 
-    if (!items || items.length === 0) return;
+        // On ferme la modale
+        closeExcelModal();
+      }
 
-    // Création de l'objet Demande compatible avec ta base de données
-    const newDemande = {
-        id: "CMD-EXCEL-" + Date.now().toString().slice(-6),
-        demandeurId: currentUser.id,
-        demandeurName: currentUser.nom + " (Via Excel)",
-        date: new Date().toLocaleString(),
-        status: "APPROUVEE", // Une commande coordo via Excel est souvent considérée comme validée d'office pour le magasin
-        items: items,
-        motif: motif,
-        source: "EXCEL"
-    };
+      // --- ENREGISTREMENT DANS FIREBASE ---
+      function confirmerImportExcel(itemsString) {
+        // Si itemsString est passé comme objet direct par JS, pas besoin de parse
+        const items =
+          typeof itemsString === "string"
+            ? JSON.parse(itemsString)
+            : itemsString;
+        const motif =
+          document.getElementById("preview-motif").value || "Import Excel";
 
-    // Sauvegarde sécurisée
-    if (!appData.demandes) appData.demandes = [];
-    appData.demandes.push(newDemande);
-    
-    // Sauvegarde vers Firebase
-    save();
+        if (!items || items.length === 0) return;
 
-    // Feedback
-    alert("Commande importée avec succès ! Transmise au gestionnaire.");
-    renderCoordCreationDirecte(document.getElementById("main-content"));
-}
-        // --- SECTION ROUTER ---
-        function showSection(id) {
-    currentSectionId = id; 
-    const container = document.getElementById("app-container");
-    const viewTitle = document.getElementById("view-title");
+        // Création de l'objet Demande compatible avec ta base de données
+        const newDemande = {
+          id: "CMD-EXCEL-" + Date.now().toString().slice(-6),
+          demandeurId: currentUser.id,
+          demandeurName: currentUser.nom + " (Via Excel)",
+          date: new Date().toLocaleString(),
+          status: "APPROUVEE", // Une commande coordo via Excel est souvent considérée comme validée d'office pour le magasin
+          items: items,
+          motif: motif,
+          source: "EXCEL",
+        };
 
-    // Nettoyage et préparation
-    viewTitle.innerText = id.toUpperCase().replace(/-/g, " ");
-    container.innerHTML = "";
-    container.scrollTop = 0; // Remet le défilement en haut
+        // Sauvegarde sécurisée
+        if (!appData.demandes) appData.demandes = [];
+        appData.demandes.push(newDemande);
 
-    // --- AIGUILLAGE LOGIQUE ---
-    if (id === "cockpit") {
-        renderCockpit(container);
-    } 
-    else if (id === "stats-consommation") {
-        renderStatsConsommation(container);
-    } 
-    else if (id === "trafic-audit") {
-        renderTraficAudit(container);
-    }
-    else if (id === "tech-nouvelle-demande") {
-        renderTechDemandeForm(container);
-    } 
-    else if (id === "tech-mes-demandes") {
-        renderTechMesDemandes(container);
-    } 
-    else if (id === "tech-retour-materiel") {
-        renderRetourForm(container);
-    } 
-    else if (id === "coord-demandes-tech") {
-        renderCoordFluxTech(container);
-    } 
-    else if (id === "coord-creation-directe") {
-        renderCoordCreationDirecte(container);
-    } 
-    else if (id === "coord-excel") {
-        renderCoordExcelUpload(container);
-    } 
-    else if (id === "demandes-coordonnatrice") {
-        renderDemandesGestionnaire(container);
-    } 
-    else if (id === "reception") {
-        renderReceptionForm(container);
-    }
-    else if (id === "livraison") {
-        renderLivraisonForm(container);
-    } 
-    else if (id === "gestion-retours") {
-        renderGestionRetours(container);
-    } 
-    else if (id === "scanner-physique") {
-        renderScanner(container);
-    }
-    // CORRECTION : Ajout du container manquant
-    else if (id === "sortie-physique") {
-        viewTitle.innerText = "SORTIE SUR BON PHYSIQUE";
-        renderSortiePhysiqueForm(container); 
-    }
-    // CORRECTION : Appel propre du rapport
-    else if (id === "rapport-hebdo") {
-        renderRapportHebdo(container);
-    }
-    else if (id.startsWith("stock-")) {
-        renderStock(id.replace("stock-", ""), container);
-    }
-    else {
-        container.innerHTML = `<div class="p-10 text-center opacity-50 uppercase font-black">Section "${id}" en cours de déploiement...</div>`;
-    }
+        // Sauvegarde vers Firebase
+        save();
 
-    // 5. GESTION DES NOTIFICATIONS (Après le rendu)
-    const sectionsANotifs = ["coord-demandes-tech", "demandes-coordonnatrice", "tech-mes-demandes", "coord-excel", "trafic-audit", "rapport-hebdo"];
-    if (sectionsANotifs.includes(id)) {
-        markNotificationsAsRead();
-    }
-}
-        // --- AUTOMATISATION EXCEL (COORDINATRICE) ---
-        function renderCoordExcelUpload(container) {
-            container.innerHTML = `
+        // Feedback
+        alert("Commande importée avec succès ! Transmise au gestionnaire.");
+        renderCoordCreationDirecte(document.getElementById("main-content"));
+      }
+      // --- SECTION ROUTER ---
+      function showSection(id) {
+        currentSectionId = id;
+        const container = document.getElementById("app-container");
+        const viewTitle = document.getElementById("view-title");
+
+        // Nettoyage et préparation
+        viewTitle.innerText = id.toUpperCase().replace(/-/g, " ");
+        container.innerHTML = "";
+        container.scrollTop = 0; // Remet le défilement en haut
+
+        // --- AIGUILLAGE LOGIQUE ---
+        if (id === "cockpit") {
+          renderCockpit(container);
+        } else if (id === "stats-consommation") {
+          renderStatsConsommation(container);
+        } else if (id === "trafic-audit") {
+          renderTraficAudit(container);
+        } else if (id === "tech-nouvelle-demande") {
+          renderTechDemandeForm(container);
+        } else if (id === "tech-mes-demandes") {
+          renderTechMesDemandes(container);
+        } else if (id === "tech-retour-materiel") {
+          renderRetourForm(container);
+        } else if (id === "coord-demandes-tech") {
+          renderCoordFluxTech(container);
+        } else if (id === "coord-creation-directe") {
+          renderCoordCreationDirecte(container);
+        } else if (id === "coord-excel") {
+          renderCoordExcelUpload(container);
+        } else if (id === "demandes-coordonnatrice") {
+          renderDemandesGestionnaire(container);
+        } else if (id === "reception") {
+          renderReceptionForm(container);
+        } else if (id === "livraison") {
+          renderLivraisonForm(container);
+        } else if (id === "gestion-retours") {
+          renderGestionRetours(container);
+        } else if (id === "scanner-physique") {
+          renderScanner(container);
+        }
+        // CORRECTION : Ajout du container manquant
+        else if (id === "sortie-physique") {
+          viewTitle.innerText = "SORTIE SUR BON PHYSIQUE";
+          renderSortiePhysiqueForm(container);
+        }
+        // CORRECTION : Appel propre du rapport
+        else if (id === "rapport-hebdo") {
+          renderRapportHebdo(container);
+        } else if (id === "rapports-sorties") {
+          renderRapportsSorties(container);
+        } else if (id.startsWith("stock-")) {
+          renderStock(id.replace("stock-", ""), container);
+        } else {
+          container.innerHTML = `<div class="p-10 text-center opacity-50 uppercase font-black">Section "${id}" en cours de déploiement...</div>`;
+        }
+
+        // 5. GESTION DES NOTIFICATIONS (Après le rendu)
+        const sectionsANotifs = [
+          "coord-demandes-tech",
+          "demandes-coordonnatrice",
+          "tech-mes-demandes",
+          "coord-excel",
+          "trafic-audit",
+          "rapport-hebdo",
+        ];
+        if (sectionsANotifs.includes(id)) {
+          markNotificationsAsRead();
+        }
+      }
+      // --- AUTOMATISATION EXCEL (COORDINATRICE) ---
+      function renderCoordExcelUpload(container) {
+        container.innerHTML = `
                 <div class="max-w-2xl mx-auto bg-white p-10 rounded-3xl shadow-xl text-center">
                     <i class="fas fa-file-excel text-6xl text-green-600 mb-6"></i>
                     <h3 class="text-xl mb-4 font-black italic">Importer une liste de matériel</h3>
@@ -844,67 +1363,69 @@ function confirmerImportExcel(itemsString) {
                     <input type="file" id="excel-file" accept=".xlsx, .xls" class="hidden" onchange="processExcel(event)" />
                     <button onclick="document.getElementById('excel-file').click()" class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700">Sélectionner le fichier Excel</button>
                 </div>`;
-        }
+      }
 
-//         function processExcelFile(event) {
-//     const file = event.target.files[0];
-//     if (!file) return;
+      //         function processExcelFile(event) {
+      //     const file = event.target.files[0];
+      //     if (!file) return;
 
-//     const reader = new FileReader();
-//     reader.onload = function(e) {
-//         try {
-//             const data = new Uint8Array(e.target.result);
-//             const workbook = XLSX.read(data, { type: 'array' });
-//             const result = analyzeExcelData(workbook);
+      //     const reader = new FileReader();
+      //     reader.onload = function(e) {
+      //         try {
+      //             const data = new Uint8Array(e.target.result);
+      //             const workbook = XLSX.read(data, { type: 'array' });
+      //             const result = analyzeExcelData(workbook);
 
-//             if (result.items.length > 0) {
-//                 showExcelPreview(result);
-//             } else {
-//                 alert("ERREUR : Impossible de trouver la structure de matériel (Entrepôt / PUMP / Quantité). Vérifiez que vous utilisez le bon fichier.");
-//             }
-//         } catch (err) {
-//             console.error(err);
-//             alert("Erreur lors de la lecture du fichier Excel.");
-//         }
-//     };
-//     reader.readAsArrayBuffer(file);
-//     event.target.value = ''; // Reset pour permettre un nouvel import
-// }
-function processExcel(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+      //             if (result.items.length > 0) {
+      //                 showExcelPreview(result);
+      //             } else {
+      //                 alert("ERREUR : Impossible de trouver la structure de matériel (Entrepôt / PUMP / Quantité). Vérifiez que vous utilisez le bon fichier.");
+      //             }
+      //         } catch (err) {
+      //             console.error(err);
+      //             alert("Erreur lors de la lecture du fichier Excel.");
+      //         }
+      //     };
+      //     reader.readAsArrayBuffer(file);
+      //     event.target.value = ''; // Reset pour permettre un nouvel import
+      // }
+      function processExcel(e) {
+        const file = e.target.files[0];
+        if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-        try {
+        const reader = new FileReader();
+        reader.onload = function (evt) {
+          try {
             const data = evt.target.result;
-            const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
-            
+            const workbook = XLSX.read(new Uint8Array(data), { type: "array" });
+
             // On appelle l'analyse robuste que nous avons créée
-            const result = analyzeExcelData(workbook); 
+            const result = analyzeExcelData(workbook);
 
             if (result.items && result.items.length > 0) {
-                // IMPORTANT : On prépare les données avec les noms EXACTS 
-                // que votre fonction renderExcelOrderForm utilise
-                const formattedItems = result.items.map(it => ({
-                    "Désignation": it.label,
-                    "Quantité": it.qty
-                }));
-                
-                renderExcelOrderForm(formattedItems);
+              // IMPORTANT : On prépare les données avec les noms EXACTS
+              // que votre fonction renderExcelOrderForm utilise
+              const formattedItems = result.items.map((it) => ({
+                Désignation: it.label,
+                Quantité: it.qty,
+              }));
+
+              renderExcelOrderForm(formattedItems);
             } else {
-                alert("ERREUR : Aucune donnée matérielle détectée sur la feuille.");
+              alert(
+                "ERREUR : Aucune donnée matérielle détectée sur la feuille.",
+              );
             }
-        } catch (err) {
+          } catch (err) {
             console.error("Erreur de lecture :", err);
             alert("Erreur lors de la lecture du fichier Excel.");
-        }
-    };
-    reader.readAsArrayBuffer(file);
-}
-function renderExcelOrderForm(items) {
-    const container = document.getElementById("app-container");
-    container.innerHTML = `
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+      function renderExcelOrderForm(items) {
+        const container = document.getElementById("app-container");
+        container.innerHTML = `
         <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
             <h3 class="mb-8 border-b-4 border-indigo-600 pb-2 text-indigo-900 uppercase font-black italic">Formulaire de Commande via Excel</h3>
             <form onsubmit="handleExcelSubmit(event)" class="space-y-6">
@@ -917,15 +1438,19 @@ function renderExcelOrderForm(items) {
 
                 <div class="space-y-3" id="excel-items-list">
                     <p class="text-[9px] text-indigo-600 mb-2 uppercase font-black">Matériel détecté (vérifiez les quantités) :</p>
-                    ${items.map(it => `
+                    ${items
+                      .map(
+                        (it) => `
     <div class="flex gap-2 items-center art-row-ex bg-slate-50 p-2 rounded-xl border transition hover:border-indigo-300">
-        <input type="text" value="${it['Désignation'] || ''}" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
+        <input type="text" value="${it["Désignation"] || ""}" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
         
-        <input type="number" value="${it['Quantité'] || 0}" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />
+        <input type="number" value="${it["Quantité"] || 0}" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />
         
         <button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>
     </div>
-`).join("")}
+`,
+                      )
+                      .join("")}
                 </div>
 
                 <div class="flex gap-4">
@@ -934,27 +1459,27 @@ function renderExcelOrderForm(items) {
                 </div>
             </form>
         </div>`;
-}
-        function renderScanner(container) {
-    // Vérification de la date à l'ouverture du scanner
-    verifierReinitialisationQuotidienne();
+      }
+      function renderScanner(container) {
+        // Vérification de la date à l'ouverture du scanner
+        verifierReinitialisationQuotidienne();
 
-    // --- MODIFICATION AJOUTÉE ICI ---
-    // 1. Sécurité : On s'assure que appData existe
-    if (!appData) return; 
+        // --- MODIFICATION AJOUTÉE ICI ---
+        // 1. Sécurité : On s'assure que appData existe
+        if (!appData) return;
 
-    // 2. On récupère la liste des demandes de manière sécurisée
-    const demandes = appData.demandes || [];
+        // 2. On récupère la liste des demandes de manière sécurisée
+        const demandes = appData.demandes || [];
 
-    // 3. Si aucune demande n'existe, on affiche un message et ON ARRÊTE LÀ (return)
-    // Cela évite de lancer la caméra inutilement.
-    if (demandes.length === 0) {
-        container.innerHTML = `<p class="p-10 text-center opacity-50 uppercase font-black">Aucune donnée à scanner pour le moment</p>`;
-        return;
-    }
-    // --------------------------------
+        // 3. Si aucune demande n'existe, on affiche un message et ON ARRÊTE LÀ (return)
+        // Cela évite de lancer la caméra inutilement.
+        if (demandes.length === 0) {
+          container.innerHTML = `<p class="p-10 text-center opacity-50 uppercase font-black">Aucune donnée à scanner pour le moment</p>`;
+          return;
+        }
+        // --------------------------------
 
-    container.innerHTML = `
+        container.innerHTML = `
         <div class="max-w-md mx-auto space-y-4">
             <div class="bg-white p-6 rounded-3xl shadow-xl text-center">
                 <h3 class="mb-4 uppercase text-pink-600 font-black italic">Scanner de Bons ITC</h3>
@@ -975,11 +1500,13 @@ function renderExcelOrderForm(items) {
                     <span class="text-[8px] bg-slate-700 px-2 py-0.5 rounded">${new Date().toLocaleDateString()}</span>
                 </div>
                 <div class="space-y-3 max-h-40 overflow-y-auto custom-scrollbar">
-                    ${ 
-                        // J'ai aussi ajouté la sécurité (|| []) ici pour éviter une autre erreur potentielle
-                        (appData.scansDuJour || []).length === 0 ? 
-                        '<p class="text-center py-4 text-slate-600 text-[8px] uppercase">Aucun scan aujourd\'hui</p>' : 
-                        (appData.scansDuJour || []).map(s => `
+                    ${
+                      // J'ai aussi ajouté la sécurité (|| []) ici pour éviter une autre erreur potentielle
+                      (appData.scansDuJour || []).length === 0
+                        ? '<p class="text-center py-4 text-slate-600 text-[8px] uppercase">Aucun scan aujourd\'hui</p>'
+                        : (appData.scansDuJour || [])
+                            .map(
+                              (s) => `
                             <div class="flex justify-between items-center bg-slate-800 p-3 rounded-xl border-l-2 border-pink-500">
                                 <div>
                                     <p class="text-pink-400 text-[9px] font-black">${s.id}</p>
@@ -987,7 +1514,9 @@ function renderExcelOrderForm(items) {
                                 </div>
                                 <span class="text-[8px] font-black text-slate-500">${s.heure}</span>
                             </div>
-                        `).join("")
+                        `,
+                            )
+                            .join("")
                     }
                 </div>
             </div>
@@ -995,35 +1524,47 @@ function renderExcelOrderForm(items) {
             <button onclick="showSection('cockpit')" class="w-full text-slate-400 text-[8px] uppercase font-black text-center py-2 transition hover:text-slate-600">Retour au tableau de bord</button>
         </div>`;
 
-    // --- Initialisation de la caméra (ne s'exécute que si le 'return' plus haut n'a pas été déclenché) ---
-    const html5QrCode = new Html5Qrcode("reader");
-    let isTorchOn = false;
-    const qrCodeSuccessCallback = (decodedText) => {
-        html5QrCode.stop().then(() => { handleScanSuccess(decodedText); }).catch(err => console.error(err));
-    };
-    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-    html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback).then(() => {
-        const torchBtn = document.getElementById("torch-button");
-        torchBtn.addEventListener("click", () => {
-            isTorchOn = !isTorchOn;
-            html5QrCode.applyVideoConstraints({ advanced: [{ torch: isTorchOn }] }).catch(e => {});
-            torchBtn.innerHTML = isTorchOn ? '<i class="fas fa-lightbulb"></i> Éteindre' : '<i class="fas fa-lightbulb"></i> Allumer';
-        });
-    }).catch(err => {
-        // Gestion d'erreur si la caméra ne démarre pas
-        console.error("Erreur caméra:", err);
-        container.innerHTML = `<p class="text-red-500 text-center p-10 font-black">Impossible d'accéder à la caméra.</p>`;
-    });
-}
+        // --- Initialisation de la caméra (ne s'exécute que si le 'return' plus haut n'a pas été déclenché) ---
+        const html5QrCode = new Html5Qrcode("reader");
+        let isTorchOn = false;
+        const qrCodeSuccessCallback = (decodedText) => {
+          html5QrCode
+            .stop()
+            .then(() => {
+              handleScanSuccess(decodedText);
+            })
+            .catch((err) => console.error(err));
+        };
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        html5QrCode
+          .start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
+          .then(() => {
+            const torchBtn = document.getElementById("torch-button");
+            torchBtn.addEventListener("click", () => {
+              isTorchOn = !isTorchOn;
+              html5QrCode
+                .applyVideoConstraints({ advanced: [{ torch: isTorchOn }] })
+                .catch((e) => {});
+              torchBtn.innerHTML = isTorchOn
+                ? '<i class="fas fa-lightbulb"></i> Éteindre'
+                : '<i class="fas fa-lightbulb"></i> Allumer';
+            });
+          })
+          .catch((err) => {
+            // Gestion d'erreur si la caméra ne démarre pas
+            console.error("Erreur caméra:", err);
+            container.innerHTML = `<p class="text-red-500 text-center p-10 font-black">Impossible d'accéder à la caméra.</p>`;
+          });
+      }
 
-// 1. Variable globale pour le graphique (à placer au début de votre balise script)
-let myChart = null;
+      // 1. Variable globale pour le graphique (à placer au début de votre balise script)
+      let myChart = null;
 
-function renderRapportHebdo() {
-    const container = document.getElementById("app-container");
-    const moisActuel = new Date().getMonth();
-    
-    container.innerHTML = `
+      function renderRapportHebdo() {
+        const container = document.getElementById("app-container");
+        const moisActuel = new Date().getMonth();
+
+        container.innerHTML = `
         <div class="space-y-6">
             <div class="bg-white p-6 rounded-3xl shadow-xl border-b-4 border-blue-600">
                 <div class="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -1032,8 +1573,25 @@ function renderRapportHebdo() {
                     </h3>
                     <div class="flex gap-2">
                         <select id="filter-month" onchange="updateRapportHebdo()" class="border-2 p-2 rounded-xl text-[10px] font-black uppercase outline-none bg-slate-50">
-                            ${["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
-                                .map((m, i) => `<option value="${i}" ${i === moisActuel ? 'selected' : ''}>${m}</option>`).join("")}
+                            ${[
+                              "Janvier",
+                              "Février",
+                              "Mars",
+                              "Avril",
+                              "Mai",
+                              "Juin",
+                              "Juillet",
+                              "Août",
+                              "Septembre",
+                              "Octobre",
+                              "Novembre",
+                              "Décembre",
+                            ]
+                              .map(
+                                (m, i) =>
+                                  `<option value="${i}" ${i === moisActuel ? "selected" : ""}>${m}</option>`,
+                              )
+                              .join("")}
                         </select>
                         <button onclick="exportHebdoExcel()" class="bg-green-600 text-white px-4 py-2 rounded-xl text-[8px] font-black uppercase shadow-sm">Excel</button>
                         <button onclick="exportHebdoPDF()" class="bg-red-600 text-white px-4 py-2 rounded-xl text-[8px] font-black uppercase shadow-sm">PDF</button>
@@ -1048,57 +1606,60 @@ function renderRapportHebdo() {
             <div id="hebdo-content" class="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-slate-100"></div>
         </div>
     `;
-    updateRapportHebdo();
-}
+        updateRapportHebdo();
+      }
 
-function updateRapportHebdo() {
-    const month = parseInt(document.getElementById("filter-month").value);
-    const content = document.getElementById("hebdo-content");
-    
-    let allMovements = [];
+      function updateRapportHebdo() {
+        const month = parseInt(document.getElementById("filter-month").value);
+        const content = document.getElementById("hebdo-content");
 
-    // Récupération des Sorties (Bons Livrés)
-    (appData.demandes || []).forEach(d => {
-        if (d.status === "LIVREE" && d.dateLivraison) {
-            const parts = d.dateLivraison.split('/');
+        let allMovements = [];
+
+        // Récupération des Sorties (Bons Livrés)
+        (appData.demandes || []).forEach((d) => {
+          if (d.status === "LIVREE" && d.dateLivraison) {
+            const parts = d.dateLivraison.split("/");
             if (parseInt(parts[1]) - 1 === month) {
-                allMovements.push({
-                    date: d.dateLivraison,
-                    type: "SORTIE",
-                    op: d.op || "ITC",
-                    item: d.items.map(i => i.label).join(", "),
-                    qty: d.items.reduce((sum, i) => sum + (parseInt(i.qty) || 0), 0),
-                    dest: d.demandeurName || "N/A"
-                });
+              allMovements.push({
+                date: d.dateLivraison,
+                type: "SORTIE",
+                op: d.op || "ITC",
+                item: d.items.map((i) => i.label).join(", "),
+                qty: d.items.reduce(
+                  (sum, i) => sum + (parseInt(i.qty) || 0),
+                  0,
+                ),
+                dest: d.demandeurName || "N/A",
+              });
             }
-        }
-    });
+          }
+        });
 
-   // Dans updateRapportHebdo, remplacez la boucle des entrées par celle-ci :
-(appData.notifications || []).forEach(n => {
-    // On cherche le mot clé que vous utilisez dans handleRec
-    if (n.message.includes("TRAFIC : ENTRÉE STOCK")) {
-        const dateParts = n.date.split(' ')[0].split('/'); // Récupère DD/MM/YYYY
-        const m = parseInt(dateParts[1]) - 1;
-        
-        if (m === month) {
-            const qtyMatch = n.message.match(/QUANTITÉ\s*:\s*(\d+)/i);
-            allMovements.push({
+        // Dans updateRapportHebdo, remplacez la boucle des entrées par celle-ci :
+        (appData.notifications || []).forEach((n) => {
+          // On cherche le mot clé que vous utilisez dans handleRec
+          if (n.message.includes("TRAFIC : ENTRÉE STOCK")) {
+            const dateParts = n.date.split(" ")[0].split("/"); // Récupère DD/MM/YYYY
+            const m = parseInt(dateParts[1]) - 1;
+
+            if (m === month) {
+              const qtyMatch = n.message.match(/QUANTITÉ\s*:\s*(\d+)/i);
+              allMovements.push({
                 date: dateParts[0] + "/" + dateParts[1] + "/" + dateParts[2],
                 type: "ENTRÉE",
                 op: "ITC",
-                item: n.message.split('(')[1]?.split(')')[0] || "Matériel",
+                item: n.message.split("(")[1]?.split(")")[0] || "Matériel",
                 qty: qtyMatch ? parseInt(qtyMatch[1]) : 0,
-                dest: "MAGASIN CENTRAL"
-            });
-        }
-    }
-});
+                dest: "MAGASIN CENTRAL",
+              });
+            }
+          }
+        });
 
-    // Tri par date
-    allMovements.sort((a, b) => b.date.localeCompare(a.date));
+        // Tri par date
+        allMovements.sort((a, b) => b.date.localeCompare(a.date));
 
-    let html = `
+        let html = `
         <table class="w-full text-left border-collapse">
             <thead>
                 <tr class="bg-slate-900 text-white text-[8px] uppercase font-black italic">
@@ -1107,244 +1668,315 @@ function updateRapportHebdo() {
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 text-[9px] font-bold">
-                ${allMovements.map(m => `
+                ${allMovements
+                  .map(
+                    (m) => `
                     <tr>
                         <td class="p-4">${m.date}</td>
-                        <td class="p-4 ${m.type === 'SORTIE' ? 'text-red-500' : 'text-green-500'}">${m.type}</td>
+                        <td class="p-4 ${m.type === "SORTIE" ? "text-red-500" : "text-green-500"}">${m.type}</td>
                         <td class="p-4">${m.op}</td>
                         <td class="p-4">${m.item}</td>
                         <td class="p-4 font-black">${m.qty} U</td>
                         <td class="p-4 text-slate-500">${m.dest}</td>
                     </tr>
-                `).join("")}
+                `,
+                  )
+                  .join("")}
             </tbody>
         </table>`;
-    
-    content.innerHTML = allMovements.length > 0 ? html : `<p class="p-10 text-center opacity-30">AUCUNE DONNÉE</p>`;
-    generateFluxChart(allMovements);
-}
 
-function generateFluxChart(data) {
-    const canvas = document.getElementById('fluxChart');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    
-    const totalEntrees = data.filter(m => m.type === "ENTRÉE").reduce((sum, m) => sum + m.qty, 0);
-    const totalSorties = data.filter(m => m.type === "SORTIE").reduce((sum, m) => sum + m.qty, 0);
+        content.innerHTML =
+          allMovements.length > 0
+            ? html
+            : `<p class="p-10 text-center opacity-30">AUCUNE DONNÉE</p>`;
+        generateFluxChart(allMovements);
+      }
 
-    if (myChart) myChart.destroy();
+      function generateFluxChart(data) {
+        const canvas = document.getElementById("fluxChart");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
 
-    myChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: ['MOUVEMENTS'],
+        const totalEntrees = data
+          .filter((m) => m.type === "ENTRÉE")
+          .reduce((sum, m) => sum + m.qty, 0);
+        const totalSorties = data
+          .filter((m) => m.type === "SORTIE")
+          .reduce((sum, m) => sum + m.qty, 0);
+
+        if (myChart) myChart.destroy();
+
+        myChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: ["MOUVEMENTS"],
             datasets: [
-                { label: 'Entrées', data: [totalEntrees], backgroundColor: '#22c55e', borderRadius: 8 },
-                { label: 'Sorties', data: [totalSorties], backgroundColor: '#ef4444', borderRadius: 8 }
-            ]
-        },
-        options: {
+              {
+                label: "Entrées",
+                data: [totalEntrees],
+                backgroundColor: "#22c55e",
+                borderRadius: 8,
+              },
+              {
+                label: "Sorties",
+                data: [totalSorties],
+                backgroundColor: "#ef4444",
+                borderRadius: 8,
+              },
+            ],
+          },
+          options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom' } }
+            plugins: { legend: { position: "bottom" } },
+          },
+        });
+      }
+      function exportHebdoExcel() {
+        // 1. On récupère le conteneur du rapport
+        const content = document.getElementById("hebdo-content");
+        const table = content ? content.querySelector("table") : null;
+
+        // 2. Vérification de sécurité : Si le tableau n'existe pas, on arrête tout proprement
+        if (!table) {
+          alert(
+            "⚠️ IMPOSSIBLE D'EXPORTER : Il n'y a aucune donnée affichée dans le tableau pour ce mois.",
+          );
+          return;
         }
-    });
-}
-function exportHebdoExcel() {
-    // 1. On récupère le conteneur du rapport
-    const content = document.getElementById("hebdo-content");
-    const table = content ? content.querySelector("table") : null;
 
-    // 2. Vérification de sécurité : Si le tableau n'existe pas, on arrête tout proprement
-    if (!table) {
-        alert("⚠️ IMPOSSIBLE D'EXPORTER : Il n'y a aucune donnée affichée dans le tableau pour ce mois.");
-        return;
-    }
+        // 3. Récupération du nom du mois pour nommer le fichier
+        const monthSelect = document.getElementById("filter-month");
+        const monthName = monthSelect.options[monthSelect.selectedIndex].text;
 
-    // 3. Récupération du nom du mois pour nommer le fichier
-    const monthSelect = document.getElementById("filter-month");
-    const monthName = monthSelect.options[monthSelect.selectedIndex].text;
+        try {
+          // 4. Conversion du tableau HTML en classeur Excel
+          const wb = XLSX.utils.table_to_book(table, {
+            sheet: "Flux Magasin ITC",
+          });
 
-    try {
-        // 4. Conversion du tableau HTML en classeur Excel
-        const wb = XLSX.utils.table_to_book(table, { sheet: "Flux Magasin ITC" });
-        
-        // 5. Génération et téléchargement du fichier
-        XLSX.writeFile(wb, `RAPPORT_FLUX_ITC_${monthName}_2026.xlsx`);
-        
-        console.log("✅ Export Excel réussi !");
-    } catch (err) {
-        console.error("Erreur Excel:", err);
-        alert("Erreur lors de la génération du fichier Excel.");
-    }
-}
-function exportHebdoPDF() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF('l', 'mm', 'a4'); // Mode paysage pour plus de colonnes
-    const monthName = document.getElementById("filter-month").options[document.getElementById("filter-month").selectedIndex].text;
+          // 5. Génération et téléchargement du fichier
+          XLSX.writeFile(wb, `RAPPORT_FLUX_ITC_${monthName}_2026.xlsx`);
 
-    doc.setFontSize(14);
-    doc.text(`RAPPORT MENSUEL DES FLUX MAGASIN - ${monthName.toUpperCase()} 2026`, 14, 15);
-    
-    doc.autoTable({
-        html: '#hebdo-content table',
-        startY: 25,
-        theme: 'grid',
-        headStyles: { fillColor: [30, 41, 59], fontSize: 8 },
-        styles: { fontSize: 7, fontStyle: 'bold' }
-    });
+          console.log("✅ Export Excel réussi !");
+        } catch (err) {
+          console.error("Erreur Excel:", err);
+          alert("Erreur lors de la génération du fichier Excel.");
+        }
+      }
+      function exportHebdoPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF("l", "mm", "a4"); // Mode paysage pour plus de colonnes
+        const monthName =
+          document.getElementById("filter-month").options[
+            document.getElementById("filter-month").selectedIndex
+          ].text;
 
-    doc.save(`RAPPORT_FLUX_${monthName}.pdf`);
-}
+        doc.setFontSize(14);
+        doc.text(
+          `RAPPORT MENSUEL DES FLUX MAGASIN - ${monthName.toUpperCase()} 2026`,
+          14,
+          15,
+        );
 
-function handleScanSuccess(id) {
-    const beep = document.getElementById("beep-sound");
-    if (beep) beep.play();
-    if (navigator.vibrate) navigator.vibrate(100);
+        doc.autoTable({
+          html: "#hebdo-content table",
+          startY: 25,
+          theme: "grid",
+          headStyles: { fillColor: [30, 41, 59], fontSize: 8 },
+          styles: { fontSize: 7, fontStyle: "bold" },
+        });
 
-    const d = appData.demandes.find(x => x.id === id);
-    if (d) {
-        // 1. Vérifier la date avant d'ajouter
-        verifierReinitialisationQuotidienne();
+        doc.save(`RAPPORT_FLUX_${monthName}.pdf`);
+      }
 
-        // 2. Ajouter à l'historique du jour (si pas déjà présent pour éviter les doublons)
-        if (!appData.scansDuJour.some(s => s.id === id)) {
+      function handleScanSuccess(id) {
+        const beep = document.getElementById("beep-sound");
+        if (beep) beep.play();
+        if (navigator.vibrate) navigator.vibrate(100);
+
+        const d = appData.demandes.find((x) => x.id === id);
+        if (d) {
+          // 1. Vérifier la date avant d'ajouter
+          verifierReinitialisationQuotidienne();
+
+          // 2. Ajouter à l'historique du jour (si pas déjà présent pour éviter les doublons)
+          if (!appData.scansDuJour.some((s) => s.id === id)) {
             appData.scansDuJour.unshift({
-                id: id,
-                heure: new Date().toLocaleTimeString([], {hour: '2p', minute: '2p'}),
-                technicien: d.demandeurName
+              id: id,
+              heure: new Date().toLocaleTimeString([], {
+                hour: "2p",
+                minute: "2p",
+              }),
+              technicien: d.demandeurName,
             });
             save();
-        }
+          }
 
-        const resultText = document.getElementById("scan-id-text");
-        const resultDiv = document.getElementById("scanner-result");
-        if (resultText && resultDiv) {
+          const resultText = document.getElementById("scan-id-text");
+          const resultDiv = document.getElementById("scanner-result");
+          if (resultText && resultDiv) {
             resultText.innerText = "BON DÉTECTÉ : " + id;
             resultDiv.classList.remove("hidden");
-        }
+          }
 
-        setTimeout(() => {
+          setTimeout(() => {
             if (d.status === "PRET" || d.status === "EN ATTENTE GESTIONNAIRE") {
-                prepSortie(id); 
+              prepSortie(id);
             } else {
-                alert("STATUT : " + d.status);
-                showSection("scanner-physique");
+              alert("STATUT : " + d.status);
+              showSection("scanner-physique");
             }
-        }, 1000);
-    } else {
-        alert("QR CODE INCONNU.");
-        showSection("scanner-physique");
-    }
-}
-        function addRowEx() {
-            const div = document.createElement("div"); div.className = "flex gap-2 items-center art-row-ex bg-slate-50 p-2 rounded-xl border";
-            div.innerHTML = `<input type="text" placeholder="DÉSIGNATION" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required /><input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" /><button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>`;
-            document.getElementById("excel-items-list").appendChild(div);
+          }, 1000);
+        } else {
+          alert("QR CODE INCONNU.");
+          showSection("scanner-physique");
         }
+      }
+      function addRowEx() {
+        const div = document.createElement("div");
+        div.className =
+          "flex gap-2 items-center art-row-ex bg-slate-50 p-2 rounded-xl border";
+        div.innerHTML = `<input type="text" placeholder="DÉSIGNATION" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required /><input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" /><button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>`;
+        document.getElementById("excel-items-list").appendChild(div);
+      }
 
-        function handleExcelSubmit(e) {
-            e.preventDefault();
-            const items = [];
-            document.querySelectorAll(".art-row-ex").forEach(r => { items.push({ label: r.querySelector(".art-l").value.toUpperCase(), qty: parseInt(r.querySelector(".art-q").value) }); });
-            const motifComplet = `[ÉQUIPE: ${document.getElementById("ex-team").value}] CHEF: ${document.getElementById("ex-chef").value} | LIEU/MOTIF: ${document.getElementById("ex-motif").value}`;
-            const c = { id: "EXCEL-"+Date.now().toString().slice(-4), demandeurOriginalId: currentUser.id, demandeurName: "COORDINATION (AUTO)", op: "ITC", items, motif: motifComplet.toUpperCase(), status: "EN ATTENTE GESTIONNAIRE", date: new Date().toLocaleDateString() };
-            appData.demandes.unshift(c); addNotification(2, `COMMANDE VIA EXCEL : ${c.id}`); save(); alert("COMMANDE ÉMISE."); showSection("cockpit");
-        }
-
-        function exportStatsToExcel() {
-    const moisNom = new Date().toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
-    
-    // 1. Préparer les données pour l'onglet Équipes
-    const dataEquipes = [["ÉQUIPE", "TOTAL ARTICLES CONSOMMÉS"]];
-    const livraisonsMois = appData.demandes.filter(d => d.status === "LIVREE"); // Filtre simplifié pour l'exemple
-    
-    const statsEquipe = {};
-    livraisonsMois.forEach(d => {
-        const eq = d.prestataire || "SANS ÉQUIPE";
-        const qty = d.items.reduce((sum, i) => sum + i.qty, 0);
-        statsEquipe[eq] = (statsEquipe[eq] || 0) + qty;
-    });
-    Object.entries(statsEquipe).forEach(([eq, qty]) => dataEquipes.push([eq, qty]));
-
-    // 2. Préparer les données pour l'onglet Détails Techniciens
-    const dataTechs = [["TECHNICIEN", "PROJET/SITE", "DATE LIVRAISON", "NOMBRE D'ARTICLES"]];
-    livraisonsMois.forEach(d => {
-        const qty = d.items.reduce((sum, i) => sum + i.qty, 0);
-        dataTechs.push([d.demandeurName, d.motif, d.dateLivraison, qty]);
-    });
-
-    // 3. Création du classeur Excel
-    const wb = XLSX.utils.book_new();
-    const ws1 = XLSX.utils.aoa_to_sheet(dataEquipes);
-    const ws2 = XLSX.utils.aoa_to_sheet(dataTechs);
-
-    XLSX.utils.book_append_sheet(wb, ws1, "Résumé Équipes");
-    XLSX.utils.book_append_sheet(wb, ws2, "Détails Techniciens");
-
-    // 4. Téléchargement du fichier
-    XLSX.writeFile(wb, `RAPPORT_CONSO_ITC_${moisNom.toUpperCase()}.xlsx`);
-}
-
-// Sauvegarde locale des champs de réception
-function saveReceptionDraft() {
-    const draft = {
-        op: document.getElementById("r-op")?.value,
-        type: document.getElementById("r-type")?.value,
-        mat: document.getElementById("r-mat")?.value,
-        qty: document.getElementById("r-qty")?.value
-    };
-    localStorage.setItem("draft_reception", JSON.stringify(draft));
-}
-
-// Écouteur global pour détecter la saisie
-document.addEventListener('input', (e) => {
-    if (["r-op", "r-type", "r-mat", "r-qty"].includes(e.target.id)) {
-        saveReceptionDraft();
-    }
-});
-
-function saveSortieDraft() {
-    const items = [];
-    document.querySelectorAll(".art-row-sortie").forEach(row => {
-        items.push({
-            label: row.querySelector(".art-l").value,
-            qty: row.querySelector(".art-q").value
+      function handleExcelSubmit(e) {
+        e.preventDefault();
+        const items = [];
+        document.querySelectorAll(".art-row-ex").forEach((r) => {
+          items.push({
+            label: r.querySelector(".art-l").value.toUpperCase(),
+            qty: parseInt(r.querySelector(".art-q").value),
+          });
         });
-    });
+        const motifComplet = `[ÉQUIPE: ${document.getElementById("ex-team").value}] CHEF: ${document.getElementById("ex-chef").value} | LIEU/MOTIF: ${document.getElementById("ex-motif").value}`;
+        const c = {
+          id: "EXCEL-" + Date.now().toString().slice(-4),
+          demandeurOriginalId: currentUser.id,
+          demandeurName: "COORDINATION (AUTO)",
+          op: "ITC",
+          items,
+          motif: motifComplet.toUpperCase(),
+          status: "EN ATTENTE GESTIONNAIRE",
+          date: new Date().toLocaleDateString(),
+        };
+        appData.demandes.unshift(c);
+        addNotification(2, `COMMANDE VIA EXCEL : ${c.id}`);
+        save();
+        alert("COMMANDE ÉMISE.");
+        showSection("cockpit");
+      }
 
-    const draft = {
-        op: document.getElementById("s-op")?.value,
-        tech: document.getElementById("s-tech")?.value,
-        ref: document.getElementById("s-ref")?.value,
-        items: items
-    };
-    localStorage.setItem("draft_sortie", JSON.stringify(draft));
-}
+      function exportStatsToExcel() {
+        const moisNom = new Date().toLocaleString("fr-FR", {
+          month: "long",
+          year: "numeric",
+        });
 
-// On écoute les changements dans la section sortie
-document.addEventListener('input', (e) => {
-    if (e.target.closest('#app-container') && currentSectionId === 'sortie-physique') {
-        saveSortieDraft();
-    }
-});
+        // 1. Préparer les données pour l'onglet Équipes
+        const dataEquipes = [["ÉQUIPE", "TOTAL ARTICLES CONSOMMÉS"]];
+        const livraisonsMois = appData.demandes.filter(
+          (d) => d.status === "LIVREE",
+        ); // Filtre simplifié pour l'exemple
 
-        // --- COCKPIT & ALERTES ---
-        function renderCockpit(container) {
-    // 1. SÉCURITÉ : On définit des listes vides par défaut si les données manquent
-    const stock = appData.stock || [];
-    const demandes = appData.demandes || [];
+        const statsEquipe = {};
+        livraisonsMois.forEach((d) => {
+          const eq = d.prestataire || "SANS ÉQUIPE";
+          const qty = d.items.reduce((sum, i) => sum + i.qty, 0);
+          statsEquipe[eq] = (statsEquipe[eq] || 0) + qty;
+        });
+        Object.entries(statsEquipe).forEach(([eq, qty]) =>
+          dataEquipes.push([eq, qty]),
+        );
 
-    // 2. CALCULS SÉCURISÉS
-    const totalStock = stock
-        .filter(s => s.op === "ITC")
-        .reduce((a, b) => a + (parseInt(b.qty) || 0), 0);
-    
-    const pending = demandes.filter(d => d.status === "EN ATTENTE GESTIONNAIRE").length;
-    
-    const alerts = stock.filter(s => s.op === "ITC" && (parseInt(s.qty) || 0) < 5).length;
+        // 2. Préparer les données pour l'onglet Détails Techniciens
+        const dataTechs = [
+          ["TECHNICIEN", "PROJET/SITE", "DATE LIVRAISON", "NOMBRE D'ARTICLES"],
+        ];
+        livraisonsMois.forEach((d) => {
+          const qty = d.items.reduce((sum, i) => sum + i.qty, 0);
+          dataTechs.push([d.demandeurName, d.motif, d.dateLivraison, qty]);
+        });
 
-    let html = `
+        // 3. Création du classeur Excel
+        const wb = XLSX.utils.book_new();
+        const ws1 = XLSX.utils.aoa_to_sheet(dataEquipes);
+        const ws2 = XLSX.utils.aoa_to_sheet(dataTechs);
+
+        XLSX.utils.book_append_sheet(wb, ws1, "Résumé Équipes");
+        XLSX.utils.book_append_sheet(wb, ws2, "Détails Techniciens");
+
+        // 4. Téléchargement du fichier
+        XLSX.writeFile(wb, `RAPPORT_CONSO_ITC_${moisNom.toUpperCase()}.xlsx`);
+      }
+
+      // Sauvegarde locale des champs de réception
+      function saveReceptionDraft() {
+        const draft = {
+          op: document.getElementById("r-op")?.value,
+          type: document.getElementById("r-type")?.value,
+          mat: document.getElementById("r-mat")?.value,
+          qty: document.getElementById("r-qty")?.value,
+        };
+        localStorage.setItem("draft_reception", JSON.stringify(draft));
+      }
+
+      // Écouteur global pour détecter la saisie
+      document.addEventListener("input", (e) => {
+        if (["r-op", "r-type", "r-mat", "r-qty"].includes(e.target.id)) {
+          saveReceptionDraft();
+        }
+      });
+
+      function saveSortieDraft() {
+        const items = [];
+        document.querySelectorAll(".art-row-sortie").forEach((row) => {
+          items.push({
+            label: row.querySelector(".art-l").value,
+            qty: row.querySelector(".art-q").value,
+          });
+        });
+
+        const draft = {
+          op: document.getElementById("s-op")?.value,
+          tech: document.getElementById("s-tech")?.value,
+          ref: document.getElementById("s-ref")?.value,
+          items: items,
+        };
+        localStorage.setItem("draft_sortie", JSON.stringify(draft));
+      }
+
+      // On écoute les changements dans la section sortie
+      document.addEventListener("input", (e) => {
+        if (
+          e.target.closest("#app-container") &&
+          currentSectionId === "sortie-physique"
+        ) {
+          saveSortieDraft();
+        }
+      });
+
+      // --- COCKPIT & ALERTES ---
+      function renderCockpit(container) {
+        // 1. SÉCURITÉ : On définit des listes vides par défaut si les données manquent
+        const stock = appData.stock || [];
+        const demandes = appData.demandes || [];
+
+        // 2. CALCULS SÉCURISÉS
+        const totalStock = stock
+          .filter((s) => s.op === "ITC")
+          .reduce((a, b) => a + (parseInt(b.qty) || 0), 0);
+
+        const pending = demandes.filter(
+          (d) => d.status === "EN ATTENTE GESTIONNAIRE",
+        ).length;
+
+        const alerts = stock.filter(
+          (s) => s.op === "ITC" && (parseInt(s.qty) || 0) < 5,
+        ).length;
+
+        let html = `
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 font-black">
             <div class="bg-indigo-600 text-white p-6 rounded-3xl shadow-lg">
                 <p class="text-[8px] opacity-60">STOCK TOTAL ITC</p>
@@ -1361,96 +1993,122 @@ document.addEventListener('input', (e) => {
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 italic font-bold">`;
 
-    // 3. AFFICHAGE DES GROUPES PAR OPÉRATEUR
-    ["ITC", "OCI-CIC", "MOOV", "MTN"].forEach(key => {
-        const group = stock.filter(s => 
-            key === "OCI-CIC" ? ["OCI", "CIC", "OCI-CIC"].includes(s.op) : s.op === key
-        );
+        // 3. AFFICHAGE DES GROUPES PAR OPÉRATEUR
+        ["ITC", "OCI-CIC", "MOOV", "MTN"].forEach((key) => {
+          const group = stock.filter((s) =>
+            key === "OCI-CIC"
+              ? ["OCI", "CIC", "OCI-CIC"].includes(s.op)
+              : s.op === key,
+          );
 
-        html += `
+          html += `
             <div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 border-slate-200">
                 <h3 class="text-xl font-black mb-6 uppercase text-indigo-900">${key}</h3>
                 <div class="space-y-2">
-                    ${group.length > 0 ? group.map(m => {
-                        let qtyVal = parseInt(m.qty) || 0;
-                        let badgeColor = (key === 'ITC' && qtyVal < 5) ? 'text-red-600 bg-red-50' : 'text-indigo-600 bg-indigo-50';
-                        
-                        return `
+                    ${
+                      group.length > 0
+                        ? group
+                            .map((m) => {
+                              let qtyVal = parseInt(m.qty) || 0;
+                              let badgeColor =
+                                key === "ITC" && qtyVal < 5
+                                  ? "text-red-600 bg-red-50"
+                                  : "text-indigo-600 bg-indigo-50";
+
+                              return `
                         <div class="flex justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">
                             <span class="w-1/2 truncate uppercase">${m.label}</span>
                             <div class="flex items-center gap-2">
                                 <span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">
-                                    ${key === 'ITC' ? qtyVal + ' U' : 'DISPO'}
+                                    ${key === "ITC" ? qtyVal + " U" : "DISPO"}
                                 </span>
                                 
-                                ${(currentUser.role === 'Gestionnaire' && key === 'ITC') ? 
-                                    `<button onclick="ouvrirModifStock('${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1">
+                                ${
+                                  currentUser.role === "Gestionnaire" &&
+                                  key === "ITC"
+                                    ? `<button onclick="ouvrirModifStock('${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1">
                                         <i class="fas fa-edit"></i>
-                                    </button>` : ''}
+                                    </button>`
+                                    : ""
+                                }
 
-                                ${currentUser.role === 'Gestionnaire' ? 
-                                    `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 hover:text-red-500 ml-1">
+                                ${
+                                  currentUser.role === "Gestionnaire"
+                                    ? `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 hover:text-red-500 ml-1">
                                         <i class="fas fa-trash"></i>
-                                    </button>` : ''}
+                                    </button>`
+                                    : ""
+                                }
                             </div>
                         </div>`;
-                    }).join("") : '<p class="text-[8px] text-slate-400 opacity-50">Aucun matériel répertorié</p>'}
+                            })
+                            .join("")
+                        : '<p class="text-[8px] text-slate-400 opacity-50">Aucun matériel répertorié</p>'
+                    }
                 </div>
             </div>`;
-    });
+        });
 
-    html += `</div>`; 
-    container.innerHTML = html;
-}
-        function ouvrirModifStock(label) {
-    const item = appData.stock.find(s => s.label === label && s.op === "ITC");
-    if (!item) return;
+        html += `</div>`;
+        container.innerHTML = html;
+      }
+      function ouvrirModifStock(label) {
+        const item = appData.stock.find(
+          (s) => s.label === label && s.op === "ITC",
+        );
+        if (!item) return;
 
-    // Sauvegarde de l'état initial pour l'audit
-    const ancienneQty = item.qty;
-    const ancienNom = item.label;
+        // Sauvegarde de l'état initial pour l'audit
+        const ancienneQty = item.qty;
+        const ancienNom = item.label;
 
-    const nouveauNom = prompt("MODIFIER LE NOM DE L'ARTICLE :", item.label);
-    if (nouveauNom === null) return; 
+        const nouveauNom = prompt("MODIFIER LE NOM DE L'ARTICLE :", item.label);
+        if (nouveauNom === null) return;
 
-    const nouvelleQty = prompt("MODIFIER LA QUANTITÉ EN STOCK :", item.qty);
-    if (nouvelleQty === null) return; 
+        const nouvelleQty = prompt("MODIFIER LA QUANTITÉ EN STOCK :", item.qty);
+        if (nouvelleQty === null) return;
 
-    // Mise à jour
-    item.label = nouveauNom.toUpperCase();
-    item.qty = parseInt(nouvelleQty) || 0;
+        // Mise à jour
+        item.label = nouveauNom.toUpperCase();
+        item.qty = parseInt(nouvelleQty) || 0;
 
-    // ALERTE AUDIT POUR LE SUPERVISEUR (ID 1)
-    const messageAudit = `ALERTE MODIFICATION STOCK : L'article "${ancienNom}" (${ancienneQty}U) a été renommé en "${item.label}" avec une nouvelle quantité de (${item.qty}U) par le gestionnaire.`;
-    addNotification(1, messageAudit);
-    
-    save();
-    showSection("cockpit");
-}
+        // ALERTE AUDIT POUR LE SUPERVISEUR (ID 1)
+        const messageAudit = `ALERTE MODIFICATION STOCK : L'article "${ancienNom}" (${ancienneQty}U) a été renommé en "${item.label}" avec une nouvelle quantité de (${item.qty}U) par le gestionnaire.`;
+        addNotification(1, messageAudit);
 
-function renderTechMesDemandes(container) {
-    // 1. SÉCURITÉ CRUCIALE : "Gilet de sauvetage"
-    // On vérifie que la liste existe avant de filtrer pour éviter le crash
-    const sourceDemandes = (appData && appData.demandes) ? appData.demandes : [];
+        save();
+        showSection("cockpit");
+      }
 
-    // 2. FILTRAGE (Ta logique conservée)
-    const myBS = sourceDemandes.filter(d => 
-        d.demandeurOriginalId === currentUser.id && 
-        ["EN ATTENTE GESTIONNAIRE", "PRET", "LIVREE"].includes(d.status)
-    );
+      function renderTechMesDemandes(container) {
+        // 1. SÉCURITÉ CRUCIALE : "Gilet de sauvetage"
+        // On vérifie que la liste existe avant de filtrer pour éviter le crash
+        const sourceDemandes =
+          appData && appData.demandes ? appData.demandes : [];
 
-    // Optionnel : On inverse pour voir les plus récents en premier
-    // myBS.reverse(); 
+        // 2. FILTRAGE (Ta logique conservée)
+        const myBS = sourceDemandes.filter(
+          (d) =>
+            d.demandeurOriginalId === currentUser.id &&
+            ["EN ATTENTE GESTIONNAIRE", "PRET", "LIVREE"].includes(d.status),
+        );
 
-    // 3. AFFICHAGE
-    container.innerHTML = `
+        // Optionnel : On inverse pour voir les plus récents en premier
+        // myBS.reverse();
+
+        // 3. AFFICHAGE
+        container.innerHTML = `
         <div class="bg-white rounded-3xl p-8 shadow-xl italic font-bold h-full">
             <h3 class="border-b-2 mb-6 uppercase text-pink-600 font-black italic">
                 <i class="fas fa-file-invoice mr-2"></i> Mes Bons de Sortie (Disponibles)
             </h3>
             
             <div class="grid grid-cols-1 gap-4 overflow-y-auto custom-scrollbar pr-2 max-h-[500px]">
-                ${myBS.length > 0 ? myBS.map(bs => `
+                ${
+                  myBS.length > 0
+                    ? myBS
+                        .map(
+                          (bs) => `
                     <div class="bg-slate-50 p-5 rounded-2xl border border-slate-100 flex justify-between items-center hover:shadow-md transition duration-200">
                         <div>
                             <p class="text-indigo-900 font-black text-sm">
@@ -1460,12 +2118,12 @@ function renderTechMesDemandes(container) {
                             
                             <p class="text-[8px] uppercase text-orange-500 font-bold mt-1">
                                 <span class="w-2 h-2 rounded-full bg-orange-500 inline-block mr-1"></span>
-                                STATUT : ${(bs.status || '').replace(/-/g, " ")}
+                                STATUT : ${(bs.status || "").replace(/-/g, " ")}
                             </p>
                             
                             <p class="text-[7px] text-slate-400 mt-1 uppercase font-bold">
                                 <i class="fas fa-tools mr-1 opacity-50"></i>
-                                PROJET : ${bs.motif || 'NON PRÉCISÉ'}
+                                PROJET : ${bs.motif || "NON PRÉCISÉ"}
                             </p>
                         </div>
                         
@@ -1473,17 +2131,21 @@ function renderTechMesDemandes(container) {
                             <i class="fas fa-file-pdf mr-2"></i> PDF
                         </button>
                     </div>
-                `).join("") : `
+                `,
+                        )
+                        .join("")
+                    : `
                     <div class="text-center py-12 opacity-40">
                         <i class="fas fa-folder-open text-4xl mb-3 text-slate-300"></i>
                         <p class="uppercase font-black text-[9px] text-slate-400">Aucun bon disponible pour le moment</p>
                     </div>
-                `}
+                `
+                }
             </div>
         </div>`;
-}
-function renderTechDemandeForm(container) {
-    container.innerHTML = `
+      }
+      function renderTechDemandeForm(container) {
+        container.innerHTML = `
         <div class="max-w-xl mx-auto bg-white p-8 rounded-3xl shadow-xl italic font-bold">
             <h3 class="mb-6 uppercase text-indigo-600 border-b-2 pb-2 font-black italic">
                 <i class="fas fa-user-edit mr-2"></i> Identification & Besoins
@@ -1512,59 +2174,64 @@ function renderTechDemandeForm(container) {
                 </button>
             </form>
         </div>`;
-}
+      }
 
-function handleTechSubmit(e) {
-    e.preventDefault();
-    const d = { 
-        id: "T-" + Date.now().toString().slice(-4), 
-        technicienId: currentUser.id, // Garde l'ID du compte pour l'archivage
-        technicienNom: document.getElementById("t-nom").value.toUpperCase(), // Récupère le nom saisi
-        equipe: document.getElementById("t-equipe").value.toUpperCase(),
-        besoin: document.getElementById("t-besoin").value.toUpperCase(), 
-        objectif: document.getElementById("t-objectif").value.toUpperCase(), 
-        statut: "EN ATTENTE COORDINATION", 
-        date: new Date().toLocaleDateString() 
-    };
-    appData.techDemandes.unshift(d); 
-    addNotification(7, `BESOIN : ${d.technicienNom} (${d.equipe})`); 
-    save(); 
-    alert("DEMANDE TRANSMISE À LA COORDINATRICE."); 
-    showSection("cockpit");
-}
-function renderCoordFluxTech(container) {
-    // 1. SÉCURITÉ CRUCIALE : "Gilet de sauvetage"
-    // On utilise une liste vide [] si appData ou appData.techDemandes n'existe pas encore
-    const sourceData = (appData && appData.techDemandes) ? appData.techDemandes : [];
+      function handleTechSubmit(e) {
+        e.preventDefault();
+        const d = {
+          id: "T-" + Date.now().toString().slice(-4),
+          technicienId: currentUser.id, // Garde l'ID du compte pour l'archivage
+          technicienNom: document.getElementById("t-nom").value.toUpperCase(), // Récupère le nom saisi
+          equipe: document.getElementById("t-equipe").value.toUpperCase(),
+          besoin: document.getElementById("t-besoin").value.toUpperCase(),
+          objectif: document.getElementById("t-objectif").value.toUpperCase(),
+          statut: "EN ATTENTE COORDINATION",
+          date: new Date().toLocaleDateString(),
+        };
+        appData.techDemandes.unshift(d);
+        addNotification(7, `BESOIN : ${d.technicienNom} (${d.equipe})`);
+        save();
+        alert("DEMANDE TRANSMISE À LA COORDINATRICE.");
+        showSection("cockpit");
+      }
+      function renderCoordFluxTech(container) {
+        // 1. SÉCURITÉ CRUCIALE : "Gilet de sauvetage"
+        // On utilise une liste vide [] si appData ou appData.techDemandes n'existe pas encore
+        const sourceData =
+          appData && appData.techDemandes ? appData.techDemandes : [];
 
-    // 2. FILTRAGE SÉCURISÉ
-    const data = sourceData.filter(d => d.statut === "EN ATTENTE COORDINATION");
-    
-    // 3. AFFICHAGE
-    container.innerHTML = `
+        // 2. FILTRAGE SÉCURISÉ
+        const data = sourceData.filter(
+          (d) => d.statut === "EN ATTENTE COORDINATION",
+        );
+
+        // 3. AFFICHAGE
+        container.innerHTML = `
         <div class="bg-white rounded-3xl shadow-xl p-8">
             <h3 class="mb-6 uppercase border-b-2 pb-2 text-orange-500 font-black italic">
                 <i class="fas fa-truck-pickup mr-2"></i> Besoins Techniciens en attente
             </h3>
             <div class="space-y-4">
-                ${data.map(d => `
+                ${data
+                  .map(
+                    (d) => `
                     <div class="bg-slate-50 p-5 rounded-2xl border-2 border-slate-100 flex justify-between items-center transition hover:border-orange-300">
                         <div class="w-2/3">
                             <p class="font-black text-indigo-900 text-[11px]">
-                                ${d.technicienNom || 'Technicien Inconnu'} 
-                                <span class="text-indigo-400 font-medium ml-2">[ÉQUIPE : ${d.equipe || 'N/A'}]</span>
+                                ${d.technicienNom || "Technicien Inconnu"} 
+                                <span class="text-indigo-400 font-medium ml-2">[ÉQUIPE : ${d.equipe || "N/A"}]</span>
                             </p>
                             
                             <p class="text-[9px] text-pink-600 font-black uppercase mt-1">
-                                <i class="fas fa-map-marker-alt mr-1"></i> SITE : ${d.objectif || 'Non précisé'}
+                                <i class="fas fa-map-marker-alt mr-1"></i> SITE : ${d.objectif || "Non précisé"}
                             </p>
                             
                             <div class="mt-2 p-2 bg-white rounded-lg border border-slate-200">
                                 <p class="text-[8px] text-slate-400 uppercase mb-1">Matériel & Quantités demandés :</p>
-                                <p class="text-[9px] uppercase text-slate-700 leading-tight">${d.besoin || 'Non spécifié'}</p>
+                                <p class="text-[9px] uppercase text-slate-700 leading-tight">${d.besoin || "Non spécifié"}</p>
                             </div>
                             
-                            <p class="text-[7px] text-slate-300 mt-2">ÉMIS LE : ${d.date || 'Date inconnue'}</p>
+                            <p class="text-[7px] text-slate-300 mt-2">ÉMIS LE : ${d.date || "Date inconnue"}</p>
                         </div>
                         
                         <div class="text-right">
@@ -1573,63 +2240,75 @@ function renderCoordFluxTech(container) {
                             </button>
                         </div>
                     </div>
-                `).join("")}
+                `,
+                  )
+                  .join("")}
 
-                ${data.length === 0 ? `
+                ${
+                  data.length === 0
+                    ? `
                     <div class="py-20 text-center">
                         <i class="fas fa-check-circle text-slate-200 text-5xl mb-4"></i>
                         <p class="text-slate-400 italic uppercase">Aucun nouveau besoin terrain à traiter</p>
                     </div>
-                ` : ''}
+                `
+                    : ""
+                }
             </div>
         </div>`;
-}
-        function preparerCmd(id) {
-            const tech = appData.techDemandes.find(x => x.id === id); window._currentTechProcess = tech;
-            const container = document.getElementById("app-container");
-            container.innerHTML = `<div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold font-black"><h3 class="mb-6 border-b-2 text-pink-600 uppercase">Conversion du besoin</h3><input id="c-motif" type="text" class="w-full border-2 p-3 rounded-xl mb-6 text-xs uppercase bg-slate-50" value="${tech.objectif}" required /><div id="cmd-list" class="space-y-3"></div><button onclick="addRow()" class="text-indigo-600 text-[9px] mt-4 uppercase">+ ARTICLE</button><button onclick="submitCmd()" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] mt-8 uppercase font-black">Envoyer Magasin</button></div>`;
-            addRow();
-        }
+      }
+      function preparerCmd(id) {
+        const tech = appData.techDemandes.find((x) => x.id === id);
+        window._currentTechProcess = tech;
+        const container = document.getElementById("app-container");
+        container.innerHTML = `<div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold font-black"><h3 class="mb-6 border-b-2 text-pink-600 uppercase">Conversion du besoin</h3><input id="c-motif" type="text" class="w-full border-2 p-3 rounded-xl mb-6 text-xs uppercase bg-slate-50" value="${tech.objectif}" required /><div id="cmd-list" class="space-y-3"></div><button onclick="addRow()" class="text-indigo-600 text-[9px] mt-4 uppercase">+ ARTICLE</button><button onclick="submitCmd()" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] mt-8 uppercase font-black">Envoyer Magasin</button></div>`;
+        addRow();
+      }
 
-        function addRow() {
-            const div = document.createElement("div"); div.className = "flex gap-2 items-center art-row bg-slate-50 p-2 rounded-xl";
-            const stockITC = appData.stock.filter(s => s.op === "ITC");
-            div.innerHTML = `<select class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase">${stockITC.map(s => `<option value="${s.label}">${s.label} (${s.qty} DISPO)</option>`).join("")}</select><input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />`;
-            document.getElementById("cmd-list").appendChild(div);
-        }
+      function addRow() {
+        const div = document.createElement("div");
+        div.className =
+          "flex gap-2 items-center art-row bg-slate-50 p-2 rounded-xl";
+        const stockITC = appData.stock.filter((s) => s.op === "ITC");
+        div.innerHTML = `<select class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase">${stockITC.map((s) => `<option value="${s.label}">${s.label} (${s.qty} DISPO)</option>`).join("")}</select><input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />`;
+        document.getElementById("cmd-list").appendChild(div);
+      }
 
-        function submitCmd() {
-    const tech = window._currentTechProcess;
-    const items = [];
-    document.querySelectorAll(".art-row").forEach(r => {
-        const label = r.querySelector(".art-l").value;
-        const qty = parseInt(r.querySelector(".art-q").value);
-        if(label && qty > 0) items.push({ label, qty });
-    });
+      function submitCmd() {
+        const tech = window._currentTechProcess;
+        const items = [];
+        document.querySelectorAll(".art-row").forEach((r) => {
+          const label = r.querySelector(".art-l").value;
+          const qty = parseInt(r.querySelector(".art-q").value);
+          if (label && qty > 0) items.push({ label, qty });
+        });
 
-    const c = { 
-        id: "BS-" + Date.now().toString().slice(-4), 
-        demandeurOriginalId: tech.technicienId, 
-        demandeurName: tech.technicienNom,
-        coordinateurNom: currentUser.name, // Nom de la coordinatrice connectée
-        prestataire: "ITC / " + (tech.equipe || "TERRAIN"), 
-        op: "ITC", 
-        items, 
-        motif: tech.objectif.toUpperCase(), 
-        status: "EN ATTENTE GESTIONNAIRE", // Disponible immédiatement pour le tech
-        date: new Date().toLocaleDateString() 
-    };
-    
-    appData.demandes.unshift(c); 
-    tech.statut = "VALIDÉ";
-    addNotification(tech.technicienId, `VOTRE BON ${c.id} EST PRÊT. TÉLÉCHARGEZ LE PDF.`);
-    save(); 
-    alert("COMMANDE ENVOYÉE AU MAGASIN ET BON TRANSMIS AU TECHNICIEN."); 
-    showSection("cockpit");
-}
+        const c = {
+          id: "BS-" + Date.now().toString().slice(-4),
+          demandeurOriginalId: tech.technicienId,
+          demandeurName: tech.technicienNom,
+          coordinateurNom: currentUser.name, // Nom de la coordinatrice connectée
+          prestataire: "ITC / " + (tech.equipe || "TERRAIN"),
+          op: "ITC",
+          items,
+          motif: tech.objectif.toUpperCase(),
+          status: "EN ATTENTE GESTIONNAIRE", // Disponible immédiatement pour le tech
+          date: new Date().toLocaleDateString(),
+        };
 
-function renderCoordCreationDirecte(container) {
-    container.innerHTML = `
+        appData.demandes.unshift(c);
+        tech.statut = "VALIDÉ";
+        addNotification(
+          tech.technicienId,
+          `VOTRE BON ${c.id} EST PRÊT. TÉLÉCHARGEZ LE PDF.`,
+        );
+        save();
+        alert("COMMANDE ENVOYÉE AU MAGASIN ET BON TRANSMIS AU TECHNICIEN.");
+        showSection("cockpit");
+      }
+
+      function renderCoordCreationDirecte(container) {
+        container.innerHTML = `
         <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold font-black">
             <h3 class="mb-6 border-b-2 text-pink-600 uppercase italic">Commande Directe (Manuelle)</h3>
             
@@ -1662,16 +2341,17 @@ function renderCoordCreationDirecte(container) {
                 </button>
             </form>
         </div>`;
-    
-    // On ajoute une première ligne vide au démarrage
-    addDirectRow();
-}
 
-function addDirectRow() {
-    const div = document.createElement("div");
-    div.className = "flex flex-col md:flex-row gap-2 items-end direct-row bg-slate-50 p-3 rounded-xl border transition hover:border-pink-200";
-    
-    div.innerHTML = `
+        // On ajoute une première ligne vide au démarrage
+        addDirectRow();
+      }
+
+      function addDirectRow() {
+        const div = document.createElement("div");
+        div.className =
+          "flex flex-col md:flex-row gap-2 items-end direct-row bg-slate-50 p-3 rounded-xl border transition hover:border-pink-200";
+
+        div.innerHTML = `
         <div class="flex-1 w-full">
             <label class="text-[7px] text-slate-400 uppercase">Catégorie</label>
             <select class="w-full border p-2 rounded-lg text-[9px] art-type uppercase bg-white" required>
@@ -1702,130 +2382,213 @@ function addDirectRow() {
             <i class="fas fa-trash"></i>
         </button>
     `;
-    
-    document.getElementById("direct-items-list").appendChild(div);
-}
 
-        function refreshDirectMaterials() { document.getElementById("direct-items-list").innerHTML = ""; addDirectRow(); }
+        document.getElementById("direct-items-list").appendChild(div);
+      }
 
-        function handleDirectSubmit(e) {
-            e.preventDefault();
-            const items = []; document.querySelectorAll(".direct-row").forEach(r => { items.push({ label: r.querySelector(".art-l").value, qty: parseInt(r.querySelector(".art-q").value) }); });
-            const c = { id: "CMD-D-"+Date.now().toString().slice(-4), demandeurOriginalId: currentUser.id, demandeurName: "COORDINATION", op: document.getElementById("d-op").value, items, motif: document.getElementById("d-motif").value.toUpperCase(), status: "EN ATTENTE GESTIONNAIRE", date: new Date().toLocaleDateString() };
-            appData.demandes.unshift(c); addNotification(2, `COMMANDE DIRECTE : ${c.id}`); save(); alert("TRANSMIS."); showSection("cockpit");
-        }
+      function refreshDirectMaterials() {
+        document.getElementById("direct-items-list").innerHTML = "";
+        addDirectRow();
+      }
 
-        // --- RETOURS TERRAIN ---
-        function renderRetourForm(container) {
-            container.innerHTML = `<div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black"><h3 class="mb-6 uppercase text-orange-500 border-b-2 pb-2">Déclarer un Retour</h3><form onsubmit="handleRetourSubmit(event)" class="space-y-4"><input id="ret-label" type="text" placeholder="MATÉRIEL RENDU" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required /><div class="grid grid-cols-2 gap-4"><input id="ret-qty" type="number" placeholder="QTÉ" class="w-full border-2 p-3 rounded-xl text-xs" required min="1" /><select id="ret-etat" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-100"><option value="NEUF">NEUF</option><option value="DÉFECTUEUX">DÉFECTUEUX</option></select></div><textarea id="ret-motif" placeholder="MOTIF DU RETOUR..." class="w-full border-2 p-3 rounded-xl text-xs h-24 uppercase bg-slate-50" required></textarea><button type="submit" class="w-full bg-orange-500 text-white py-4 rounded-2xl text-[10px] uppercase font-black">Valider Retour</button></form></div>`;
-        }
+      function handleDirectSubmit(e) {
+        e.preventDefault();
+        const items = [];
+        document.querySelectorAll(".direct-row").forEach((r) => {
+          items.push({
+            label: r.querySelector(".art-l").value,
+            qty: parseInt(r.querySelector(".art-q").value),
+          });
+        });
+        const c = {
+          id: "CMD-D-" + Date.now().toString().slice(-4),
+          demandeurOriginalId: currentUser.id,
+          demandeurName: "COORDINATION",
+          op: document.getElementById("d-op").value,
+          items,
+          motif: document.getElementById("d-motif").value.toUpperCase(),
+          status: "EN ATTENTE GESTIONNAIRE",
+          date: new Date().toLocaleDateString(),
+        };
+        appData.demandes.unshift(c);
+        addNotification(2, `COMMANDE DIRECTE : ${c.id}`);
+        save();
+        alert("TRANSMIS.");
+        showSection("cockpit");
+      }
 
-        function handleRetourSubmit(e) {
-            e.preventDefault();
-            const r = { id: "RET-"+Date.now().toString().slice(-4), techName: currentUser.name, label: document.getElementById("ret-label").value.toUpperCase(), qty: parseInt(document.getElementById("ret-qty").value), etat: document.getElementById("ret-etat").value, motif: document.getElementById("ret-motif").value.toUpperCase(), date: new Date().toLocaleDateString(), status: "EN ATTENTE" };
-            appData.retours.unshift(r); addNotification(2, `RETOUR : ${r.techName}`); save(); alert("RETOUR ENREGISTRÉ."); showSection("cockpit");
-        }
+      // --- RETOURS TERRAIN ---
+      function renderRetourForm(container) {
+        container.innerHTML = `<div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black"><h3 class="mb-6 uppercase text-orange-500 border-b-2 pb-2">Déclarer un Retour</h3><form onsubmit="handleRetourSubmit(event)" class="space-y-4"><input id="ret-label" type="text" placeholder="MATÉRIEL RENDU" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required /><div class="grid grid-cols-2 gap-4"><input id="ret-qty" type="number" placeholder="QTÉ" class="w-full border-2 p-3 rounded-xl text-xs" required min="1" /><select id="ret-etat" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-100"><option value="NEUF">NEUF</option><option value="DÉFECTUEUX">DÉFECTUEUX</option></select></div><textarea id="ret-motif" placeholder="MOTIF DU RETOUR..." class="w-full border-2 p-3 rounded-xl text-xs h-24 uppercase bg-slate-50" required></textarea><button type="submit" class="w-full bg-orange-500 text-white py-4 rounded-2xl text-[10px] uppercase font-black">Valider Retour</button></form></div>`;
+      }
 
-        // --- GESTION MAGASIN ---
-        function renderDemandesGestionnaire(container) {
-    // 1. SÉCURITÉ : On vérifie que appData existe et on crée une liste vide si demandes est absent
-    if (!appData) return;
-    const toutesLesDemandes = appData.demandes || [];
+      function handleRetourSubmit(e) {
+        e.preventDefault();
+        const r = {
+          id: "RET-" + Date.now().toString().slice(-4),
+          techName: currentUser.name,
+          label: document.getElementById("ret-label").value.toUpperCase(),
+          qty: parseInt(document.getElementById("ret-qty").value),
+          etat: document.getElementById("ret-etat").value,
+          motif: document.getElementById("ret-motif").value.toUpperCase(),
+          date: new Date().toLocaleDateString(),
+          status: "EN ATTENTE",
+        };
+        appData.retours.unshift(r);
+        addNotification(2, `RETOUR : ${r.techName}`);
+        save();
+        alert("RETOUR ENREGISTRÉ.");
+        showSection("cockpit");
+      }
 
-    // 2. FILTRAGE : On récupère uniquement les bons en attente
-    const data = toutesLesDemandes.filter(d => d.status === "EN ATTENTE GESTIONNAIRE");
+      // --- GESTION MAGASIN ---
+      function renderDemandesGestionnaire(container) {
+        // 1. SÉCURITÉ : On vérifie que appData existe et on crée une liste vide si demandes est absent
+        if (!appData) return;
+        const toutesLesDemandes = appData.demandes || [];
 
-    // 3. GÉNÉRATION DE L'INTERFACE
-    container.innerHTML = `
+        // 2. FILTRAGE : On récupère uniquement les bons en attente
+        const data = toutesLesDemandes.filter(
+          (d) => d.status === "EN ATTENTE GESTIONNAIRE",
+        );
+
+        // 3. GÉNÉRATION DE L'INTERFACE
+        container.innerHTML = `
         <div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic font-black">
             <h3 class="border-b-2 mb-6 uppercase text-yellow-600 font-black italic">
                 Préparation Commandes
             </h3>
             
             <div class="space-y-4">
-                ${data.map(d => `
+                ${data
+                  .map(
+                    (d) => `
                     <div class="bg-slate-50 p-4 rounded-2xl flex justify-between items-center border hover:border-yellow-200 transition">
                         <div>
                             <p class="font-black text-indigo-900">${d.id} | ${d.demandeurName}</p>
-                            <p class="text-[7px] text-orange-500 uppercase italic">MOTIF : ${d.motif || 'NON PRÉCISÉ'}</p>
+                            <p class="text-[7px] text-orange-500 uppercase italic">MOTIF : ${d.motif || "NON PRÉCISÉ"}</p>
                         </div>
                         <button onclick="prepSortie('${d.id}')" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-indigo-700 transition">
                             Réserver
                         </button>
                     </div>
-                `).join("")}
+                `,
+                  )
+                  .join("")}
                 
-                ${data.length === 0 ? `
+                ${
+                  data.length === 0
+                    ? `
                     <div class="text-center py-10">
                         <i class="fas fa-inbox text-slate-200 text-3xl mb-3"></i>
                         <p class="opacity-30 uppercase text-[10px]">Aucune commande en attente de préparation</p>
                     </div>
-                ` : ''}
+                `
+                    : ""
+                }
             </div>
         </div>`;
-}
+      }
 
-        function prepSortie(id) { const d = appData.demandes.find(x => x.id === id); d.status = "PRET"; save(); showSection("livraison"); }
+      function prepSortie(id) {
+        const d = appData.demandes.find((x) => x.id === id);
+        d.status = "PRET";
+        save();
+        showSection("livraison");
+      }
 
-        function renderLivraisonForm(container) {
-    const demandes = appData.demandes || []; // Gilet de sauvetage
-    const aLivrer = demandes.filter(d => d.status === "PREPAREE");
-    
-    container.innerHTML = `
+      function renderLivraisonForm(container) {
+        const demandes = appData.demandes || []; // Gilet de sauvetage
+        const aLivrer = demandes.filter((d) => d.status === "PREPAREE");
+
+        container.innerHTML = `
         <div class="bg-white p-8 rounded-3xl shadow-xl italic font-black">
             <h3 class="text-green-600 border-b-2 mb-6 uppercase">Sortie Physique (Scanner)</h3>
             <div class="space-y-4">
-                ${aLivrer.map(d => `
+                ${aLivrer
+                  .map(
+                    (d) => `
                     <div class="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border">
                         <span class="text-xs">${d.id} - ${d.demandeurName}</span>
                         <button onclick="validerLivraison('${d.id}')" class="bg-green-600 text-white px-4 py-2 rounded-lg text-[9px] uppercase">Confirmer Sortie</button>
                     </div>
-                `).join("")}
-                ${aLivrer.length === 0 ? '<p class="text-center opacity-30 py-5">AUCUN BON PRÊT</p>' : ''}
+                `,
+                  )
+                  .join("")}
+                ${aLivrer.length === 0 ? '<p class="text-center opacity-30 py-5">AUCUN BON PRÊT</p>' : ""}
             </div>
         </div>`;
-}
+      }
 
-        function finalSortie(id) {
-            const d = appData.demandes.find(x => x.id === id);
-            let stockInsuffisant = false;
-            d.items.forEach(i => { const s = appData.stock.find(st => st.label === i.label && st.op === d.op); if (!s || s.qty < i.qty) stockInsuffisant = true; });
-            if (stockInsuffisant) return alert("STOCK INSUFFISANT !");
-            d.items.forEach(i => { const s = appData.stock.find(st => st.label === i.label && st.op === d.op); if (s) s.qty -= i.qty; });
-            d.status = "LIVREE"; d.dateLivraison = new Date().toLocaleDateString();
-            addNotification(1, `AUDIT : SORTIE VALIDÉE (${d.id})`);
-            addNotification(d.demandeurOriginalId, `VOTRE MATÉRIEL EST DISPONIBLE (${d.id}).`);
-            save(); alert("TERMINÉ."); showSection("cockpit");
-        }
+      function finalSortie(id) {
+        const d = appData.demandes.find((x) => x.id === id);
+        let stockInsuffisant = false;
+        d.items.forEach((i) => {
+          const s = appData.stock.find(
+            (st) => st.label === i.label && st.op === d.op,
+          );
+          if (!s || s.qty < i.qty) stockInsuffisant = true;
+        });
+        if (stockInsuffisant) return alert("STOCK INSUFFISANT !");
+        d.items.forEach((i) => {
+          const s = appData.stock.find(
+            (st) => st.label === i.label && st.op === d.op,
+          );
+          if (s) s.qty -= i.qty;
+        });
+        d.status = "LIVREE";
+        d.dateLivraison = new Date().toLocaleDateString();
+        addNotification(1, `AUDIT : SORTIE VALIDÉE (${d.id})`);
+        addNotification(
+          d.demandeurOriginalId,
+          `VOTRE MATÉRIEL EST DISPONIBLE (${d.id}).`,
+        );
+        save();
+        alert("TERMINÉ.");
+        showSection("cockpit");
+      }
 
-        function renderGestionRetours(container) {
-    const retours = appData.retours || []; // Sécurité
-    const enAttente = retours.filter(r => r.status === "EN ATTENTE");
+      function renderGestionRetours(container) {
+        const retours = appData.retours || []; // Sécurité
+        const enAttente = retours.filter((r) => r.status === "EN ATTENTE");
 
-    container.innerHTML = `
+        container.innerHTML = `
         <div class="bg-white p-8 rounded-3xl shadow-xl italic font-black">
             <h3 class="text-orange-600 border-b-2 mb-6 uppercase">Gestion des Retours Chantier</h3>
             <div class="space-y-4">
-                ${enAttente.map(r => `...`).join("")}
-                ${enAttente.length === 0 ? '<p class="text-center opacity-30 py-5 font-black">AUCUN RETOUR À TRAITER</p>' : ''}
+                ${enAttente.map((r) => `...`).join("")}
+                ${enAttente.length === 0 ? '<p class="text-center opacity-30 py-5 font-black">AUCUN RETOUR À TRAITER</p>' : ""}
             </div>
         </div>`;
-}
+      }
 
-        function validerRetour(id) {
-            const r = appData.retours.find(x => x.id === id);
-            if (r.etat === "NEUF") {
-                const s = appData.stock.find(st => st.label === r.label && st.op === "ITC");
-                if (s) s.qty += r.qty; else appData.stock.push({ op: "ITC", label: r.label, qty: r.qty, type: "RETOUR" });
-            }
-            r.status = "VALIDÉ"; addNotification(1, `AUDIT : RETOUR RÉINTÉGRÉ (${r.label})`); save(); alert("STOCK À JOUR."); showSection("gestion-retours");
+      function validerRetour(id) {
+        const r = appData.retours.find((x) => x.id === id);
+        if (r.etat === "NEUF") {
+          const s = appData.stock.find(
+            (st) => st.label === r.label && st.op === "ITC",
+          );
+          if (s) s.qty += r.qty;
+          else
+            appData.stock.push({
+              op: "ITC",
+              label: r.label,
+              qty: r.qty,
+              type: "RETOUR",
+            });
         }
+        r.status = "VALIDÉ";
+        addNotification(1, `AUDIT : RETOUR RÉINTÉGRÉ (${r.label})`);
+        save();
+        alert("STOCK À JOUR.");
+        showSection("gestion-retours");
+      }
 
-        // --- AUTRES ---
-        function renderReceptionForm(container) {
-            // Récupérer le brouillon s'il existe
-    const saved = JSON.parse(localStorage.getItem("draft_reception")) || {};
-    container.innerHTML = `
+      // --- AUTRES ---
+      function renderReceptionForm(container) {
+        // Récupérer le brouillon s'il existe
+        const saved = JSON.parse(localStorage.getItem("draft_reception")) || {};
+        container.innerHTML = `
         <div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black">
             <h3 class="mb-8 uppercase border-b-2 text-indigo-600 italic">Mise en Stock Matériel</h3>
             
@@ -1871,64 +2634,75 @@ function addDirectRow() {
                 </button>
             </form>
         </div>`;
-    
-    // On réinitialise l'affichage de la quantité selon la sélection par défaut (ITC)
-    toggleQtyField('ITC');
-}
 
-function handleRec(e) {
-    e.preventDefault();
+        // On réinitialise l'affichage de la quantité selon la sélection par défaut (ITC)
+        toggleQtyField("ITC");
+      }
 
-    // 1. SÉCURITÉ : On s'assure que appData et appData.stock existent
-    if (!appData) appData = {};
-    if (!appData.stock) appData.stock = [];
+      function handleRec(e) {
+        e.preventDefault();
 
-    const mat = {
-        op: document.getElementById("r-op").value,
-        label: document.getElementById("r-mat").value.toUpperCase().trim(),
-        qty: parseInt(document.getElementById("r-qty").value) || 0,
-        type: document.getElementById("r-type").value.toUpperCase()
-    };
+        // 1. SÉCURITÉ : On s'assure que appData et appData.stock existent
+        if (!appData) appData = {};
+        if (!appData.stock) appData.stock = [];
 
-    // 2. RECHERCHE SÉCURISÉE : On cherche si l'article existe déjà pour cet opérateur
-    const existing = appData.stock.find(s => s.op === mat.op && s.label === mat.label);
+        const mat = {
+          op: document.getElementById("r-op").value,
+          label: document.getElementById("r-mat").value.toUpperCase().trim(),
+          qty: parseInt(document.getElementById("r-qty").value) || 0,
+          type: document.getElementById("r-type").value.toUpperCase(),
+        };
 
-    if (existing && mat.op === 'ITC') {
-        // Si c'est du stock ITC, on additionne la quantité
-        existing.qty = (parseInt(existing.qty) || 0) + mat.qty;
-    } else {
-        // Sinon, on crée une nouvelle entrée dans le stock
-        appData.stock.push(mat);
-    }
+        // 2. RECHERCHE SÉCURISÉE : On cherche si l'article existe déjà pour cet opérateur
+        const existing = appData.stock.find(
+          (s) => s.op === mat.op && s.label === mat.label,
+        );
 
-    // 3. AUDIT & SAUVEGARDE
-    addNotification(1, `TRAFIC : ENTRÉE STOCK (${mat.label}) - QUANTITÉ : ${mat.qty}`);
-    save(); // Envoi vers Firebase
-    
-    alert("ENTRÉE EN STOCK RÉUSSIE.");
-    
-    // 4. RETOUR AU COCKPIT
-    showSection("cockpit");
-}
-        function toggleQtyField(v) { document.getElementById('qty-container').style.display = (v === 'ITC' ? 'block' : 'none'); }
+        if (existing && mat.op === "ITC") {
+          // Si c'est du stock ITC, on additionne la quantité
+          existing.qty = (parseInt(existing.qty) || 0) + mat.qty;
+        } else {
+          // Sinon, on crée une nouvelle entrée dans le stock
+          appData.stock.push(mat);
+        }
 
-        function renderStock(opKey, container) {
-    // 1. Définition des opérateurs à afficher
-    const ops = opKey === "oci-cic" ? ["OCI", "CIC", "OCI-CIC"] : [opKey.toUpperCase()];
+        // 3. AUDIT & SAUVEGARDE
+        addNotification(
+          1,
+          `TRAFIC : ENTRÉE STOCK (${mat.label}) - QUANTITÉ : ${mat.qty}`,
+        );
+        save(); // Envoi vers Firebase
 
-    // 2. SÉCURITÉ CRUCIALE : On utilise une liste vide [] si appData.stock n'existe pas encore.
-    // Cela empêche l'erreur "Cannot read properties of undefined (reading 'filter')"
-    const fullStock = (appData && appData.stock) || [];
+        alert("ENTRÉE EN STOCK RÉUSSIE.");
 
-    // 3. Filtrage sécurisé
-    const stockEntite = fullStock.filter(s => ops.includes(s.op));
+        // 4. RETOUR AU COCKPIT
+        showSection("cockpit");
+      }
+      function toggleQtyField(v) {
+        document.getElementById("qty-container").style.display =
+          v === "ITC" ? "block" : "none";
+      }
 
-    // 4. Génération du HTML avec gestion du cas "Liste vide"
-    container.innerHTML = `
+      function renderStock(opKey, container) {
+        // 1. Définition des opérateurs à afficher
+        const ops =
+          opKey === "oci-cic"
+            ? ["OCI", "CIC", "OCI-CIC"]
+            : [opKey.toUpperCase()];
+
+        // 2. SÉCURITÉ CRUCIALE : On utilise une liste vide [] si appData.stock n'existe pas encore.
+        // Cela empêche l'erreur "Cannot read properties of undefined (reading 'filter')"
+        const fullStock = (appData && appData.stock) || [];
+
+        // 3. Filtrage sécurisé
+        const stockEntite = fullStock.filter((s) => ops.includes(s.op));
+
+        // 4. Génération du HTML avec gestion du cas "Liste vide"
+        container.innerHTML = `
     <div class="bg-white rounded-3xl shadow-xl overflow-hidden font-bold italic">
         <div class="p-6 bg-slate-900 text-white flex justify-between items-center">
             <h3 class="text-xl uppercase font-black tracking-widest italic">
-                <i class="fas fa-cubes mr-2 opacity-50"></i> STOCK ${opKey.toUpperCase().replace('-', '/')}
+                <i class="fas fa-cubes mr-2 opacity-50"></i> STOCK ${opKey.toUpperCase().replace("-", "/")}
             </h3>
             <span class="bg-slate-700 px-3 py-1 rounded-xl text-xs">${stockEntite.length} Réf.</span>
         </div>
@@ -1942,39 +2716,51 @@ function handleRec(e) {
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-50">
-                    ${stockEntite.length > 0 ? stockEntite.map(s => `
+                    ${
+                      stockEntite.length > 0
+                        ? stockEntite
+                            .map(
+                              (s) => `
                         <tr class="hover:bg-indigo-50 transition duration-150">
-                            <td class="py-4 pl-2 text-[9px] text-slate-500 font-black uppercase w-1/3">${s.type || 'NON DÉFINI'}</td>
+                            <td class="py-4 pl-2 text-[9px] text-slate-500 font-black uppercase w-1/3">${s.type || "NON DÉFINI"}</td>
                             <td class="py-4 text-xs text-indigo-900 font-black uppercase">${s.label}</td>
                             <td class="py-4 text-center font-black">
-                                ${s.op === 'ITC' 
-                                    ? `<span class="${(parseInt(s.qty)||0) < 5 ? 'text-red-600 bg-red-50 px-2 py-1 rounded' : ''}">${s.qty} U</span>` 
-                                    : '<span class="text-green-600 text-[9px] bg-green-50 px-2 py-1 rounded"><i class="fas fa-check mr-1"></i>DISPO</span>'}
+                                ${
+                                  s.op === "ITC"
+                                    ? `<span class="${(parseInt(s.qty) || 0) < 5 ? "text-red-600 bg-red-50 px-2 py-1 rounded" : ""}">${s.qty} U</span>`
+                                    : '<span class="text-green-600 text-[9px] bg-green-50 px-2 py-1 rounded"><i class="fas fa-check mr-1"></i>DISPO</span>'
+                                }
                             </td>
                         </tr>
-                    `).join("") : `
+                    `,
+                            )
+                            .join("")
+                        : `
                         <tr>
                             <td colspan="3" class="py-12 text-center text-slate-300 uppercase font-black italic">
                                 <i class="fas fa-box-open text-4xl mb-4 block opacity-30"></i>
                                 Aucun matériel répertorié pour ${opKey.toUpperCase()}
                             </td>
                         </tr>
-                    `}
+                    `
+                    }
                 </tbody>
             </table>
         </div>
     </div>`;
-}
-function renderTraficAudit(container) {
-    // 1. SÉCURITÉ : On utilise une liste vide [] si appData.notifications n'existe pas
-    // Cela empêche l'erreur "Cannot read properties of undefined (reading 'filter')"
-    const sourceNotifications = appData.notifications || [];
+      }
+      function renderTraficAudit(container) {
+        // 1. SÉCURITÉ : On utilise une liste vide [] si appData.notifications n'existe pas
+        // Cela empêche l'erreur "Cannot read properties of undefined (reading 'filter')"
+        const sourceNotifications = appData.notifications || [];
 
-    // 2. FILTRAGE : On garde ta logique (userId === 1) mais on sécurise le tout
-    // On ajoute .reverse() pour voir les événements récents en premier
-    const notifs = sourceNotifications.filter(n => n.userId === 1).reverse();
+        // 2. FILTRAGE : On garde ta logique (userId === 1) mais on sécurise le tout
+        // On ajoute .reverse() pour voir les événements récents en premier
+        const notifs = sourceNotifications
+          .filter((n) => n.userId === 1)
+          .reverse();
 
-    container.innerHTML = `
+        container.innerHTML = `
         <div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic uppercase h-full flex flex-col">
             <div class="flex justify-between items-center border-b-2 mb-6 pb-4 border-slate-100">
                 <h3 class="text-blue-600 font-black tracking-tighter italic text-xl">
@@ -1986,131 +2772,183 @@ function renderTraficAudit(container) {
             </div>
             
             <div class="space-y-3 overflow-y-auto custom-scrollbar pr-2 max-h-[500px]">
-                ${notifs.length > 0 ? notifs.map(n => `
+                ${
+                  notifs.length > 0
+                    ? notifs
+                        .map(
+                          (n) => `
                     <div class="bg-slate-50 p-4 rounded-xl border-l-4 border-indigo-400 hover:bg-indigo-50 transition">
                         <p class="text-[9px] text-slate-800 leading-relaxed">${n.message}</p>
-                        <p class="text-[7px] text-slate-400 mt-2 font-black text-right">${n.date || ''}</p>
+                        <p class="text-[7px] text-slate-400 mt-2 font-black text-right">${n.date || ""}</p>
                     </div>
-                `).join("") : `
+                `,
+                        )
+                        .join("")
+                    : `
                     <div class="text-center py-10 opacity-40">
                         <i class="fas fa-history text-2xl mb-2"></i>
                         <p class="text-[8px]">Aucun historique pour le moment</p>
                     </div>
-                `}
+                `
+                }
             </div>
         </div>`;
-}
+      }
 
+      async function downloadPDF(id) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const d = appData.demandes.find((x) => x.id === id);
 
+        // Nettoyer et générer le QR Code en mémoire
+        const qrContainer = document.getElementById("qrcode-temp");
+        qrContainer.innerHTML = "";
+        new QRCode(qrContainer, { text: d.id, width: 100, height: 100 });
 
-        async function downloadPDF(id) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const d = appData.demandes.find(x => x.id === id);
-    
-    // Nettoyer et générer le QR Code en mémoire
-    const qrContainer = document.getElementById("qrcode-temp");
-    qrContainer.innerHTML = "";
-    new QRCode(qrContainer, { text: d.id, width: 100, height: 100 });
-
-    // Laisser 500ms au navigateur pour dessiner le QR Code
-    setTimeout(() => {
-        try {
+        // Laisser 500ms au navigateur pour dessiner le QR Code
+        setTimeout(() => {
+          try {
             const qrCanvas = qrContainer.querySelector("canvas");
             const qrImage = qrCanvas.toDataURL("image/jpeg");
 
             // Design du PDF
-            doc.addImage("logo-ITC-NW-01-fond-blanc-01.jpg", 'JPEG', 15, 10, 40, 20);
-            doc.addImage(qrImage, 'JPEG', 165, 10, 25, 25);
-            
+            doc.addImage(
+              "logo-ITC-NW-01-fond-blanc-01.jpg",
+              "JPEG",
+              15,
+              10,
+              40,
+              20,
+            );
+            doc.addImage(qrImage, "JPEG", 165, 10, 25, 25);
+
             doc.setFontSize(16);
             doc.text("BON DE SORTIE MATÉRIEL", 105, 22, { align: "center" });
 
             doc.autoTable({
-                startY: 85,
-                head: [['DÉSIGNATION', 'DEMANDÉ', 'REÇU']],
-                body: d.items.map(i => [i.label, i.qty, d.status === "LIVREE" ? i.qty : "___"]),
-                theme: 'grid',
-                headStyles: { fillColor: [102, 34, 119] }
+              startY: 85,
+              head: [["DÉSIGNATION", "DEMANDÉ", "REÇU"]],
+              body: d.items.map((i) => [
+                i.label,
+                i.qty,
+                d.status === "LIVREE" ? i.qty : "___",
+              ]),
+              theme: "grid",
+              headStyles: { fillColor: [102, 34, 119] },
             });
 
             doc.save(`BS_ITC_${d.id}.pdf`);
-        } catch (e) {
+          } catch (e) {
             alert("Erreur PDF : vérifiez que le logo est accessible.");
-        }
-    }, 500);
-}
-function markNotificationsAsRead() {
-    if (!appData || !appData.notifications) return; // Sécurité totale
+          }
+        }, 500);
+      }
+      function markNotificationsAsRead() {
+        if (!appData || !appData.notifications) return; // Sécurité totale
 
-    appData.notifications.forEach(n => {
-        if (n.userId === currentUser.id) n.lu = true;
-    });
-    save();
-}function markNotificationsAsRead() {
-    if (!appData || !appData.notifications) return; // Sécurité totale
+        appData.notifications.forEach((n) => {
+          if (n.userId === currentUser.id) n.lu = true;
+        });
+        save();
+      }
+      function markNotificationsAsRead() {
+        if (!appData || !appData.notifications) return; // Sécurité totale
 
-    appData.notifications.forEach(n => {
-        if (n.userId === currentUser.id) n.lu = true;
-    });
-    save();
-    updateNotifications;
-}
-        function addNotification(u, m) { if(!appData.notifications) appData.notifications = []; appData.notifications.unshift({ userId: u, message: m, lu: false, date: new Date().toLocaleString() }); save(); updateNotifications(); }
-        function updateNotifications() {
-    // 1. Sécurité : Si l'utilisateur n'est pas là ou si les données ne sont pas chargées
-    if (!currentUser || !appData) return;
+        appData.notifications.forEach((n) => {
+          if (n.userId === currentUser.id) n.lu = true;
+        });
+        save();
+        updateNotifications;
+      }
+      function addNotification(u, m) {
+        if (!appData.notifications) appData.notifications = [];
+        appData.notifications.unshift({
+          userId: u,
+          message: m,
+          lu: false,
+          date: new Date().toLocaleString(),
+        });
+        save();
+        updateNotifications();
+      }
+      function updateNotifications() {
+        // 1. Sécurité : Si l'utilisateur n'est pas là ou si les données ne sont pas chargées
+        if (!currentUser || !appData) return;
 
-    // 2. Sécurité CRUCIALE : On utilise une liste vide [] si 'notifications' est absent
-    const notifications = appData.notifications || [];
-    
-    // 3. Calcul du nombre de notifs non lues pour cet utilisateur précis
-    const count = notifications.filter(n => n.userId === currentUser.id && !n.lu).length;
+        // 2. Sécurité CRUCIALE : On utilise une liste vide [] si 'notifications' est absent
+        const notifications = appData.notifications || [];
 
-    // 4. Mise à jour des pastilles (badges) dans l'interface
-    const badgeIds = ["notif-coord", "notif-tech", "notif-superviseur", "notif-gest-coord"];
-    
-    badgeIds.forEach(id => { 
-        const el = document.getElementById(id); 
-        if (el) { 
-            el.innerText = count; 
+        // 3. Calcul du nombre de notifs non lues pour cet utilisateur précis
+        const count = notifications.filter(
+          (n) => n.userId === currentUser.id && !n.lu,
+        ).length;
+
+        // 4. Mise à jour des pastilles (badges) dans l'interface
+        const badgeIds = [
+          "notif-coord",
+          "notif-tech",
+          "notif-superviseur",
+          "notif-gest-coord",
+        ];
+
+        badgeIds.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.innerText = count;
             // On affiche le badge seulement si count > 0, sinon on le cache
-            el.classList.toggle("hidden", count === 0); 
+            el.classList.toggle("hidden", count === 0);
+          }
+        });
+      }
+      function deleteMaterial(op, label) {
+        if (
+          !confirm(
+            "ATTENTION : VOULEZ-VOUS SUPPRIMER DÉFINITIVEMENT CET ARTICLE DU STOCK ?",
+          )
+        )
+          return;
+
+        const itemASupprimer = appData.stock.find(
+          (s) => s.op === op && s.label === label,
+        );
+        const qteAuMomentSuppr = itemASupprimer
+          ? itemASupprimer.qty
+          : "Inconnue";
+
+        appData.stock = appData.stock.filter(
+          (s) => !(s.op === op && s.label === label),
+        );
+
+        // ALERTE CRITIQUE POUR LE SUPERVISEUR (ID 1)
+        const messageAudit = `ALERTE SUPPRESSION CRITIQUE : Le gestionnaire a supprimé l'article "${label}" de l'opérateur ${op}. (Quantité au moment de la suppression : ${qteAuMomentSuppr}U)`;
+        addNotification(1, messageAudit);
+
+        save();
+        showSection("cockpit");
+      }
+
+      // INITIALISATION
+      if (appData.currentUserId) {
+        currentUser = appData.users.find((u) => u.id === appData.currentUserId);
+        if (currentUser) {
+          document.getElementById("login-screen").classList.add("hidden");
+          document.getElementById("main-app").classList.remove("hidden");
+          updateMenuVisibility();
+          updateUserInfo();
+          updateNotifications();
+          showSection(
+            currentUser.role === "Technicien"
+              ? "tech-nouvelle-demande"
+              : "cockpit",
+          );
         }
-    });
-}
-        function deleteMaterial(op, label) {
-    if (!confirm("ATTENTION : VOULEZ-VOUS SUPPRIMER DÉFINITIVEMENT CET ARTICLE DU STOCK ?")) return;
-    
-    const itemASupprimer = appData.stock.find(s => s.op === op && s.label === label);
-    const qteAuMomentSuppr = itemASupprimer ? itemASupprimer.qty : "Inconnue";
+      }
 
-    appData.stock = appData.stock.filter(s => !(s.op === op && s.label === label));
-
-    // ALERTE CRITIQUE POUR LE SUPERVISEUR (ID 1)
-    const messageAudit = `ALERTE SUPPRESSION CRITIQUE : Le gestionnaire a supprimé l'article "${label}" de l'opérateur ${op}. (Quantité au moment de la suppression : ${qteAuMomentSuppr}U)`;
-    addNotification(1, messageAudit);
-
-    save();
-    showSection("cockpit");
-}
-
-        // INITIALISATION
-        if (appData.currentUserId) {
-            currentUser = appData.users.find(u => u.id === appData.currentUserId);
-            if (currentUser) {
-                document.getElementById("login-screen").classList.add("hidden");
-                document.getElementById("main-app").classList.remove("hidden");
-                updateMenuVisibility(); updateUserInfo(); updateNotifications();
-                showSection(currentUser.role === 'Technicien' ? "tech-nouvelle-demande" : "cockpit");
-            }
-        }
-
-        firebase.auth().onAuthStateChanged((user) => {
-    if (user) {
-        // Un utilisateur est présent dans le cache Firebase
-        const userProfile = appData.users.find(u => u.email === user.email);
-        if (userProfile) {
+      firebase.auth().onAuthStateChanged((user) => {
+        if (user) {
+          // Un utilisateur est présent dans le cache Firebase
+          const userProfile = appData.users.find((u) => u.email === user.email);
+          if (userProfile) {
             currentUser = userProfile;
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("main-app").classList.remove("hidden");
@@ -2119,16 +2957,16 @@ function markNotificationsAsRead() {
             updateNotifications();
             // On n'appelle showSection("cockpit") que si on est sur l'écran de login
             if (document.getElementById("app-container").innerHTML === "") {
-                showSection("cockpit");
+              showSection("cockpit");
             }
+          }
+        } else {
+          // AUCUN utilisateur : On force l'affichage du login
+          document.getElementById("login-screen").classList.remove("hidden");
+          document.getElementById("main-app").classList.add("hidden");
+          currentUser = null;
         }
-    } else {
-        // AUCUN utilisateur : On force l'affichage du login
-        document.getElementById("login-screen").classList.remove("hidden");
-        document.getElementById("main-app").classList.add("hidden");
-        currentUser = null;
-    }
-});
+      });
     </script>
-</body>
+  </body>
 </html>
