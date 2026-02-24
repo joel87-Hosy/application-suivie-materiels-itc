@@ -456,6 +456,7 @@
         stock: [],
         demandes: [],
         techDemandes: [],
+        sorties: [],
         retours: [],
         notifications: [],
         scansDuJour: [],
@@ -487,14 +488,35 @@
           },
         ],
       };
+
+      function normalizeAppData(data) {
+        const normalized = {
+          ...appData,
+          ...(data || {}),
+        };
+
+        normalized.sorties = Array.isArray(normalized.sorties)
+          ? normalized.sorties
+          : [];
+
+        if (!Array.isArray(normalized.users) || normalized.users.length === 0) {
+          normalized.users = appData.users;
+        }
+
+        return normalized;
+      }
+
       // Écoute en temps réel des changements sur Firebase
       // Écoute en temps réel des changements sur Firebase
       db.ref("itc_data").on("value", (snapshot) => {
         const data = snapshot.val();
 
-        // On vérifie que les données existent et que l'utilisateur est connecté
-        if (data && currentUser) {
-          appData = data; // Mise à jour de la mémoire locale
+        if (data) {
+          appData = normalizeAppData(data);
+        }
+
+        // On ne met à jour l'interface que si l'utilisateur est connecté
+        if (currentUser) {
           updateNotifications(); // Met à jour les petites pastilles rouges
 
           const container = document.getElementById("app-container");
@@ -518,6 +540,10 @@
             renderLivraisonForm(container);
           } else if (currentSectionId === "gestion-retours") {
             renderGestionRetours(container);
+          } else if (currentSectionId === "sortie-physique") {
+            renderSortiePhysiqueForm(container);
+          } else if (currentSectionId === "rapports-sorties") {
+            renderRapportsSorties(container);
           } else if (currentSectionId.startsWith("stock-")) {
             renderStock(currentSectionId.replace("stock-", ""), container);
           }
@@ -1083,6 +1109,34 @@
       }
 
       // Rend la liste des rapports de sorties pour le gestionnaire
+      function getSortieItems(sortie) {
+        if (Array.isArray(sortie?.items)) {
+          return sortie.items
+            .filter((item) => item && item.label)
+            .map((item) => ({
+              label: String(item.label),
+              qty: Number(item.qty) || 0,
+            }));
+        }
+
+        if (Array.isArray(sortie?.logs)) {
+          return sortie.logs
+            .filter((entry) => typeof entry === "string" && entry.trim())
+            .map((entry) => {
+              const match = entry.match(/^(.*?)\s*\(-\s*(\d+)\s*\)$/);
+              if (match) {
+                return {
+                  label: match[1].trim(),
+                  qty: Number(match[2]) || 0,
+                };
+              }
+              return { label: entry.trim(), qty: 0 };
+            });
+        }
+
+        return [];
+      }
+
       function renderRapportsSorties(container) {
         if (!appData.sorties) appData.sorties = [];
         const sorties = appData.sorties.slice().reverse();
@@ -1097,22 +1151,29 @@
             ${
               sorties.length > 0
                 ? sorties
-                    .map(
-                      (s) => `
+                    .map((s) => {
+                      const sortieItems = getSortieItems(s);
+                      return `
                 <div class="p-4 rounded-xl border bg-slate-50 flex justify-between items-start">
                     <div>
                         <p class="text-[9px] font-black">Réf: ${s.ref} — ${s.date}</p>
                         <p class="text-[8px] text-slate-600">Opérateur: ${s.op} • Destinataire: ${s.tech} • Par: ${s.createdBy}</p>
                         <ul class="mt-2 text-[9px] list-disc pl-4">
-                            ${s.items.map((i) => `<li>${i.label} — ${i.qty} U</li>`).join("")}
+                      ${
+                        sortieItems.length > 0
+                          ? sortieItems
+                              .map((i) => `<li>${i.label} — ${i.qty} U</li>`)
+                              .join("")
+                          : '<li class="text-slate-500 italic">Détail des articles indisponible</li>'
+                      }
                         </ul>
                     </div>
                     <div class="text-right">
                         <button onclick="exportSortiePDF('${s.id}')" class="bg-pink-600 text-white px-3 py-2 rounded-lg text-[9px] font-black mr-2">PDF</button>
                     </div>
                 </div>
-            `,
-                    )
+              `;
+                    })
                     .join("")
                 : `<p class="text-[9px] text-slate-400 italic">Aucun rapport de sortie enregistré.</p>`
             }
@@ -1135,11 +1196,14 @@
         doc.text(`Opérateur: ${s.op}`, 14, 40);
         doc.text(`Destinataire: ${s.tech}`, 14, 46);
         doc.text(`Confirmé par: ${s.createdBy}`, 14, 52);
-        const body = s.items.map((it) => [it.label, String(it.qty)]);
+        const body = getSortieItems(s).map((it) => [it.label, String(it.qty)]);
         doc.autoTable({
           startY: 60,
           head: [["Désignation", "Quantité"]],
-          body,
+          body:
+            body.length > 0
+              ? body
+              : [["Détail des articles indisponible", "-"]],
         });
         doc.save(`${s.id}.pdf`);
       }
@@ -1161,11 +1225,17 @@
           doc.text(`Opérateur: ${s.op}`, 14, 40);
           doc.text(`Destinataire: ${s.tech}`, 14, 46);
           doc.text(`Confirmé par: ${s.createdBy}`, 14, 52);
-          const body = s.items.map((it) => [it.label, String(it.qty)]);
+          const body = getSortieItems(s).map((it) => [
+            it.label,
+            String(it.qty),
+          ]);
           doc.autoTable({
             startY: 60,
             head: [["Désignation", "Quantité"]],
-            body,
+            body:
+              body.length > 0
+                ? body
+                : [["Détail des articles indisponible", "-"]],
           });
         });
         doc.save(`Rapports_Sorties_${Date.now()}.pdf`);
