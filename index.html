@@ -3341,31 +3341,31 @@
                                   : "text-indigo-600 bg-indigo-50";
 
                               return `
-                        <div class="flex justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">
-                            <span class="w-1/2 truncate uppercase">${m.label}</span>
-                            <div class="flex items-center gap-2">
+                            <div class="flex.justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">
+                              <span class="w-1/2 truncate uppercase">${m.label}</span>
+                              <div class="flex items-center gap-2">
                                 <span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">
-                                    ${key === "ITC" ? qtyVal + " U" : "DISPO"}
+                                  ${key === "ITC" || key === "MTN" ? qtyVal + " U" : "DISPO"}
                                 </span>
                                 
                                 ${
                                   currentUser.role === "Gestionnaire" &&
-                                  key === "ITC"
-                                    ? `<button onclick="ouvrirModifStock('${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1">
-                                        <i class="fas fa-edit"></i>
-                                    </button>`
+                                  (key === "ITC" || key === "MTN")
+                                    ? `<button onclick="ouvrirModifStock('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1">
+                                    <i class="fas fa-edit"></i>
+                                  </button>`
                                     : ""
                                 }
 
                                 ${
                                   currentUser.role === "Gestionnaire"
                                     ? `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 hover:text-red-500 ml-1">
-                                        <i class="fas fa-trash"></i>
-                                    </button>`
+                                    <i class="fas fa-trash"></i>
+                                  </button>`
                                     : ""
                                 }
-                            </div>
-                        </div>`;
+                              </div>
+                            </div>`;
                             })
                             .join("")
                         : '<p class="text-[8px] text-slate-400 opacity-50">Aucun matériel répertorié</p>'
@@ -3377,9 +3377,9 @@
         html += `</div>`;
         container.innerHTML = html;
       }
-      function ouvrirModifStock(label) {
+      function ouvrirModifStock(op, label) {
         const item = appData.stock.find(
-          (s) => s.label === label && s.op === "ITC",
+          (s) => s.label === label && s.op === op,
         );
         if (!item) return;
 
@@ -4098,9 +4098,20 @@
                             <td class="py-4 text-xs text-indigo-900 font-black uppercase">${s.label}</td>
                             <td class="py-4 text-center font-black">
                                 ${
-                                  s.op === "ITC"
+                                  s.op === "ITC" || s.op === "MTN"
                                     ? `<span class="${(parseInt(s.qty) || 0) < 5 ? "text-red-600 bg-red-50 px-2 py-1 rounded" : ""}">${s.qty} U</span>`
-                                    : '<span class="text-green-600 text-[9px] bg-green-50 px-2 py-1 rounded"><i class="fas fa-check mr-1"></i>DISPO</span>'
+                                    : `<span class="text-green-600 text-[9px] bg-green-50 px-2 py-1 rounded"><i class="fas fa-check mr-1"></i>DISPO</span>`
+                                }
+                                ${
+                                  /* Afficher boutons Modifier / Supprimer pour MTN quand le gestionnaire est connecté */
+                                  (opKey || "").toUpperCase() === "MTN" &&
+                                  currentUser &&
+                                  currentUser.role === "Gestionnaire"
+                                    ? ` <div class="mt-2 flex justify-center gap-2">
+                                            <button onclick="ouvrirModifStock('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 text-[9px] bg-white border px-2 py-1 rounded">Modifier</button>
+                                            <button onclick="deleteMaterial('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-red-500 hover:text-red-700 text-[9px] bg-white border px-2 py-1 rounded">Supprimer</button>
+                                        </div>`
+                                    : ""
                                 }
                             </td>
                         </tr>
@@ -4358,6 +4369,61 @@
         addNotification(1, messageAudit);
 
         save();
+        showSection("cockpit");
+      }
+
+      // Nouvelle version robuste de la fonction d'édition de stock.
+      // Accepts either (op, label) or (label) for backward compatibility.
+      function ouvrirModifStock(a, b) {
+        let op = "ITC";
+        let label = "";
+        if (b === undefined) {
+          // appeler avec (label)
+          label = String(a || "").toUpperCase();
+        } else {
+          op = String(a || "").toUpperCase();
+          label = String(b || "").toUpperCase();
+        }
+
+        const item = (appData.stock || []).find(
+          (s) =>
+            String(s.op || "").toUpperCase() === op &&
+            String(s.label || "").toUpperCase() === label,
+        );
+        if (!item) return alert("Article introuvable en stock.");
+
+        const ancienNom = item.label;
+        const ancienneQty = Number(item.qty) || 0;
+
+        const nouveauNom = prompt("MODIFIER LE NOM DE L'ARTICLE :", item.label);
+        if (nouveauNom === null) return; // annulation
+
+        const nouvelleQtyRaw = prompt(
+          "MODIFIER LA QUANTITÉ EN STOCK :",
+          String(item.qty || 0),
+        );
+        if (nouvelleQtyRaw === null) return; // annulation
+
+        const nouvelleQty = parseInt(nouvelleQtyRaw);
+        if (Number.isNaN(nouvelleQty) || nouvelleQty < 1) {
+          return alert(
+            "La quantité doit être un nombre entier supérieur ou égal à 1.",
+          );
+        }
+
+        const confirmation = confirm(
+          `Confirmer la modification de ${ancienNom} (${ancienneQty}U) → ${nouveauNom.toUpperCase()} (${nouvelleQty}U) ?`,
+        );
+        if (!confirmation) return;
+
+        // Appliquer les modifications
+        item.label = String(nouveauNom || item.label).toUpperCase();
+        item.qty = nouvelleQty;
+
+        const messageAudit = `ALERTE MODIFICATION STOCK : L'article "${ancienNom}" (${ancienneQty}U) a été renommé en "${item.label}" avec une nouvelle quantité de (${item.qty}U) par le gestionnaire.`;
+        addNotification(1, messageAudit, op);
+        save();
+        alert("Modification enregistrée.");
         showSection("cockpit");
       }
 
