@@ -176,6 +176,16 @@
               </div>
               <div
                 onclick="
+                  showSection('archives-consommations');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-amber-300"
+              >
+                <i class="fas fa-archive w-5 text-amber-400"></i> Archives
+                Consommations
+              </div>
+              <div
+                onclick="
                   showSection('superviseur-rapports-sorties');
                   toggleSidebarMobile();
                 "
@@ -365,16 +375,25 @@
                 "
                 class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
               >
-                <i class="fas fa-box w-5 text-indigo-400"></i> STOCK ITC
+                <i class="fas fa-box w-5 text-gray-400"></i> STOCK ITC
               </div>
               <div
                 onclick="
-                  showSection('stock-oci-cic');
+                  showSection('stock-oci');
                   toggleSidebarMobile();
                 "
                 class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
               >
-                <i class="fas fa-box w-5 text-green-400"></i> OCI-CIC
+                <i class="fas fa-box w-5 text-orange-400"></i> STOCK OCI
+              </div>
+              <div
+                onclick="
+                  showSection('stock-cic');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-box w-5 text-orange-300"></i> STOCK CIC
               </div>
               <div
                 onclick="
@@ -383,7 +402,7 @@
                 "
                 class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
               >
-                <i class="fas fa-box w-5 text-yellow-400"></i> MOOV
+                <i class="fas fa-box w-5 text-blue-400"></i> STOCK MOOV
               </div>
               <div
                 onclick="
@@ -392,7 +411,7 @@
                 "
                 class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
               >
-                <i class="fas fa-box w-5 text-red-400"></i> MTN
+                <i class="fas fa-box w-5 text-yellow-400"></i> STOCK MTN
               </div>
             </div>
           </nav>
@@ -469,6 +488,8 @@
         sorties: [],
         retours: [],
         notifications: [],
+        consumptionArchives: [],
+        lastConsumptionArchiveKey: null,
         scansDuJour: [],
         derniereDateScan: null,
         users: [
@@ -508,6 +529,13 @@
         normalized.sorties = Array.isArray(normalized.sorties)
           ? normalized.sorties
           : [];
+        normalized.consumptionArchives = Array.isArray(
+          normalized.consumptionArchives,
+        )
+          ? normalized.consumptionArchives
+          : [];
+        normalized.lastConsumptionArchiveKey =
+          normalized.lastConsumptionArchiveKey || null;
 
         if (!Array.isArray(normalized.users) || normalized.users.length === 0) {
           normalized.users = appData.users;
@@ -550,6 +578,7 @@
       }
 
       let isSavingSortiesMigration = false;
+      let isSavingConsumptionArchive = false;
 
       // Écoute en temps réel des changements sur Firebase
       // Écoute en temps réel des changements sur Firebase
@@ -568,6 +597,14 @@
               `Migration sorties effectuée : ${migrationResult.migratedCount} rapport(s) mis à jour.`,
             );
           }
+
+          const archiveChanged = ensureMonthlyConsumptionArchive();
+          if (archiveChanged && !isSavingConsumptionArchive) {
+            isSavingConsumptionArchive = true;
+            save();
+            isSavingConsumptionArchive = false;
+            console.log("Archivage mensuel des consommations effectué.");
+          }
         }
 
         // On ne met à jour l'interface que si l'utilisateur est connecté
@@ -583,6 +620,8 @@
             renderCockpit(container);
           } else if (currentSectionId === "stats-consommation") {
             renderStatsConsommation(container); // <--- AJOUTÉ : Pour que les stats s'actualisent
+          } else if (currentSectionId === "archives-consommations") {
+            renderArchivesConsommations(container);
           } else if (currentSectionId === "trafic-audit") {
             renderTraficAudit(container);
           } else if (currentSectionId === "coord-demandes-tech") {
@@ -811,50 +850,55 @@
         }
       }
 
-      function renderStatsConsommation(container) {
-        const moisActuel = new Date().getMonth();
-        const anneeActuelle = new Date().getFullYear();
+      let statsConsommationCharts = [];
 
-        // 1. SÉCURITÉ : On s'assure que la liste existe avant de filtrer
-        const sourceDemandes =
-          appData && appData.demandes ? appData.demandes : [];
+      function getMonthKey(monthIndex, year) {
+        return `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+      }
 
-        // 2. FILTRAGE ROBUSTE
-        const livraisonsMois = sourceDemandes.filter((d) => {
-          // On vérifie que le bon est livré et qu'il a une date
-          if (d.status !== "LIVREE" || !d.dateLivraison) return false;
-
-          // Gestion intelligente de la date (accepte "05/02/2026" ET "2026-02-05")
-          const parts = d.dateLivraison.includes("/")
-            ? d.dateLivraison.split("/")
-            : d.dateLivraison.split("-");
-
-          let m, a;
-          if (parts[0].length === 4) {
-            // Format YYYY-MM-DD
-            m = parseInt(parts[1]) - 1;
-            a = parseInt(parts[0]);
-          } else {
-            // Format DD/MM/YYYY
-            m = parseInt(parts[1]) - 1;
-            a = parseInt(parts[2]);
-          }
-
-          return m === moisActuel && a === anneeActuelle;
+      function getMonthLabel(monthIndex, year) {
+        return new Date(year, monthIndex, 1).toLocaleString("fr-FR", {
+          month: "long",
+          year: "numeric",
         });
+      }
 
-        // 3. CALCULS SÉCURISÉS (Items)
+      function normalizeOperatorKey(opValue) {
+        const normalized = String(opValue || "")
+          .trim()
+          .toUpperCase();
+
+        if (["ORANGE", "OCI", "OCI-CIC", "ORANGE/OCI"].includes(normalized)) {
+          return "OCI";
+        }
+        if (normalized === "CIC") return "CIC";
+        if (normalized === "MOOV") return "MOOV";
+        if (normalized === "MTN") return "MTN";
+        return "ITC";
+      }
+
+      function isDateInTargetMonth(dateText, month, year) {
+        const ts = getSortieTimestamp(dateText);
+        if (!ts) return false;
+        const date = new Date(ts);
+        return date.getMonth() === month && date.getFullYear() === year;
+      }
+
+      function buildConsumptionSnapshot(monthIndex, year) {
+        const sourceDemandes = (appData && appData.demandes) || [];
+        const livraisonsMois = sourceDemandes.filter(
+          (d) =>
+            d.status === "LIVREE" &&
+            isDateInTargetMonth(d.dateLivraison, monthIndex, year),
+        );
+
         const statsTech = {};
         const statsEquipe = {};
 
         livraisonsMois.forEach((d) => {
           const nom = d.demandeurName || "INCONNU";
           const equipe = d.prestataire || "SANS ÉQUIPE";
-
-          // Sécurité : si d.items est vide, on prend une liste vide []
           const items = d.items || [];
-
-          // Sécurité : on s'assure que la quantité est bien un chiffre
           const totalItems = items.reduce(
             (sum, i) => sum + (parseInt(i.qty) || 0),
             0,
@@ -863,6 +907,194 @@
           statsTech[nom] = (statsTech[nom] || 0) + totalItems;
           statsEquipe[equipe] = (statsEquipe[equipe] || 0) + totalItems;
         });
+
+        const operators = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+        const operatorStats = operators.reduce((acc, op) => {
+          acc[op] = {
+            availableTotal: 0,
+            entrantsByDesignation: {},
+            sortantsByDesignation: {},
+          };
+          return acc;
+        }, {});
+
+        const fullStock = (appData && appData.stock) || [];
+        fullStock.forEach((stockItem) => {
+          const op = normalizeOperatorKey(stockItem.op);
+          if (!operatorStats[op]) return;
+
+          const qty = parseInt(stockItem.qty) || 0;
+          const availableQty = op === "ITC" ? qty : Math.max(qty, 1);
+          operatorStats[op].availableTotal += availableQty;
+        });
+
+        const sortiesSource = (appData && appData.sorties) || [];
+        sortiesSource
+          .filter((s) => isDateInTargetMonth(s.date, monthIndex, year))
+          .forEach((sortie) => {
+            const op = normalizeOperatorKey(sortie.op);
+            if (!operatorStats[op]) return;
+
+            getSortieItems(sortie).forEach((item) => {
+              const label = String(item.label || "NON DÉFINI")
+                .trim()
+                .toUpperCase();
+              const qty = parseInt(item.qty) || 0;
+              if (!label || qty <= 0) return;
+
+              operatorStats[op].sortantsByDesignation[label] =
+                (operatorStats[op].sortantsByDesignation[label] || 0) + qty;
+            });
+          });
+
+        const sourceNotifications = (appData && appData.notifications) || [];
+        sourceNotifications
+          .filter(
+            (n) =>
+              n.userId === 1 &&
+              String(n.message || "").includes("TRAFIC : ENTRÉE STOCK") &&
+              isDateInTargetMonth(n.date, monthIndex, year),
+          )
+          .forEach((n) => {
+            const op = normalizeOperatorKey(n.auditFlux || "ITC");
+            if (!operatorStats[op]) return;
+
+            const labelMatch = String(n.message || "").match(/\((.*?)\)/);
+            const qtyMatch = String(n.message || "").match(
+              /QUANTITÉ\s*:\s*(\d+)/i,
+            );
+            const label = String(labelMatch?.[1] || "NON DÉFINI")
+              .trim()
+              .toUpperCase();
+            const rawQty = parseInt(qtyMatch?.[1]) || 0;
+            const qty = rawQty > 0 ? rawQty : op === "ITC" ? 0 : 1;
+
+            if (!label || qty <= 0) return;
+
+            operatorStats[op].entrantsByDesignation[label] =
+              (operatorStats[op].entrantsByDesignation[label] || 0) + qty;
+          });
+
+        return {
+          key: getMonthKey(monthIndex, year),
+          label: getMonthLabel(monthIndex, year),
+          monthIndex,
+          year,
+          statsTech,
+          statsEquipe,
+          operatorStats,
+        };
+      }
+
+      function ensureMonthlyConsumptionArchive() {
+        if (!appData) return false;
+        if (!Array.isArray(appData.consumptionArchives)) {
+          appData.consumptionArchives = [];
+        }
+
+        const now = new Date();
+        const previousMonthDate = new Date(
+          now.getFullYear(),
+          now.getMonth() - 1,
+          1,
+        );
+        const monthIndex = previousMonthDate.getMonth();
+        const year = previousMonthDate.getFullYear();
+        const monthKey = getMonthKey(monthIndex, year);
+
+        const alreadyArchived = appData.consumptionArchives.some(
+          (archive) => archive?.key === monthKey,
+        );
+        if (alreadyArchived) {
+          appData.lastConsumptionArchiveKey = monthKey;
+          return false;
+        }
+
+        const snapshot = buildConsumptionSnapshot(monthIndex, year);
+        const archive = {
+          ...snapshot,
+          archivedAt: new Date().toLocaleString(),
+        };
+
+        appData.consumptionArchives.unshift(archive);
+        appData.lastConsumptionArchiveKey = monthKey;
+        return true;
+      }
+
+      function renderStatsConsommation(container) {
+        const moisActuel = new Date().getMonth();
+        const anneeActuelle = new Date().getFullYear();
+        const snapshot = buildConsumptionSnapshot(moisActuel, anneeActuelle);
+        const statsTech = snapshot.statsTech;
+        const statsEquipe = snapshot.statsEquipe;
+        const operatorStats = snapshot.operatorStats;
+        const operators = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+
+        const renderDesignationTotals = (totals, colorClass) => {
+          const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+          if (entries.length === 0) {
+            return '<p class="text-[8px] text-slate-400 italic">Aucune donnée ce mois-ci</p>';
+          }
+
+          return `<div class="space-y-2">${entries
+            .map(
+              ([label, qty]) => `
+              <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg border-l-4 ${colorClass}">
+                <span class="text-[8px] text-slate-700 uppercase">${escapeHtml(label)}</span>
+                <span class="text-[8px] font-black">${qty} U</span>
+              </div>
+            `,
+            )
+            .join("")}</div>`;
+        };
+
+        const operatorBlocksHtml = operators
+          .map((op) => {
+            const stats = operatorStats[op];
+            const totalSortants = Object.values(
+              stats.sortantsByDesignation,
+            ).reduce((sum, qty) => sum + qty, 0);
+            const totalEntrants = Object.values(
+              stats.entrantsByDesignation,
+            ).reduce((sum, qty) => sum + qty, 0);
+
+            return `
+              <div class="bg-white p-6 rounded-3xl shadow-xl">
+                <h4 class="text-indigo-700 uppercase font-black text-[10px] border-b pb-2 mb-4">Consommation Gestionnaire - ${op}</h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                  <div class="bg-slate-50 border rounded-xl p-3">
+                    <p class="text-[7px] text-slate-500 uppercase">Total matériel disponible</p>
+                    <p class="text-[11px] font-black text-slate-800 mt-1">${stats.availableTotal} U</p>
+                  </div>
+                  <div class="bg-red-50 border border-red-100 rounded-xl p-3">
+                    <p class="text-[7px] text-red-500 uppercase">Total matériels sortants</p>
+                    <p class="text-[11px] font-black text-red-700 mt-1">${totalSortants} U</p>
+                  </div>
+                  <div class="bg-green-50 border border-green-100 rounded-xl p-3">
+                    <p class="text-[7px] text-green-600 uppercase">Total matériels entrants</p>
+                    <p class="text-[11px] font-black text-green-700 mt-1">${totalEntrants} U</p>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <p class="text-[8px] text-red-600 uppercase font-black mb-2">Sortants par désignation</p>
+                    ${renderDesignationTotals(stats.sortantsByDesignation, "border-red-400")}
+                  </div>
+                  <div>
+                    <p class="text-[8px] text-green-600 uppercase font-black mb-2">Entrants par désignation</p>
+                    ${renderDesignationTotals(stats.entrantsByDesignation, "border-green-400")}
+                  </div>
+                </div>
+
+                <div class="h-64 bg-slate-50 rounded-2xl p-3 border">
+                  <canvas id="gestionnaire-chart-${op}"></canvas>
+                </div>
+                <p class="text-[7px] text-slate-400 mt-2 uppercase">Légende : vert = entrants / rouge = sortants (par désignation)</p>
+              </div>
+            `;
+          })
+          .join("");
 
         // 4. INTERFACE VISUELLE
         container.innerHTML = `
@@ -916,6 +1148,11 @@
                 </div>
             </div>
         </div>
+
+          <div class="space-y-6">
+            <h4 class="text-lg font-black uppercase text-slate-800 border-b-2 border-slate-200 pb-2">Consommation Gestionnaire du Mois par Opérateur</h4>
+            ${operatorBlocksHtml}
+          </div>
         
         <div class="flex gap-4">
             <button onclick="window.print()" class="bg-slate-900 text-white px-6 py-3 rounded-xl text-[8px] font-black uppercase shadow-lg hover:bg-slate-800 transition">
@@ -927,12 +1164,334 @@
             </button>
         </div>
     </div>`;
+
+        statsConsommationCharts.forEach((chart) => chart.destroy());
+        statsConsommationCharts = [];
+
+        operators.forEach((op) => {
+          const stats = operatorStats[op];
+          const canvas = document.getElementById(`gestionnaire-chart-${op}`);
+          if (!canvas) return;
+
+          const labels = [
+            ...new Set([
+              ...Object.keys(stats.entrantsByDesignation),
+              ...Object.keys(stats.sortantsByDesignation),
+            ]),
+          ];
+
+          const chartLabels = labels.length > 0 ? labels : ["AUCUNE DONNÉE"];
+          const entrantData = chartLabels.map(
+            (label) => stats.entrantsByDesignation[label] || 0,
+          );
+          const sortantData = chartLabels.map(
+            (label) => stats.sortantsByDesignation[label] || 0,
+          );
+
+          const chart = new Chart(canvas.getContext("2d"), {
+            type: "bar",
+            data: {
+              labels: chartLabels,
+              datasets: [
+                {
+                  label: "Entrants",
+                  data: entrantData,
+                  backgroundColor: "#22c55e",
+                  borderRadius: 6,
+                },
+                {
+                  label: "Sortants",
+                  data: sortantData,
+                  backgroundColor: "#ef4444",
+                  borderRadius: 6,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { position: "bottom" },
+                title: {
+                  display: true,
+                  text: `Flux mensuel ${op} par désignation`,
+                },
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                },
+              },
+            },
+          });
+
+          statsConsommationCharts.push(chart);
+        });
+      }
+
+      function renderArchivesConsommations(container) {
+        const archives = Array.isArray(appData?.consumptionArchives)
+          ? appData.consumptionArchives
+          : [];
+
+        const renderByDesignation = (totals, colorClass) => {
+          const entries = Object.entries(totals || {}).sort(
+            (a, b) => b[1] - a[1],
+          );
+          if (entries.length === 0) {
+            return '<p class="text-[8px] text-slate-400 italic">Aucune donnée</p>';
+          }
+
+          return `<div class="space-y-1">${entries
+            .map(
+              ([label, qty]) => `
+                <div class="flex justify-between items-center bg-slate-50 border-l-4 ${colorClass} rounded-lg p-2">
+                  <span class="text-[8px] uppercase text-slate-700">${escapeHtml(label)}</span>
+                  <span class="text-[8px] font-black">${qty} U</span>
+                </div>
+              `,
+            )
+            .join("")}</div>`;
+        };
+
+        container.innerHTML = `
+          <div class="space-y-6 h-full overflow-y-auto custom-scrollbar p-2">
+            <h3 class="text-xl font-black uppercase text-indigo-900 border-b-4 border-indigo-600 pb-2 italic">Archives Consommations</h3>
+            ${
+              archives.length > 0
+                ? archives
+                    .map((archive) => {
+                      const operators = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+                      const blocks = operators
+                        .map((op) => {
+                          const stats = archive.operatorStats?.[op] || {
+                            availableTotal: 0,
+                            entrantsByDesignation: {},
+                            sortantsByDesignation: {},
+                          };
+                          const totalEntrants = Object.values(
+                            stats.entrantsByDesignation || {},
+                          ).reduce((sum, qty) => sum + qty, 0);
+                          const totalSortants = Object.values(
+                            stats.sortantsByDesignation || {},
+                          ).reduce((sum, qty) => sum + qty, 0);
+
+                          return `
+                            <div class="bg-slate-50 border rounded-2xl p-4">
+                              <p class="text-[9px] uppercase font-black text-indigo-700 mb-2">${op}</p>
+                              <div class="grid grid-cols-3 gap-2 mb-3">
+                                <div class="bg-white border rounded-lg p-2 text-center">
+                                  <p class="text-[7px] uppercase text-slate-500">Disponible</p>
+                                  <p class="text-[9px] font-black">${stats.availableTotal || 0} U</p>
+                                </div>
+                                <div class="bg-white border rounded-lg p-2 text-center">
+                                  <p class="text-[7px] uppercase text-green-600">Entrants</p>
+                                  <p class="text-[9px] font-black text-green-700">${totalEntrants} U</p>
+                                </div>
+                                <div class="bg-white border rounded-lg p-2 text-center">
+                                  <p class="text-[7px] uppercase text-red-600">Sortants</p>
+                                  <p class="text-[9px] font-black text-red-700">${totalSortants} U</p>
+                                </div>
+                              </div>
+                              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                  <p class="text-[8px] uppercase font-black text-green-600 mb-1">Entrants par désignation</p>
+                                  ${renderByDesignation(stats.entrantsByDesignation, "border-green-400")}
+                                </div>
+                                <div>
+                                  <p class="text-[8px] uppercase font-black text-red-600 mb-1">Sortants par désignation</p>
+                                  ${renderByDesignation(stats.sortantsByDesignation, "border-red-400")}
+                                </div>
+                              </div>
+                            </div>
+                          `;
+                        })
+                        .join("");
+
+                      return `
+                        <div class="bg-white rounded-3xl shadow-xl p-6">
+                          <div class="flex justify-between items-center border-b pb-2 mb-4">
+                            <div>
+                              <p class="text-[10px] uppercase font-black text-indigo-700">${escapeHtml(archive.label || archive.key || "Mois archivé")}</p>
+                              <p class="text-[8px] uppercase text-slate-400">Archivé le ${escapeHtml(archive.archivedAt || "-")}</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                              <button onclick="exportArchiveConsommationPDF('${encodeURIComponent(archive.key || "")}')" class="bg-pink-600 text-white px-3 py-2 rounded-lg text-[8px] font-black uppercase">PDF</button>
+                              <button onclick="exportArchiveConsommationExcel('${encodeURIComponent(archive.key || "")}')" class="bg-green-600 text-white px-3 py-2 rounded-lg text-[8px] font-black uppercase">Excel</button>
+                            </div>
+                          </div>
+                          <div class="space-y-3">${blocks}</div>
+                        </div>
+                      `;
+                    })
+                    .join("")
+                : '<div class="bg-white rounded-3xl shadow-xl p-10 text-center text-slate-400 text-[9px] uppercase font-black">Aucune archive disponible pour le moment.</div>'
+            }
+          </div>
+        `;
+      }
+
+      function getConsumptionArchiveByKey(keyEncoded) {
+        const key = decodeURIComponent(String(keyEncoded || ""));
+        const archives = Array.isArray(appData?.consumptionArchives)
+          ? appData.consumptionArchives
+          : [];
+        return archives.find((archive) => archive?.key === key) || null;
+      }
+
+      function exportArchiveConsommationPDF(keyEncoded) {
+        const archive = getConsumptionArchiveByKey(keyEncoded);
+        if (!archive) return alert("Archive introuvable.");
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const operators = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+
+        doc.setFontSize(13);
+        doc.text(
+          `Archive Consommation - ${archive.label || archive.key}`,
+          14,
+          20,
+        );
+        doc.setFontSize(9);
+        doc.text(`Archivé le: ${archive.archivedAt || "-"}`, 14, 27);
+
+        operators.forEach((op, index) => {
+          const stats = archive.operatorStats?.[op] || {
+            availableTotal: 0,
+            entrantsByDesignation: {},
+            sortantsByDesignation: {},
+          };
+
+          const entrantTotal = Object.values(
+            stats.entrantsByDesignation || {},
+          ).reduce((sum, qty) => sum + qty, 0);
+          const sortantTotal = Object.values(
+            stats.sortantsByDesignation || {},
+          ).reduce((sum, qty) => sum + qty, 0);
+
+          if (index > 0) doc.addPage();
+
+          doc.setFontSize(12);
+          doc.text(`Opérateur: ${op}`, 14, 20);
+          doc.setFontSize(10);
+          doc.text(`Disponible: ${stats.availableTotal || 0} U`, 14, 28);
+          doc.text(`Entrants: ${entrantTotal} U`, 14, 34);
+          doc.text(`Sortants: ${sortantTotal} U`, 14, 40);
+
+          const entrantRows = Object.entries(
+            stats.entrantsByDesignation || {},
+          ).map(([label, qty]) => [label, String(qty)]);
+          doc.autoTable({
+            startY: 48,
+            head: [["Entrants par désignation", "Qté"]],
+            body:
+              entrantRows.length > 0 ? entrantRows : [["Aucune donnée", "0"]],
+          });
+
+          const nextStartY = (doc.lastAutoTable?.finalY || 60) + 8;
+          const sortantRows = Object.entries(
+            stats.sortantsByDesignation || {},
+          ).map(([label, qty]) => [label, String(qty)]);
+          doc.autoTable({
+            startY: nextStartY,
+            head: [["Sortants par désignation", "Qté"]],
+            body:
+              sortantRows.length > 0 ? sortantRows : [["Aucune donnée", "0"]],
+          });
+        });
+
+        doc.save(`Archive_Consommation_${archive.key || Date.now()}.pdf`);
+      }
+
+      function exportArchiveConsommationExcel(keyEncoded) {
+        const archive = getConsumptionArchiveByKey(keyEncoded);
+        if (!archive) return alert("Archive introuvable.");
+
+        const operators = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+        const rows = [];
+
+        operators.forEach((op) => {
+          const stats = archive.operatorStats?.[op] || {
+            availableTotal: 0,
+            entrantsByDesignation: {},
+            sortantsByDesignation: {},
+          };
+
+          const entrantTotal = Object.values(
+            stats.entrantsByDesignation || {},
+          ).reduce((sum, qty) => sum + qty, 0);
+          const sortantTotal = Object.values(
+            stats.sortantsByDesignation || {},
+          ).reduce((sum, qty) => sum + qty, 0);
+
+          rows.push({
+            Mois: archive.label || archive.key || "",
+            Operateur: op,
+            Disponible: stats.availableTotal || 0,
+            EntrantsTotal: entrantTotal,
+            SortantsTotal: sortantTotal,
+            Type: "",
+            Designation: "",
+            Quantite: "",
+          });
+
+          Object.entries(stats.entrantsByDesignation || {}).forEach(
+            ([label, qty]) => {
+              rows.push({
+                Mois: archive.label || archive.key || "",
+                Operateur: op,
+                Disponible: "",
+                EntrantsTotal: "",
+                SortantsTotal: "",
+                Type: "ENTRANT",
+                Designation: label,
+                Quantite: qty,
+              });
+            },
+          );
+
+          Object.entries(stats.sortantsByDesignation || {}).forEach(
+            ([label, qty]) => {
+              rows.push({
+                Mois: archive.label || archive.key || "",
+                Operateur: op,
+                Disponible: "",
+                EntrantsTotal: "",
+                SortantsTotal: "",
+                Type: "SORTANT",
+                Designation: label,
+                Quantite: qty,
+              });
+            },
+          );
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Archives");
+        XLSX.writeFile(
+          workbook,
+          `Archive_Consommation_${archive.key || Date.now()}.xlsx`,
+        );
       }
 
       function renderSortiePhysiqueForm() {
         const saved = JSON.parse(localStorage.getItem("draft_sortie")) || {
           items: [{ label: "", qty: "" }],
         };
+        const itcDesignations = [
+          ...new Set(
+            ((appData && appData.stock) || [])
+              .filter((s) => String(s.op || "").toUpperCase() === "ITC")
+              .map((s) =>
+                String(s.label || "")
+                  .trim()
+                  .toUpperCase(),
+              )
+              .filter(Boolean),
+          ),
+        ].sort();
         const container = document.getElementById("app-container");
         container.innerHTML = `
         <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
@@ -962,11 +1521,15 @@
 
                 <div class="space-y-3" id="sortie-items-list">
                     <p class="text-[9px] text-red-600 mb-2 uppercase font-black">Articles à déduire du stock :</p>
+                  <datalist id="sortie-itc-designations-list">
+                    ${itcDesignations.map((label) => `<option value="${escapeHtml(label)}"></option>`).join("")}
+                  </datalist>
                     <div class="flex gap-2 items-center art-row-sortie bg-slate-50 p-2 rounded-xl border">
-                        <input type="text" placeholder="DÉSIGNATION" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
+                    <input type="text" list="sortie-itc-designations-list" placeholder="DÉSIGNATION" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
                         <input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />
                         <button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>
                     </div>
+                  <p class="text-[7px] text-slate-400 uppercase">Suggestions issues du stock ITC</p>
                 </div>
 
                 <div class="flex gap-4">
@@ -983,7 +1546,7 @@
         div.className =
           "flex gap-2 items-center art-row-sortie bg-slate-50 p-2 rounded-xl border";
         div.innerHTML = `
-        <input type="text" placeholder="DÉSIGNATION" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
+        <input type="text" list="sortie-itc-designations-list" placeholder="DÉSIGNATION" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
         <input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />
         <button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>
     `;
@@ -1213,6 +1776,7 @@
       }
 
       let currentEditingSortieId = null;
+      let currentEditingSortieRefKey = null;
 
       function addEditSortieItemRow(label = "", qty = 1) {
         const list = document.getElementById("edit-sortie-items-list");
@@ -1233,6 +1797,12 @@
         const modal = document.getElementById("edit-sortie-modal");
         if (modal) modal.remove();
         currentEditingSortieId = null;
+      }
+
+      function closeEditSortieRefModal() {
+        const modal = document.getElementById("edit-sortie-ref-modal");
+        if (modal) modal.remove();
+        currentEditingSortieRefKey = null;
       }
 
       function openEditSortie(id) {
@@ -1458,6 +2028,30 @@
         return `${year}-${month}-${day}`;
       }
 
+      function getSortieTimestamp(dateText) {
+        const raw = String(dateText || "").trim();
+        const match = raw.match(
+          /(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\D+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/,
+        );
+        if (match) {
+          const day = parseInt(match[1], 10);
+          const month = parseInt(match[2], 10) - 1;
+          const year = parseInt(match[3], 10);
+          const hour = parseInt(match[4] || "0", 10);
+          const minute = parseInt(match[5] || "0", 10);
+          const second = parseInt(match[6] || "0", 10);
+          return new Date(year, month, day, hour, minute, second).getTime();
+        }
+        const parsed = Date.parse(raw);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      }
+
+      function extractTimeFromLocaleString(dateText) {
+        const raw = String(dateText || "");
+        const match = raw.match(/(\d{1,2}:\d{2}(?::\d{2})?)/);
+        return match ? match[1] : "--:--";
+      }
+
       function applySortiesSupervisionFilters() {
         const opFilter = (
           document.getElementById("sup-sorties-op")?.value || ""
@@ -1480,6 +2074,15 @@
           if (shouldShow) visibleCount += 1;
         });
 
+        const groupedBlocks = document.querySelectorAll(".sortie-ref-block");
+        groupedBlocks.forEach((block) => {
+          const blockCards = block.querySelectorAll(".sortie-report-card");
+          const hasVisibleCard = Array.from(blockCards).some(
+            (card) => card.style.display !== "none",
+          );
+          block.style.display = hasVisibleCard ? "" : "none";
+        });
+
         const emptyState = document.getElementById("sorties-supervision-empty");
         if (emptyState) {
           emptyState.classList.toggle("hidden", visibleCount > 0);
@@ -1488,7 +2091,7 @@
 
       function renderRapportsSorties(container, options = {}) {
         if (!appData.sorties) appData.sorties = [];
-        const sorties = appData.sorties.slice().reverse();
+        const sorties = appData.sorties.slice();
         const isReadOnly = !!options.readOnly;
         const canEdit = !isReadOnly && canCurrentUserEditSorties();
         const operatorOptions = [
@@ -1498,6 +2101,35 @@
               .filter(Boolean),
           ),
         ].sort();
+
+        const groupedSorties = Object.values(
+          sorties.reduce((acc, sortie) => {
+            const refValue = String(sortie?.ref || "SANS RÉF").trim();
+            const normalizedRef = refValue.toUpperCase() || "SANS RÉF";
+
+            if (!acc[normalizedRef]) {
+              acc[normalizedRef] = {
+                refKey: normalizedRef,
+                refLabel: refValue || "SANS RÉF",
+                sorties: [],
+                latestTimestamp: 0,
+              };
+            }
+
+            acc[normalizedRef].sorties.push(sortie);
+            return acc;
+          }, {}),
+        )
+          .map((group) => {
+            group.sorties.sort(
+              (a, b) => getSortieTimestamp(b.date) - getSortieTimestamp(a.date),
+            );
+            group.latestTimestamp = group.sorties.length
+              ? getSortieTimestamp(group.sorties[0].date)
+              : 0;
+            return group;
+          })
+          .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
 
         let html = `
     <div class="max-w-5xl mx-auto bg-white p-8 rounded-3xl shadow-xl">
@@ -1529,45 +2161,70 @@
         </div>
         <div class="space-y-4">
             ${
-              sorties.length > 0
-                ? sorties
-                    .map((s) => {
-                      const sortieItems = getSortieItems(s);
-                      const filterDate = extractIsoDateFromLocaleString(s.date);
+              groupedSorties.length > 0
+                ? groupedSorties
+                    .map((group) => {
                       return `
-                <div class="sortie-report-card p-4 rounded-xl border bg-slate-50 flex justify-between items-start" data-op="${escapeHtml(String(s.op || "").toUpperCase())}" data-date="${filterDate}">
-                    <div>
-                        <p class="text-[9px] font-black">Réf: ${s.ref} — ${s.date}</p>
-                        <p class="text-[8px] text-slate-600">ID: ${s.id || "-"} • Opérateur: ${s.op || "-"} • Destinataire: ${s.tech || "-"}</p>
-                        <p class="text-[8px] text-slate-600">Créé par: ${s.createdBy || "-"} • Créé le: ${s.date || "-"}</p>
-                        ${
-                          s.updatedAt
-                            ? `<p class="text-[8px] text-amber-600">Modifié le ${s.updatedAt} par ${s.updatedBy || "-"}</p>`
-                            : ""
-                        }
-                        <ul class="mt-2 text-[9px] list-disc pl-4">
+                <div class="sortie-ref-block p-4 rounded-xl border border-indigo-200 bg-indigo-50/40">
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="text-[10px] font-black text-indigo-700">Référence: ${escapeHtml(group.refLabel)}</p>
+                    <div class="flex items-center gap-2">
                       ${
-                        sortieItems.length > 0
-                          ? sortieItems
-                              .map((i) => `<li>${i.label} — ${i.qty} U</li>`)
-                              .join("")
-                          : '<li class="text-slate-500 italic">Détail des articles indisponible</li>'
+                        canEdit
+                          ? `<button onclick="editSortieRefBlock('${encodeURIComponent(group.refKey)}')" class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black">Modifier Réf</button>`
+                          : ""
                       }
-                        </ul>
-                        ${
-                          Array.isArray(s.logs) && s.logs.length > 0
-                            ? `<p class="mt-2 text-[8px] text-slate-500">Trace stock: ${s.logs.join(" | ")}</p>`
-                            : ""
-                        }
+                      <button onclick="exportSortieRefPDF('${encodeURIComponent(group.refKey)}')" class="bg-pink-600 text-white px-3 py-2 rounded-lg text-[9px] font-black">PDF</button>
                     </div>
-                    <div class="text-right">
-                        ${
-                          canEdit
-                            ? `<button onclick="openEditSortie('${s.id}')" class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black mr-2">Modifier</button>`
-                            : ""
-                        }
-                        <button onclick="exportSortiePDF('${s.id}')" class="bg-pink-600 text-white px-3 py-2 rounded-lg text-[9px] font-black mr-2">PDF</button>
-                    </div>
+                  </div>
+                  <div class="space-y-3 mt-3">
+                    ${group.sorties
+                      .map((s) => {
+                        const sortieItems = getSortieItems(s);
+                        const filterDate = extractIsoDateFromLocaleString(
+                          s.date,
+                        );
+                        const sortieTime = extractTimeFromLocaleString(s.date);
+                        return `
+                      <div class="sortie-report-card p-4 rounded-xl border bg-white flex justify-between items-start" data-op="${escapeHtml(String(s.op || "").toUpperCase())}" data-date="${filterDate}">
+                        <div>
+                          <p class="text-[9px] font-black">${s.date} • Heure sortie: ${sortieTime}</p>
+                          <p class="text-[8px] text-slate-600">ID: ${s.id || "-"} • Opérateur: ${s.op || "-"} • Destinataire: ${s.tech || "-"}</p>
+                          <p class="text-[8px] text-slate-600">Créé par: ${s.createdBy || "-"} • Créé le: ${s.date || "-"}</p>
+                          ${
+                            s.updatedAt
+                              ? `<p class="text-[8px] text-amber-600">Modifié le ${s.updatedAt} par ${s.updatedBy || "-"}</p>`
+                              : ""
+                          }
+                          <ul class="mt-2 text-[9px] list-disc pl-4">
+                            ${
+                              sortieItems.length > 0
+                                ? sortieItems
+                                    .map(
+                                      (i) => `<li>${i.label} — ${i.qty} U</li>`,
+                                    )
+                                    .join("")
+                                : '<li class="text-slate-500 italic">Détail des articles indisponible</li>'
+                            }
+                          </ul>
+                          ${
+                            Array.isArray(s.logs) && s.logs.length > 0
+                              ? `<p class="mt-2 text-[8px] text-slate-500">Trace stock: ${s.logs.join(" | ")}</p>`
+                              : ""
+                          }
+                        </div>
+                        <div class="text-right">
+                          ${
+                            canEdit
+                              ? `<button onclick="openEditSortie('${s.id}')" class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black mr-2">Modifier</button>`
+                              : ""
+                          }
+                        </div>
+                      </div>
+                    `;
+                      })
+                      .join("")}
+                  </div>
                 </div>
               `;
                     })
@@ -1583,6 +2240,131 @@
         if (isReadOnly) {
           applySortiesSupervisionFilters();
         }
+      }
+
+      function editSortieRefBlock(refKeyEncoded) {
+        if (!canCurrentUserEditSorties()) {
+          alert("Action non autorisée pour votre profil.");
+          return;
+        }
+
+        const refKey = decodeURIComponent(String(refKeyEncoded || ""));
+        const targetSorties = (appData.sorties || []).filter(
+          (s) =>
+            String(s?.ref || "SANS RÉF")
+              .trim()
+              .toUpperCase() === refKey,
+        );
+
+        if (targetSorties.length === 0) {
+          alert("Aucun rapport trouvé pour cette référence.");
+          return;
+        }
+
+        currentEditingSortieRefKey = refKey;
+        const currentRef =
+          String(targetSorties[0]?.ref || refKey).trim() || refKey;
+
+        let modal = document.getElementById("edit-sortie-ref-modal");
+        if (!modal) {
+          modal = document.createElement("div");
+          modal.id = "edit-sortie-ref-modal";
+          modal.className =
+            "fixed inset-0 bg-black/70 z-[220] flex items-center justify-center p-4";
+          document.body.appendChild(modal);
+        }
+
+        modal.innerHTML = `
+          <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+            <div class="p-4 bg-slate-900 text-white flex items-center justify-between">
+              <h3 class="text-sm font-black uppercase text-amber-400">Correction Référence Bloc</h3>
+              <button onclick="closeEditSortieRefModal()" class="text-white"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-5 space-y-4">
+              <p class="text-[9px] text-slate-600 uppercase">Cette action corrigera la référence sur ${targetSorties.length} sortie(s).</p>
+              <div>
+                <label class="text-[8px] text-slate-500 uppercase">Nouvelle référence</label>
+                <input id="edit-sortie-ref-block-input" type="text" onkeydown="handleSortieRefInputKeydown(event)" class="w-full border-2 p-3 rounded-xl text-xs uppercase" value="${escapeHtml(currentRef)}" required />
+              </div>
+              <div class="flex justify-end gap-2 pt-1">
+                <button onclick="closeEditSortieRefModal()" class="bg-white border-2 border-slate-300 text-slate-700 px-4 py-2 rounded-xl text-[9px] uppercase font-black">Annuler</button>
+                <button onclick="saveEditedSortieRefBlock()" class="bg-amber-500 text-white px-4 py-2 rounded-xl text-[9px] uppercase font-black">Enregistrer</button>
+              </div>
+            </div>
+          </div>
+        `;
+
+        const refInput = document.getElementById("edit-sortie-ref-block-input");
+        if (refInput) {
+          refInput.focus();
+          refInput.select();
+        }
+      }
+
+      function handleSortieRefInputKeydown(event) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        saveEditedSortieRefBlock();
+      }
+
+      function saveEditedSortieRefBlock() {
+        if (!canCurrentUserEditSorties()) {
+          alert("Action non autorisée pour votre profil.");
+          return;
+        }
+
+        if (!currentEditingSortieRefKey) return;
+
+        const targetSorties = (appData.sorties || []).filter(
+          (s) =>
+            String(s?.ref || "SANS RÉF")
+              .trim()
+              .toUpperCase() === currentEditingSortieRefKey,
+        );
+
+        if (targetSorties.length === 0) {
+          closeEditSortieRefModal();
+          alert("Aucun rapport trouvé pour cette référence.");
+          return;
+        }
+
+        const currentRef =
+          String(targetSorties[0]?.ref || currentEditingSortieRefKey).trim() ||
+          currentEditingSortieRefKey;
+        const nextRef = String(
+          document.getElementById("edit-sortie-ref-block-input")?.value || "",
+        )
+          .trim()
+          .toUpperCase();
+
+        if (!nextRef) {
+          alert("La référence ne peut pas être vide.");
+          return;
+        }
+
+        if (nextRef === currentEditingSortieRefKey) {
+          alert("Aucune modification détectée.");
+          return;
+        }
+
+        const now = new Date().toLocaleString();
+        const actor = currentUser ? currentUser.name : "ANONYME";
+
+        targetSorties.forEach((sortie) => {
+          sortie.ref = nextRef;
+          sortie.updatedAt = now;
+          sortie.updatedBy = actor;
+        });
+
+        save();
+        addNotification(
+          1,
+          `CORRECTION RÉF BLOC : ${currentRef} -> ${nextRef} (${targetSorties.length} sortie(s)) par ${actor}`,
+        );
+
+        closeEditSortieRefModal();
+        showSection("rapports-sorties");
+        alert("Référence du bloc mise à jour avec succès.");
       }
 
       function exportSortiePDF(id) {
@@ -1608,6 +2390,71 @@
               : [["Détail des articles indisponible", "-"]],
         });
         doc.save(`${s.id}.pdf`);
+      }
+
+      function exportSortieRefPDF(refKeyEncoded) {
+        const refKey = decodeURIComponent(String(refKeyEncoded || ""));
+        const sorties = (appData.sorties || [])
+          .filter(
+            (s) =>
+              String(s?.ref || "SANS RÉF")
+                .trim()
+                .toUpperCase() === refKey,
+          )
+          .slice()
+          .sort(
+            (a, b) => getSortieTimestamp(b.date) - getSortieTimestamp(a.date),
+          );
+
+        if (sorties.length === 0)
+          return alert("Aucun rapport à exporter pour cette référence");
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const pageHeight = doc.internal.pageSize.getHeight();
+
+        doc.setFontSize(12);
+        doc.text(
+          `Rapport de Sortie - Référence ${sorties[0]?.ref || refKey}`,
+          14,
+          20,
+        );
+        doc.setFontSize(10);
+        doc.text(`Nombre de sorties: ${sorties.length}`, 14, 28);
+
+        let cursorY = 36;
+
+        sorties.forEach((s, idx) => {
+          if (cursorY > pageHeight - 45) {
+            doc.addPage();
+            cursorY = 20;
+          }
+
+          doc.setFontSize(10);
+          doc.text(`Sortie ${idx + 1}`, 14, cursorY);
+          doc.text(`ID: ${s.id}`, 14, cursorY + 6);
+          doc.text(`Date: ${s.date}`, 14, cursorY + 12);
+          doc.text(`Opérateur: ${s.op}`, 14, cursorY + 18);
+          doc.text(`Destinataire: ${s.tech}`, 14, cursorY + 24);
+          doc.text(`Confirmé par: ${s.createdBy}`, 14, cursorY + 30);
+
+          const body = getSortieItems(s).map((it) => [
+            it.label,
+            String(it.qty),
+          ]);
+          doc.autoTable({
+            startY: cursorY + 36,
+            head: [["Désignation", "Quantité"]],
+            body:
+              body.length > 0
+                ? body
+                : [["Détail des articles indisponible", "-"]],
+          });
+
+          cursorY = (doc.lastAutoTable?.finalY || cursorY + 36) + 8;
+        });
+
+        doc.save(`Rapports_Sorties_${refKey}_${Date.now()}.pdf`);
       }
 
       function exportAllSortiesPDF() {
@@ -1771,6 +2618,9 @@
           renderCockpit(container);
         } else if (id === "stats-consommation") {
           renderStatsConsommation(container);
+        } else if (id === "archives-consommations") {
+          viewTitle.innerText = "ARCHIVES CONSOMMATIONS";
+          renderArchivesConsommations(container);
         } else if (id === "trafic-audit") {
           renderTraficAudit(container);
         } else if (id === "tech-nouvelle-demande") {
@@ -2804,6 +3654,26 @@
                     </div>
                 </div>
 
+            <datalist id="direct-itc-designations-list">
+              ${[
+                ...new Set(
+                  ((appData && appData.stock) || [])
+                    .filter((s) => String(s.op || "").toUpperCase() === "ITC")
+                    .map((s) =>
+                      String(s.label || "")
+                        .trim()
+                        .toUpperCase(),
+                    )
+                    .filter(Boolean),
+                ),
+              ]
+                .sort()
+                .map(
+                  (label) => `<option value="${escapeHtml(label)}"></option>`,
+                )
+                .join("")}
+            </datalist>
+
                 <div id="direct-items-list" class="space-y-3">
                     </div>
 
@@ -2828,35 +3698,35 @@
 
         div.innerHTML = `
         <div class="flex-1 w-full">
-            <label class="text-[7px] text-slate-400 uppercase">Catégorie</label>
-            <select class="w-full border p-2 rounded-lg text-[9px] art-type uppercase bg-white" required>
-                <option value="" disabled selected>-- TYPE --</option>
-                <option value="MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES">MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES</option>
-                <option value="CABLES FIBRES OPTIQUES SOUTERRAINS">CÂBLES FIBRES OPTIQUES SOUTERRAINS</option>
-                <option value="CABLES FIBRES OPTIQUES AÉRIENS">CÂBLES FIBRES OPTIQUES AÉRIENS</option>
-                <option value="MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS">MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS</option>
-                <option value="MATÉRIELS DE PROTECTION ET DE RACCORDEMENT">MATÉRIELS DE PROTECTION ET DE RACCORDEMENT</option>
-                <option value="MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO">MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO</option>
-                <option value="CONNECTIQUES FO">CONNECTIQUES FO</option>
-                <option value="MATÉRIELS D'ÉTIQUETAGE">MATÉRIELS D'ÉTIQUETAGE</option>
-                <option value="MATÉRIELS GÉNIE CIVIL (GC)">MATÉRIELS GÉNIE CIVIL (GC)</option>
-            </select>
+          <label class="text-[7px] text-slate-400 uppercase">Catégorie</label>
+          <select class="w-full border p-2 rounded-lg text-[9px] art-type uppercase bg-white" required>
+            <option value="" disabled selected>-- TYPE --</option>
+            <option value="MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES">MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES</option>
+            <option value="CABLES FIBRES OPTIQUES SOUTERRAINS">CÂBLES FIBRES OPTIQUES SOUTERRAINS</option>
+            <option value="CABLES FIBRES OPTIQUES AÉRIENS">CÂBLES FIBRES OPTIQUES AÉRIENS</option>
+            <option value="MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS">MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS</option>
+            <option value="MATÉRIELS DE PROTECTION ET DE RACCORDEMENT">MATÉRIELS DE PROTECTION ET DE RACCORDEMENT</option>
+            <option value="MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO">MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO</option>
+            <option value="CONNECTIQUES FO">CONNECTIQUES FO</option>
+            <option value="MATÉRIELS D'ÉTIQUETAGE">MATÉRIELS D'ÉTIQUETAGE</option>
+            <option value="MATÉRIELS GÉNIE CIVIL (GC)">MATÉRIELS GÉNIE CIVIL (GC)</option>
+          </select>
         </div>
 
         <div class="flex-1 w-full">
-            <label class="text-[7px] text-slate-400 uppercase">Désignation</label>
-            <input type="text" placeholder="NOM DE L'ARTICLE" class="w-full border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
+          <label class="text-[7px] text-slate-400 uppercase">Désignation</label>
+          <input type="text" list="direct-itc-designations-list" placeholder="NOM DE L'ARTICLE" class="w-full border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
         </div>
 
         <div class="w-24">
-            <label class="text-[7px] text-slate-400 uppercase">Quantité</label>
-            <input type="number" placeholder="QTÉ" class="w-full border p-2 rounded-lg text-[9px] art-q" required min="1" />
+          <label class="text-[7px] text-slate-400 uppercase">Quantité</label>
+          <input type="number" placeholder="QTÉ" class="w-full border p-2 rounded-lg text-[9px] art-q" required min="1" />
         </div>
 
         <button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2 hover:bg-red-50 rounded-lg transition">
-            <i class="fas fa-trash"></i>
+          <i class="fas fa-trash"></i>
         </button>
-    `;
+      `;
 
         document.getElementById("direct-items-list").appendChild(div);
       }
@@ -3063,6 +3933,18 @@
       function renderReceptionForm(container) {
         // Récupérer le brouillon s'il existe
         const saved = JSON.parse(localStorage.getItem("draft_reception")) || {};
+        const itcDesignations = [
+          ...new Set(
+            ((appData && appData.stock) || [])
+              .filter((s) => String(s.op || "").toUpperCase() === "ITC")
+              .map((s) =>
+                String(s.label || "")
+                  .trim()
+                  .toUpperCase(),
+              )
+              .filter(Boolean),
+          ),
+        ].sort();
         container.innerHTML = `
         <div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black">
             <h3 class="mb-8 uppercase border-b-2 text-indigo-600 italic">Mise en Stock Matériel</h3>
@@ -3096,7 +3978,11 @@
 
                 <div>
                     <label class="text-[8px] text-slate-400 uppercase ml-1">Désignation</label>
-                    <input id="r-mat" type="text" placeholder="NOM DE L'ARTICLE" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50 outline-none focus:border-indigo-500" required />
+                  <input id="r-mat" list="itc-designations-list" type="text" placeholder="NOM DE L'ARTICLE" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50 outline-none focus:border-indigo-500" required />
+                  <datalist id="itc-designations-list">
+                    ${itcDesignations.map((label) => `<option value="${escapeHtml(label)}"></option>`).join("")}
+                  </datalist>
+                  <p class="mt-1 text-[7px] text-slate-400 uppercase">Suggestions issues du stock ITC</p>
                 </div>
 
                 <div id="qty-container">
@@ -3109,6 +3995,11 @@
                 </button>
             </form>
         </div>`;
+
+        const matInput = document.getElementById("r-mat");
+        if (matInput) {
+          matInput.value = String(saved.mat || "").toUpperCase();
+        }
 
         // On réinitialise l'affichage de la quantité selon la sélection par défaut (ITC)
         toggleQtyField("ITC");
@@ -3145,6 +4036,7 @@
         addNotification(
           1,
           `TRAFIC : ENTRÉE STOCK (${mat.label}) - QUANTITÉ : ${mat.qty}`,
+          normalizeOperatorKey(mat.op),
         );
         save(); // Envoi vers Firebase
 
@@ -3160,10 +4052,7 @@
 
       function renderStock(opKey, container) {
         // 1. Définition des opérateurs à afficher
-        const ops =
-          opKey === "oci-cic"
-            ? ["OCI", "CIC", "OCI-CIC"]
-            : [opKey.toUpperCase()];
+        const ops = [opKey.toUpperCase()];
 
         // 2. SÉCURITÉ CRUCIALE : On utilise une liste vide [] si appData.stock n'existe pas encore.
         // Cela empêche l'erreur "Cannot read properties of undefined (reading 'filter')"
@@ -3233,6 +4122,10 @@
         // On ajoute .reverse() pour voir les événements récents en premier
         const notifs = sourceNotifications
           .filter((n) => n.userId === 1)
+          .map((n) => ({
+            ...n,
+            auditFlux: normalizeAuditFlux(n.auditFlux),
+          }))
           .reverse();
 
         container.innerHTML = `
@@ -3241,26 +4134,40 @@
                 <h3 class="text-blue-600 font-black tracking-tighter italic text-xl">
                     Journal d'Audit
                 </h3>
-                <span class="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[9px] font-black">
+                <span id="audit-flow-count" class="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[9px] font-black">
                     ${notifs.length} ENTRÉES
                 </span>
+            </div>
+            <div class="mb-4 max-w-sm">
+                <label class="text-[8px] text-slate-500 uppercase">Filtrer le journal d'audit</label>
+                <select id="audit-flow-select" onchange="applyAuditFlowFilter()" class="w-full border-2 p-2 rounded-xl text-[9px] font-black uppercase bg-white">
+                    <option value="ITC">Audit flux ITC</option>
+                    <option value="CIC">Audit flux CIC</option>
+                    <option value="OCI">Audit flux OCI</option>
+                    <option value="MOOV">Audit flux MOOV</option>
+                    <option value="MTN">Audit flux MTN</option>
+                </select>
             </div>
             
             <div class="space-y-3 overflow-y-auto custom-scrollbar pr-2 max-h-[500px]">
                 ${
                   notifs.length > 0
-                    ? notifs
+                    ? `${notifs
                         .map(
                           (n) => `
-                    <div class="bg-slate-50 p-4 rounded-xl border-l-4 border-indigo-400 hover:bg-indigo-50 transition">
+                    <div class="audit-flow-card bg-slate-50 p-4 rounded-xl border-l-4 border-indigo-400 hover:bg-indigo-50 transition" data-audit-flux="${escapeHtml(normalizeAuditFlux(n.auditFlux))}">
                         <p class="text-[9px] text-slate-800 leading-relaxed">${n.message}</p>
                         <p class="text-[7px] text-slate-400 mt-2 font-black text-right">${n.date || ""}</p>
                     </div>
                 `,
                         )
-                        .join("")
+                        .join("")}
+                <div id="audit-flow-empty" class="hidden text-center py-10 opacity-40">
+                  <i class="fas fa-filter text-2xl mb-2"></i>
+                  <p class="text-[8px]">Aucun événement pour ce flux</p>
+                </div>`
                     : `
-                    <div class="text-center py-10 opacity-40">
+                <div id="audit-flow-empty" class="text-center py-10 opacity-40">
                         <i class="fas fa-history text-2xl mb-2"></i>
                         <p class="text-[8px]">Aucun historique pour le moment</p>
                     </div>
@@ -3268,6 +4175,49 @@
                 }
             </div>
         </div>`;
+
+        const auditSelect = document.getElementById("audit-flow-select");
+        if (auditSelect) {
+          auditSelect.value = currentAuditFlow;
+        }
+        applyAuditFlowFilter();
+      }
+
+      let currentAuditFlow = "ITC";
+
+      function normalizeAuditFlux(fluxValue) {
+        const allowedFlows = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+        const normalized = String(fluxValue || "")
+          .trim()
+          .toUpperCase();
+        return allowedFlows.includes(normalized) ? normalized : "ITC";
+      }
+
+      function applyAuditFlowFilter() {
+        const select = document.getElementById("audit-flow-select");
+        if (!select) return;
+
+        currentAuditFlow = normalizeAuditFlux(select.value);
+
+        const cards = document.querySelectorAll(".audit-flow-card");
+        let visibleCount = 0;
+
+        cards.forEach((card) => {
+          const cardFlow = normalizeAuditFlux(card.dataset.auditFlux);
+          const shouldShow = cardFlow === currentAuditFlow;
+          card.style.display = shouldShow ? "" : "none";
+          if (shouldShow) visibleCount += 1;
+        });
+
+        const countEl = document.getElementById("audit-flow-count");
+        if (countEl) {
+          countEl.innerText = `${visibleCount} ENTRÉES`;
+        }
+
+        const emptyState = document.getElementById("audit-flow-empty");
+        if (emptyState) {
+          emptyState.classList.toggle("hidden", visibleCount > 0);
+        }
       }
 
       async function downloadPDF(id) {
@@ -3335,11 +4285,12 @@
         save();
         updateNotifications;
       }
-      function addNotification(u, m) {
+      function addNotification(u, m, auditFlux = "ITC") {
         if (!appData.notifications) appData.notifications = [];
         appData.notifications.unshift({
           userId: u,
           message: m,
+          auditFlux: normalizeAuditFlux(auditFlux),
           lu: false,
           date: new Date().toLocaleString(),
         });
