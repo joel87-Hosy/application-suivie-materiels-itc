@@ -4046,8 +4046,16 @@
         showSection("cockpit");
       }
       function toggleQtyField(v) {
-        document.getElementById("qty-container").style.display =
-          v === "ITC" ? "block" : "none";
+        const op = String(v || "").toUpperCase();
+        const el = document.getElementById("qty-container");
+        if (!el) return;
+
+        // Afficher le champ quantité pour ITC et aussi pour les opérateurs
+        // MOOV, MTN, OCI et CIC (y compris les variantes comme "OCI-CIC").
+        const showFor = ["ITC", "MOOV", "MTN", "OCI", "CIC", "OCI-CIC"];
+        const shouldShow =
+          showFor.includes(op) || op.includes("OCI") || op.includes("CIC");
+        el.style.display = shouldShow ? "block" : "none";
       }
 
       function renderStock(opKey, container) {
