@@ -4374,25 +4374,138 @@
         container.innerHTML = html;
       }
 
-      // Ouvre un prompt permettant de transférer un article dans un autre conteneur (type)
+      // Ouvre un modal permettant de transférer un article dans un autre conteneur (type)
       function ouvrirTransfertStock(op, label) {
-        const availableTypes = [
-          ...new Set(
-            (appData.stock || []).map((s) =>
-              String(s.type || "NON DÉFINI").toUpperCase(),
+        // Essayer d'utiliser la liste de types définie dans le formulaire "Entrée Stock" si elle existe
+        let availableTypes = [];
+        try {
+          const selectorCandidates = Array.from(
+            document.querySelectorAll(
+              'select[id*="type" i], select[name*="type" i], datalist[id*="type" i], input[id*="type" i], input[name*="type" i]',
+            ) || [],
+          );
+
+          for (const el of selectorCandidates) {
+            if (el.tagName === "SELECT") {
+              availableTypes = Array.from(el.options)
+                .map((o) => String(o.value || o.text || "").trim())
+                .filter(Boolean);
+              if (availableTypes.length) break;
+            } else if (el.tagName === "DATALIST") {
+              availableTypes = Array.from(el.options)
+                .map((o) => String(o.value || "").trim())
+                .filter(Boolean);
+              if (availableTypes.length) break;
+            } else if (el.tagName === "INPUT") {
+              const listId = el.getAttribute("list");
+              if (listId) {
+                const dl = document.getElementById(listId);
+                if (dl && dl.tagName === "DATALIST") {
+                  availableTypes = Array.from(dl.options)
+                    .map((o) => String(o.value || "").trim())
+                    .filter(Boolean);
+                  if (availableTypes.length) break;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          availableTypes = [];
+        }
+
+        // Fallback vers les types présents en base si rien trouvé dans le DOM
+        if (!availableTypes || availableTypes.length === 0) {
+          availableTypes = [
+            ...new Set(
+              (appData.stock || []).map((s) =>
+                String(s.type || "NON DÉFINI").toUpperCase(),
+              ),
             ),
-          ),
-        ].sort();
+          ].sort();
+        }
 
-        const message = `Types disponibles: ${availableTypes.join(", ")}\nEntrez le type cible pour transférer '${label}':`;
-        const target = prompt(message, availableTypes[0] || "");
-        if (target === null) return; // annulé
-        const cible = String(target || "")
-          .trim()
-          .toUpperCase();
-        if (!cible) return alert("Type cible invalide.");
+        if (availableTypes.length === 0) availableTypes = ["NON DÉFINI"];
 
-        transferMaterial(op, label, cible);
+        // Supprimer modal existant si présent
+        const prev = document.getElementById("transfer-modal");
+        if (prev) prev.remove();
+
+        const overlay = document.createElement("div");
+        overlay.id = "transfer-modal";
+        overlay.style = `position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;`;
+
+        const panel = document.createElement("div");
+        panel.className = "bg-white rounded-2xl p-6 max-w-lg w-full mx-4";
+
+        const title = document.createElement("h3");
+        title.className = "text-lg font-black uppercase text-slate-700 mb-2";
+        title.innerText = "Transférer l'article";
+
+        const info = document.createElement("p");
+        info.className = "text-[11px] text-slate-500 mb-4";
+        info.innerText = `Article: ${label} — Opérateur: ${op}`;
+
+        const select = document.createElement("select");
+        select.className =
+          "w-full border-2 p-2 rounded-lg mb-4 text-[11px] uppercase";
+        availableTypes.forEach((t) => {
+          const opt = document.createElement("option");
+          opt.value = t;
+          opt.innerText = t;
+          select.appendChild(opt);
+        });
+
+        // Préselectionner le type actuel si possible
+        const item = (appData.stock || []).find(
+          (s) =>
+            String(s.op || "").toUpperCase() ===
+              String(op || "").toUpperCase() &&
+            String(s.label || "").toUpperCase() ===
+              String(label || "").toUpperCase(),
+        );
+        if (item) {
+          const cur = String(item.type || "NON DÉFINI").toUpperCase();
+          const optToSelect = Array.from(select.options).find(
+            (o) => o.value === cur,
+          );
+          if (optToSelect) optToSelect.selected = true;
+        }
+
+        const btnRow = document.createElement("div");
+        btnRow.className = "flex justify-end gap-2";
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.className =
+          "px-4 py-2 rounded-xl bg-slate-200 text-slate-700";
+        cancelBtn.innerText = "Annuler";
+        cancelBtn.onclick = () => overlay.remove();
+
+        const confirmBtn = document.createElement("button");
+        confirmBtn.className =
+          "px-4 py-2 rounded-xl bg-amber-500 text-white font-black";
+        confirmBtn.innerText = "Transférer";
+        confirmBtn.onclick = () => {
+          const cible = String(select.value || "")
+            .trim()
+            .toUpperCase();
+          if (!cible) return alert("Type cible invalide.");
+          transferMaterial(op, label, cible);
+          overlay.remove();
+        };
+
+        btnRow.appendChild(cancelBtn);
+        btnRow.appendChild(confirmBtn);
+
+        panel.appendChild(title);
+        panel.appendChild(info);
+        panel.appendChild(select);
+        panel.appendChild(btnRow);
+
+        overlay.appendChild(panel);
+        document.body.appendChild(overlay);
+
+        // Focus sur le select pour UX
+        setTimeout(() => select.focus(), 50);
       }
 
       function transferMaterial(op, label, targetType) {
