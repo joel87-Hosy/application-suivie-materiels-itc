@@ -784,7 +784,57 @@
       }
 
       // Global delegated listener: when the user types in any input linked to a datalist,
-      // add the typed designation to the datalists immediately.
+      // add the typed designation to the datalists immediately and (for Gestionnaire)
+      // optionally persist a placeholder stock entry after a short debounce.
+      function getOperatorForInput(input) {
+        try {
+          const form = input.closest("form");
+          if (form) {
+            const sel = form.querySelector(
+              '#r-op, #s-op, #d-op, select[name="op"]',
+            );
+            if (sel && sel.value) return String(sel.value).toUpperCase();
+          }
+          const globalSel =
+            document.getElementById("r-op") ||
+            document.getElementById("s-op") ||
+            document.getElementById("d-op");
+          return globalSel && globalSel.value
+            ? String(globalSel.value).toUpperCase()
+            : "ITC";
+        } catch (e) {
+          return "ITC";
+        }
+      }
+
+      function addDesignationToStock(label, op) {
+        if (!label) return;
+        try {
+          if (!appData) appData = {};
+          if (!Array.isArray(appData.stock)) appData.stock = [];
+          const lbl = String(label || "")
+            .trim()
+            .toUpperCase();
+          const opKey = String(op || "ITC")
+            .trim()
+            .toUpperCase();
+          if (!lbl) return;
+          const exists = appData.stock.some(
+            (s) =>
+              String(s.label || "").toUpperCase() === lbl &&
+              String(s.op || "").toUpperCase() === opKey,
+          );
+          if (exists) return;
+          appData.stock.push({ op: opKey, label: lbl, qty: 0, type: "AUTO" });
+          save();
+          showTempToast(`Désignation ajoutée au stock (${opKey})`);
+        } catch (e) {
+          console.warn("Erreur ajoutDesignationStock", e);
+        }
+      }
+
+      // debounce timers per input
+      window._datalistAddTimers = window._datalistAddTimers || {};
       document.addEventListener("input", (e) => {
         try {
           const t = e.target;
@@ -793,6 +843,21 @@
           const val = String(t.value || "").trim();
           if (!val) return;
           ensureDesignationInDatalists(val);
+
+          // Only persist automatically for Gestionnaire
+          if (!(currentUser && currentUser.role === "Gestionnaire")) return;
+
+          // debounce by element
+          const key =
+            t._dlist_timer_key ||
+            (t._dlist_timer_key = Math.random().toString(36).slice(2));
+          if (window._datalistAddTimers[key])
+            clearTimeout(window._datalistAddTimers[key]);
+          window._datalistAddTimers[key] = setTimeout(() => {
+            const op = getOperatorForInput(t);
+            addDesignationToStock(val, op);
+            delete window._datalistAddTimers[key];
+          }, 800);
         } catch (err) {
           console.warn("Erreur lors de la mise à jour live des datalists", err);
         }
@@ -4226,8 +4291,17 @@
         // 3. Filtrage sécurisé
         const stockEntite = fullStock.filter((s) => ops.includes(s.op));
 
-        // 4. Génération du HTML avec gestion du cas "Liste vide"
-        container.innerHTML = `
+        // 4. Groupe les matériels par type pour affichage en conteneurs
+        const byType = {};
+        stockEntite.forEach((s) => {
+          const t = String(s.type || "NON DÉFINI").toUpperCase();
+          if (!byType[t]) byType[t] = [];
+          byType[t].push(s);
+        });
+
+        const types = Object.keys(byType).sort();
+
+        let html = `
           <div class="bg-white rounded-3xl shadow-xl overflow-hidden font-bold italic">
               <div class="p-6 bg-slate-900 text-white flex justify-between items-center">
                   <h3 class="text-xl uppercase font-black tracking-widest italic">
@@ -4235,59 +4309,116 @@
                   </h3>
                   <span class="bg-slate-700 px-3 py-1 rounded-xl text-xs">${stockEntite.length} Réf.</span>
               </div>
-              <div class="p-6">
+              <div class="p-6 space-y-4">
+        `;
+
+        if (stockEntite.length === 0) {
+          html += `
+            <div class="py-12 text-center text-slate-300 uppercase font-black italic">
+              <i class="fas fa-box-open text-4xl mb-4 block opacity-30"></i>
+              Aucun matériel répertorié pour ${opKey.toUpperCase()}
+            </div>
+          `;
+        } else {
+          types.forEach((type) => {
+            const items = byType[type];
+            html += `
+              <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div class="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 class="text-[11px] font-black uppercase text-indigo-900">${escapeHtml(type)}</h4>
+                    <p class="text-[9px] text-slate-400">${items.length} référence(s)</p>
+                  </div>
+                </div>
+
+                <div class="overflow-x-auto">
                   <table class="w-full text-left">
-                      <thead>
-                          <tr class="text-[8px] text-slate-400 border-b-2 border-slate-100 uppercase font-black tracking-wider">
-                              <th class="pb-3 pl-2">Type / Catégorie</th>
-                              <th class="pb-3">Désignation</th>
-                              <th class="pb-3 text-center">Quantité</th>
-                          </tr>
-                      </thead>
-                      <tbody class="divide-y divide-slate-50">
-                          ${
-                            stockEntite.length > 0
-                              ? stockEntite
-                                  .map(
-                                    (s) => `
-                              <tr class="hover:bg-indigo-50 transition duration-150">
-                                  <td class="py-4 pl-2 text-[9px] text-slate-500 font-black uppercase w-1/3">${s.type || "NON DÉFINI"}</td>
-                                  <td class="py-4 text-xs text-indigo-900 font-black uppercase">${s.label}</td>
-                                  <td class="py-4 text-center font-black">
-                                      ${
-                                        s.op === "ITC" || s.op === "MTN"
-                                          ? `<span class="${(parseInt(s.qty) || 0) < 5 ? "text-red-600 bg-red-50 px-2 py-1 rounded" : ""}">${s.qty} U</span>`
-                                          : `<span class="text-green-600 text-[9px] bg-green-50 px-2 py-1 rounded"><i class="fas fa-check mr-1"></i>DISPO</span>`
-                                      }
-                                      ${
-                                        /* Afficher boutons Modifier / Supprimer pour MTN quand le gestionnaire est connecté */
-                                        (opKey || "").toUpperCase() === "MTN" &&
-                                        currentUser &&
-                                        currentUser.role === "Gestionnaire"
-                                          ? ` <div class="mt-2 flex justify-center gap-2">
-                                                  <button onclick="ouvrirModifStock('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 text-[9px] bg-white border px-2 py-1 rounded">Modifier</button>
-                                                  <button onclick="deleteMaterial('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-red-500 hover:text-red-700 text-[9px] bg-white border px-2 py-1 rounded">Supprimer</button>
-                                              </div>`
-                                          : ""
-                                      }
-                                  </td>
-                              </tr>
+                    <tbody class="divide-y divide-slate-100">
+                      ${items
+                        .map(
+                          (s) => `
+                            <tr class="hover:bg-indigo-50 transition duration-150">
+                              <td class="py-3 text-xs font-black uppercase">${escapeHtml(
+                                s.label,
+                              )}</td>
+                              <td class="py-3 text-center font-black w-36">
+                                <span class="${
+                                  (parseInt(s.qty) || 0) < 5
+                                    ? "text-red-600 bg-red-50 px-2 py-1 rounded"
+                                    : ""
+                                }">${s.qty} U</span>
+                                ${
+                                  currentUser &&
+                                  currentUser.role === "Gestionnaire"
+                                    ? ` <div class="mt-2 flex justify-center gap-2">
+                                          <button onclick="ouvrirModifStock('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 text-[9px] bg-white border px-2 py-1 rounded">Modifier</button>
+                                          <button onclick="deleteMaterial('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-red-500 hover:text-red-700 text-[9px] bg-white border px-2 py-1 rounded">Supprimer</button>
+                                          <button onclick="ouvrirTransfertStock('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-amber-600 hover:text-amber-800 text-[9px] bg-white border px-2 py-1 rounded">Déplacer</button>
+                                        </div>`
+                                    : ""
+                                }
+                              </td>
+                            </tr>
                           `,
-                                  )
-                                  .join("")
-                              : `
-                              <tr>
-                                  <td colspan="3" class="py-12 text-center text-slate-300 uppercase font-black italic">
-                                      <i class="fas fa-box-open text-4xl mb-4 block opacity-30"></i>
-                                      Aucun matériel répertorié pour ${opKey.toUpperCase()}
-                                  </td>
-                              </tr>
-                          `
-                          }
-                      </tbody>
+                        )
+                        .join("")}
+                    </tbody>
                   </table>
+                </div>
               </div>
-          </div>`;
+            `;
+          });
+        }
+
+        html += `</div></div>`;
+        container.innerHTML = html;
+      }
+
+      // Ouvre un prompt permettant de transférer un article dans un autre conteneur (type)
+      function ouvrirTransfertStock(op, label) {
+        const availableTypes = [
+          ...new Set(
+            (appData.stock || []).map((s) =>
+              String(s.type || "NON DÉFINI").toUpperCase(),
+            ),
+          ),
+        ].sort();
+
+        const message = `Types disponibles: ${availableTypes.join(", ")}\nEntrez le type cible pour transférer '${label}':`;
+        const target = prompt(message, availableTypes[0] || "");
+        if (target === null) return; // annulé
+        const cible = String(target || "")
+          .trim()
+          .toUpperCase();
+        if (!cible) return alert("Type cible invalide.");
+
+        transferMaterial(op, label, cible);
+      }
+
+      function transferMaterial(op, label, targetType) {
+        const item = (appData.stock || []).find(
+          (s) =>
+            String(s.op || "").toUpperCase() ===
+              String(op || "").toUpperCase() &&
+            String(s.label || "").toUpperCase() ===
+              String(label || "").toUpperCase(),
+        );
+        if (!item) return alert("Article introuvable.");
+
+        const ancienType = String(item.type || "NON DÉFINI").toUpperCase();
+        item.type = String(targetType || "").toUpperCase();
+
+        const msg = `TRANSFERT STOCK : L'article '${label}' a été déplacé de '${ancienType}' vers '${item.type}' par le gestionnaire.`;
+        addNotification(1, msg, item.op);
+        save();
+        showTempToast(`Transféré vers ${item.type}`);
+        // Rafraîchir la vue actuelle
+        try {
+          showSection(currentSectionId);
+        } catch (e) {
+          // fallback: retourner au cockpit
+          showSection("cockpit");
+        }
       }
       function renderTraficAudit(container) {
         // 1. SÉCURITÉ : On utilise une liste vide [] si appData.notifications n'existe pas
