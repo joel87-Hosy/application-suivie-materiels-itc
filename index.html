@@ -833,8 +833,7 @@
         }
       }
 
-      // debounce timers per input
-      window._datalistAddTimers = window._datalistAddTimers || {};
+      // Input listener to update datalists live (no automatic persistence)
       document.addEventListener("input", (e) => {
         try {
           const t = e.target;
@@ -842,22 +841,8 @@
           if (!t.hasAttribute("list")) return;
           const val = String(t.value || "").trim();
           if (!val) return;
+          // Only update visible datalists for UX; do NOT persist to stock automatically
           ensureDesignationInDatalists(val);
-
-          // Only persist automatically for Gestionnaire
-          if (!(currentUser && currentUser.role === "Gestionnaire")) return;
-
-          // debounce by element
-          const key =
-            t._dlist_timer_key ||
-            (t._dlist_timer_key = Math.random().toString(36).slice(2));
-          if (window._datalistAddTimers[key])
-            clearTimeout(window._datalistAddTimers[key]);
-          window._datalistAddTimers[key] = setTimeout(() => {
-            const op = getOperatorForInput(t);
-            addDesignationToStock(val, op);
-            delete window._datalistAddTimers[key];
-          }, 800);
         } catch (err) {
           console.warn("Erreur lors de la mise à jour live des datalists", err);
         }
@@ -1084,6 +1069,18 @@
         return "ITC";
       }
 
+      // Convertit une étiquette en clé sûre pour Firebase Realtime Database
+      // Remplace les caractères interdits (., #, $, /, [, ]) par des alternatives lisibles
+      function sanitizeFirebaseKey(raw) {
+        const s = String(raw || "").trim();
+        if (!s) return "";
+        // On préserve la lisibilité : remplace '.' par '·' et les autres caractères par '_'
+        return s
+          .replace(/\./g, "·")
+          .replace(/[#$/\[\]]/g, "_")
+          .toUpperCase();
+      }
+
       function isDateInTargetMonth(dateText, month, year) {
         const ts = getSortieTimestamp(dateText);
         if (!ts) return false;
@@ -1146,11 +1143,12 @@
               const label = String(item.label || "NON DÉFINI")
                 .trim()
                 .toUpperCase();
+              const labelKey = sanitizeFirebaseKey(label);
               const qty = parseInt(item.qty) || 0;
               if (!label || qty <= 0) return;
 
-              operatorStats[op].sortantsByDesignation[label] =
-                (operatorStats[op].sortantsByDesignation[label] || 0) + qty;
+              operatorStats[op].sortantsByDesignation[labelKey] =
+                (operatorStats[op].sortantsByDesignation[labelKey] || 0) + qty;
             });
           });
 
@@ -1173,13 +1171,14 @@
             const label = String(labelMatch?.[1] || "NON DÉFINI")
               .trim()
               .toUpperCase();
+            const labelKey = sanitizeFirebaseKey(label);
             const rawQty = parseInt(qtyMatch?.[1]) || 0;
             const qty = rawQty > 0 ? rawQty : op === "ITC" ? 0 : 1;
 
             if (!label || qty <= 0) return;
 
-            operatorStats[op].entrantsByDesignation[label] =
-              (operatorStats[op].entrantsByDesignation[label] || 0) + qty;
+            operatorStats[op].entrantsByDesignation[labelKey] =
+              (operatorStats[op].entrantsByDesignation[labelKey] || 0) + qty;
           });
 
         return {
@@ -3979,9 +3978,18 @@
           date: new Date().toLocaleDateString(),
         };
         appData.demandes.unshift(c);
-        addNotification(2, `COMMANDE DIRECTE : ${c.id}`);
+        // Notification au gestionnaire : validation requise
+        addNotification(
+          2,
+          `VALIDATION REQUISE : Commande ${c.id} soumise par ${currentUser.name}`,
+        );
+        // Confirmation pour la coordinatrice
+        addNotification(
+          currentUser.id,
+          `Votre commande ${c.id} a été envoyée et est en attente de validation.`,
+        );
         save();
-        alert("TRANSMIS.");
+        alert("TRANSMIS. La commande attend validation.");
         showSection("cockpit");
       }
 
