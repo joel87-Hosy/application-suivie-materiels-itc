@@ -1,0 +1,17 @@
+failAt:795
+fileLine:608
+---ctx---
+     firebase.initializeApp(firebaseConfig);
+      const db = firebase.database();
+
+      // L'unique déclaration de currentUser pour toute l'app
+      let currentUser = null;
+      let appData = {
+        stock: [],
+        demandes: [],
+        techDemandes: [],
+        sorties: [],
+        retours: [],
+        notifications: [],
+        consumptionArchives: [],
+        lastConsumpt

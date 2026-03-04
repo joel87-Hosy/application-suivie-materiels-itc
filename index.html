@@ -2185,7 +2185,15 @@
                           ${operators
                             .map(
                               (op) =>
-                                `<option value="${op}" ${String(sortie.op || "ITC").toUpperCase() === op ? "selected" : ""}>${op}</option>`,
+                                '<option value="' +
+                                op +
+                                '" ' +
+                                (String(sortie.op || "ITC").toUpperCase() === op
+                                  ? "selected"
+                                  : "") +
+                                ">" +
+                                op +
+                                "</option>",
                             )
                             .join("")}
                         </select>
@@ -2430,159 +2438,158 @@
       }
 
       function renderRapportsSorties(container, options = {}) {
-        if (!appData.sorties) appData.sorties = [];
-        const sorties = appData.sorties.slice();
+        if (!container) return;
+        const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
         const isReadOnly = !!options.readOnly;
         const canEdit = !isReadOnly && canCurrentUserEditSorties();
-        const operatorOptions = [
-          ...new Set(
-            sorties
-              .map((s) => String(s.op || "").toUpperCase())
-              .filter(Boolean),
-          ),
-        ].sort();
 
-        const groupedSorties = Object.values(
-          sorties.reduce((acc, sortie) => {
-            const refValue = String(sortie?.ref || "SANS RÉF").trim();
-            const normalizedRef = refValue.toUpperCase() || "SANS RÉF";
+        if (sorties.length === 0) {
+          container.innerHTML =
+            '<div class="p-6 text-center text-slate-500">Aucun rapport de sortie enregistré.</div>';
+          return;
+        }
 
-            if (!acc[normalizedRef]) {
-              acc[normalizedRef] = {
-                refKey: normalizedRef,
-                refLabel: refValue || "SANS RÉF",
-                sorties: [],
-                latestTimestamp: 0,
-              };
+        // Group sorties by reference
+        const groupsMap = {};
+        sorties.forEach((s) => {
+          const refValue = String(s?.ref || "SANS RÉF").trim();
+          const key = refValue.toUpperCase() || "SANS RÉF";
+          if (!groupsMap[key])
+            groupsMap[key] = {
+              refKey: key,
+              refLabel: refValue || "SANS RÉF",
+              sorties: [],
+            };
+          groupsMap[key].sorties.push(s);
+        });
+
+        const groups = Object.values(groupsMap).sort((a, b) => {
+          const ta = a.sorties.length
+            ? getSortieTimestamp(a.sorties[0].date)
+            : 0;
+          const tb = b.sorties.length
+            ? getSortieTimestamp(b.sorties[0].date)
+            : 0;
+          return tb - ta;
+        });
+
+        const parts = [];
+        parts.push(
+          '<div class="max-w-5xl mx-auto bg-white p-6 rounded-3xl shadow-xl">',
+        );
+        parts.push(
+          '<h3 class="mb-2 uppercase text-indigo-600 font-black">Rapports - Sorties Bon Physique</h3>',
+        );
+        parts.push('<div class="space-y-4">');
+
+        groups.forEach((group) => {
+          parts.push(
+            '<div class="sortie-ref-block p-4 rounded-xl border border-indigo-200 bg-indigo-50/40">',
+          );
+          parts.push('<div class="flex items-center justify-between">');
+          parts.push("<div>");
+          parts.push(
+            '<p class="text-[10px] font-black text-indigo-700">Référence: ' +
+              escapeHtml(group.refLabel) +
+              "</p>",
+          );
+          parts.push("</div>");
+          parts.push('<div class="flex items-center gap-2">');
+          if (canEdit) {
+            parts.push(
+              '<button class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black" onclick="editSortieRefBlock(\'' +
+                encodeURIComponent(group.refKey) +
+                "')\">Modifier Réf</button>",
+            );
+          }
+          parts.push("</div>");
+          parts.push("</div>");
+
+          // list sorties in this group
+          group.sorties.forEach((s) => {
+            parts.push('<div class="mt-3 p-4 bg-white rounded-lg border">');
+            parts.push('<div class="flex justify-between items-start gap-4">');
+            // left: details
+            parts.push('<div class="min-w-0">');
+            parts.push(
+              '<div class="text-sm font-black">' +
+                escapeHtml(String(s.ref || "SANS RÉF")) +
+                "</div>",
+            );
+            parts.push(
+              '<div class="text-[9px] text-slate-600">ID: ' +
+                escapeHtml(String(s.id || "-")) +
+                " • Opérateur: " +
+                escapeHtml(String(s.op || "-")) +
+                " • Destinataire: " +
+                escapeHtml(String(s.tech || "-")) +
+                "</div>",
+            );
+            parts.push(
+              '<div class="text-[9px] text-slate-500 mt-1">Créé par: ' +
+                escapeHtml(String(s.createdBy || "-")) +
+                " • Le: " +
+                escapeHtml(String(s.date || "-")) +
+                "</div>",
+            );
+            if (s.updatedAt)
+              parts.push(
+                '<div class="text-[8px] text-amber-600">Modifié le ' +
+                  escapeHtml(String(s.updatedAt)) +
+                  " par " +
+                  escapeHtml(String(s.updatedBy || "-")) +
+                  "</div>",
+              );
+
+            // items
+            const items = getSortieItems(s) || [];
+            if (items.length > 0) {
+              parts.push('<ul class="mt-2 text-[9px] list-disc pl-4">');
+              items.forEach((it) => {
+                parts.push(
+                  "<li>" +
+                    escapeHtml(String(it.label || "")) +
+                    " — " +
+                    escapeHtml(String(it.qty || "")) +
+                    " U</li>",
+                );
+              });
+              parts.push("</ul>");
             }
 
-            acc[normalizedRef].sorties.push(sortie);
-            return acc;
-          }, {}),
-        )
-          .map((group) => {
-            group.sorties.sort(
-              (a, b) => getSortieTimestamp(b.date) - getSortieTimestamp(a.date),
-            );
-            group.latestTimestamp = group.sorties.length
-              ? getSortieTimestamp(group.sorties[0].date)
-              : 0;
-            return group;
-          })
-          .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+            // logs
+            if (Array.isArray(s.logs) && s.logs.length > 0) {
+              parts.push(
+                '<div class="mt-2 text-[8px] text-slate-500">Trace stock: ' +
+                  escapeHtml(s.logs.join(" | ")) +
+                  "</div>",
+              );
+            }
 
-        let html = `
-          <div class="max-w-5xl mx-auto bg-white p-8 rounded-3xl shadow-xl">
-              <h3 class="mb-2 uppercase text-indigo-600 font-black">Rapports - Sorties Bon Physique</h3>
-              <p class="mb-6 text-[9px] text-slate-500 uppercase">${
-                isReadOnly
-                  ? "Mode supervision : consultation complète des sorties du gestionnaire"
-                  : "Historique complet des sorties magasin"
-              }</p>
-                ${
-                  isReadOnly
-                    ? `<div class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 border rounded-2xl p-4">
-                    <div>
-                      <label class="text-[8px] text-slate-500 uppercase">Filtrer par opérateur</label>
-                      <select id="sup-sorties-op" onchange="applySortiesSupervisionFilters()" class="w-full border-2 p-2 rounded-xl text-[9px] font-black uppercase bg-white">
-                        <option value="">Tous les opérateurs</option>
-                        ${operatorOptions.map((op) => `<option value="${op}">${op}</option>`).join("")}
-                      </select>
-                    </div>
-                    <div>
-                      <label class="text-[8px] text-slate-500 uppercase">Filtrer par date</label>
-                      <input id="sup-sorties-date" type="date" onchange="applySortiesSupervisionFilters()" class="w-full border-2 p-2 rounded-xl text-[9px] font-black uppercase bg-white" />
-                    </div>
-                  </div>`
-                    : ""
-                }
-              <div class="relative">
-                  <button onclick="exportAllSortiesPDF()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-[9px] font-black">Exporter Tout (PDF)</button>
-              </div>
-              <div class="space-y-4">
-                  ${
-                    groupedSorties.length > 0
-                      ? groupedSorties
-                          .map((group) => {
-                            return `
-                      <div class="sortie-ref-block p-4 rounded-xl border border-indigo-200 bg-indigo-50/40">
-                        <div class="flex items-center justify-between gap-2">
-                          <p class="text-[10px] font-black text-indigo-700">Référence: ${escapeHtml(group.refLabel)}</p>
-                          <div class="flex items-center gap-2">
-                            ${
-                              canEdit
-                                ? `<button onclick="editSortieRefBlock('${encodeURIComponent(group.refKey)}')" class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black">Modifier Réf</button>`
-                                : ""
-                            }
-              <button id="login-submit"
-                type="submit"
-                class="w-full bg-pink-600 text-white font-black py-3 md:py-4 rounded-2xl tracking-widest text-[10px] hover:bg-pink-700 transition shadow-lg"
-              >
-                AUTHENTIFICATION
-              </button>
+            parts.push("</div>");
 
-              <p id="forgot-link"
-                onclick="resetPassword()"
-                class="text-[9px] text-left text-pink-600 cursor-pointer mt-4 hover:underline italic"
-              >
-                Mot de passe oublié ?
-              </p>
+            // right: actions
+            parts.push('<div class="text-right">');
+            if (canEdit) {
+              parts.push(
+                '<button class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black mr-2" onclick="openEditSortie(\'' +
+                  escapeHtml(String(s.id || "")) +
+                  "')\">Modifier</button>",
+              );
+            }
+            parts.push("</div>");
 
-              <p class="text-[9px] text-left text-slate-600 mt-2 italic">
-                <a id="privacy-link-login" href="privacy.html" target="_blank" class="text-pink-600 hover:underline">Politique de confidentialité</a>
-              </p>
-                                <p class="text-[8px] text-slate-600">ID: ${s.id || "-"} • Opérateur: ${s.op || "-"} • Destinataire: ${s.tech || "-"}</p>
-                                <p class="text-[8px] text-slate-600">Créé par: ${s.createdBy || "-"} • Créé le: ${s.date || "-"}</p>
-                                ${
-                                  s.updatedAt
-                                    ? `<p class="text-[8px] text-amber-600">Modifié le ${s.updatedAt} par ${s.updatedBy || "-"}</p>`
-                                    : ""
-                                }
-                                <ul class="mt-2 text-[9px] list-disc pl-4">
-                                  ${
-                                    sortieItems.length > 0
-                                      ? sortieItems
-                                          .map(
-                                            (i) =>
-                                              `<li>${i.label} — ${i.qty} U</li>`,
-                                          )
-                                          .join("")
-                                      : '<li class="text-slate-500 italic">Détail des articles indisponible</li>'
-                                  }
-                                </ul>
-                                ${
-                                  Array.isArray(s.logs) && s.logs.length > 0
-                                    ? `<p class="mt-2 text-[8px] text-slate-500">Trace stock: ${s.logs.join(" | ")}</p>`
-                                    : ""
-                                }
-                              </div>
-                              <div class="text-right">
-                                ${
-                                  canEdit
-                                    ? `<button onclick="openEditSortie('${s.id}')" class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black mr-2">Modifier</button>`
-                                    : ""
-                                }
-                              </div>
-                            </div>
-                          `;
-                            })
-                            .join("")}
-                        </div>
-                      </div>
-                    `;
-                          })
-                          .join("")
-                      : `<p class="text-[9px] text-slate-400 italic">Aucun rapport de sortie enregistré.</p>`
-                  }
-                  <p id="sorties-supervision-empty" class="hidden text-[9px] text-slate-400 italic">Aucun rapport ne correspond aux filtres sélectionnés.</p>
-              </div>
-          </div>`;
+            parts.push("</div>");
+            parts.push("</div>");
+          });
 
-        container.innerHTML = html;
+          parts.push("</div>");
+        });
 
-        if (isReadOnly) {
-          applySortiesSupervisionFilters();
-        }
+        parts.push("</div>");
+        parts.push("</div>");
+
+        container.innerHTML = parts.join("");
       }
 
       function editSortieRefBlock(refKeyEncoded) {
