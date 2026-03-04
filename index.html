@@ -81,11 +81,25 @@
           </div>
 
           <div class="flex-1 text-left">
-            <h2
-              class="text-2xl md:text-3xl font-black text-slate-900 mb-6 tracking-tighter italic"
-            >
-              GESTION MATERIEL
-            </h2>
+            <div class="flex items-center justify-between mb-4">
+              <h2
+                id="login-title"
+                class="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter italic"
+              >
+                GESTION MATERIEL
+              </h2>
+              <div>
+                <label for="lang-select-login" class="sr-only">Lang</label>
+                <select
+                  id="lang-select-login"
+                  class="border rounded px-2 py-1 text-sm"
+                  onchange="setLanguage(this.value)"
+                >
+                  <option value="fr">Français</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+            </div>
 
             <form onsubmit="handleLogin(event)" class="space-y-4">
               <input
@@ -127,6 +141,15 @@
               >
                 Mot de passe oublié ?
               </p>
+
+              <p class="text-[9px] text-left text-slate-600 mt-2 italic">
+                <a
+                  href="privacy.html"
+                  target="_blank"
+                  class="text-pink-600 hover:underline"
+                  >Politique de confidentialité</a
+                >
+              </p>
             </form>
           </div>
         </div>
@@ -134,6 +157,59 @@
     </div>
 
     <script>
+      const TRANSLATIONS = {
+        fr: {
+          loginTitle: "GESTION MATERIEL",
+          emailPlaceholder: "EMAIL PROFESSIONNEL",
+          passwordPlaceholder: "MOT DE PASSE",
+          authButton: "AUTHENTIFICATION",
+          forgotPassword: "Mot de passe oublié ?",
+          privacyLink: "Politique de confidentialité",
+          footerPrivacy: "Politique de confidentialité",
+        },
+        en: {
+          loginTitle: "MATERIAL MANAGEMENT",
+          emailPlaceholder: "WORK EMAIL",
+          passwordPlaceholder: "PASSWORD",
+          authButton: "SIGN IN",
+          forgotPassword: "Forgot password?",
+          privacyLink: "Privacy Policy",
+          footerPrivacy: "Privacy Policy",
+        },
+      };
+
+      function setLanguage(lang) {
+        if (!TRANSLATIONS[lang]) lang = "fr";
+        localStorage.setItem("app_lang", lang);
+        applyTranslations(lang);
+        const sel = document.getElementById("lang-select-login");
+        if (sel) sel.value = lang;
+      }
+
+      function applyTranslations(lang) {
+        const t = TRANSLATIONS[lang] || TRANSLATIONS.fr;
+        const title = document.getElementById("login-title");
+        if (title) title.innerText = t.loginTitle;
+        const email = document.getElementById("login-email");
+        if (email) email.placeholder = t.emailPlaceholder;
+        const pwd = document.getElementById("login-password");
+        if (pwd) pwd.placeholder = t.passwordPlaceholder;
+        const btn = document.getElementById("login-submit");
+        if (btn) btn.innerText = t.authButton;
+        const forgot = document.getElementById("forgot-link");
+        if (forgot) forgot.innerText = t.forgotPassword;
+        const plink = document.getElementById("privacy-link-login");
+        if (plink) plink.innerText = t.privacyLink;
+        // footer link
+        const fplink = document.getElementById("privacy-link-footer");
+        if (fplink) fplink.innerText = t.footerPrivacy;
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const lang = localStorage.getItem("app_lang") || "fr";
+        setLanguage(lang);
+      });
+
       function togglePassword() {
         const pwd = document.getElementById("login-password");
         const icon = document.getElementById("pw-toggle-icon");
@@ -499,6 +575,17 @@
             id="app-container"
             class="p-8 overflow-y-auto flex-1 h-full"
           ></div>
+
+          <footer
+            class="w-full bg-white border-t px-6 py-2 flex items-center justify-end text-[11px]"
+          >
+            <a
+              id="privacy-link-footer"
+              href="privacy.html"
+              class="text-pink-600 hover:underline"
+              >Politique de confidentialité</a
+            >
+          </footer>
         </main>
       </div>
     </div>
@@ -2409,7 +2496,7 @@
                   </div>`
                     : ""
                 }
-              <div class="mb-4 text-right">
+              <div class="relative">
                   <button onclick="exportAllSortiesPDF()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-[9px] font-black">Exporter Tout (PDF)</button>
               </div>
               <div class="space-y-4">
@@ -2427,23 +2514,23 @@
                                 ? `<button onclick="editSortieRefBlock('${encodeURIComponent(group.refKey)}')" class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black">Modifier Réf</button>`
                                 : ""
                             }
-                            <button onclick="exportSortieRefPDF('${encodeURIComponent(group.refKey)}')" class="bg-pink-600 text-white px-3 py-2 rounded-lg text-[9px] font-black">PDF</button>
-                          </div>
-                        </div>
-                        <div class="space-y-3 mt-3">
-                          ${group.sorties
-                            .map((s) => {
-                              const sortieItems = getSortieItems(s);
-                              const filterDate = extractIsoDateFromLocaleString(
-                                s.date,
-                              );
-                              const sortieTime = extractTimeFromLocaleString(
-                                s.date,
-                              );
-                              return `
-                            <div class="sortie-report-card p-4 rounded-xl border bg-white flex justify-between items-start" data-op="${escapeHtml(String(s.op || "").toUpperCase())}" data-date="${filterDate}">
-                              <div>
-                                <p class="text-[9px] font-black">${s.date} • Heure sortie: ${sortieTime}</p>
+              <button id="login-submit"
+                type="submit"
+                class="w-full bg-pink-600 text-white font-black py-3 md:py-4 rounded-2xl tracking-widest text-[10px] hover:bg-pink-700 transition shadow-lg"
+              >
+                AUTHENTIFICATION
+              </button>
+
+              <p id="forgot-link"
+                onclick="resetPassword()"
+                class="text-[9px] text-left text-pink-600 cursor-pointer mt-4 hover:underline italic"
+              >
+                Mot de passe oublié ?
+              </p>
+
+              <p class="text-[9px] text-left text-slate-600 mt-2 italic">
+                <a id="privacy-link-login" href="privacy.html" target="_blank" class="text-pink-600 hover:underline">Politique de confidentialité</a>
+              </p>
                                 <p class="text-[8px] text-slate-600">ID: ${s.id || "-"} • Opérateur: ${s.op || "-"} • Destinataire: ${s.tech || "-"}</p>
                                 <p class="text-[8px] text-slate-600">Créé par: ${s.createdBy || "-"} • Créé le: ${s.date || "-"}</p>
                                 ${
