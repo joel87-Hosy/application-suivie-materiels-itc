@@ -611,6 +611,8 @@
 
       // L'unique déclaration de currentUser pour toute l'app
       let currentUser = null;
+      // Dernier compteur local de notifications non lues (pour détecter nouvelles notifs)
+      let lastNotificationCount = 0;
       let appData = {
         stock: [],
         demandes: [],
@@ -4884,6 +4886,33 @@
           (n) => n.userId === currentUser.id && !n.lu,
         ).length;
 
+        // 3.1 Détecter nouvelles notifications : si le compteur a augmenté,
+        // jouer un bip et activer vibration si possible (mobile).
+        try {
+          const audioEl = document.getElementById("beep-sound");
+          if (count > lastNotificationCount) {
+            if (audioEl) {
+              try {
+                audioEl.currentTime = 0;
+                const p = audioEl.play();
+                if (p && p.catch) p.catch(() => {});
+              } catch (e) {
+                // ignore play errors (autoplay policy)
+              }
+            }
+
+            if (navigator && navigator.vibrate) {
+              try {
+                navigator.vibrate([200, 100, 150]);
+              } catch (e) {
+                // ignore vibration errors
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Notification sound/vibrate failed", e);
+        }
+
         // 4. Mise à jour des pastilles (badges) dans l'interface
         const badgeIds = [
           "notif-coord",
@@ -4900,6 +4929,9 @@
             el.classList.toggle("hidden", count === 0);
           }
         });
+
+        // 4. Mettre à jour le compteur local
+        lastNotificationCount = count;
       }
       function deleteMaterial(op, label) {
         if (
