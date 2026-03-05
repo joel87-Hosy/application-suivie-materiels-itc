@@ -4864,13 +4864,40 @@
       }
       function addNotification(u, m, auditFlux = "ITC") {
         if (!appData.notifications) appData.notifications = [];
-        appData.notifications.unshift({
+
+        const normalizedFlux = normalizeAuditFlux(auditFlux);
+        const notif = {
           userId: u,
           message: m,
-          auditFlux: normalizeAuditFlux(auditFlux),
+          auditFlux: normalizedFlux,
           lu: false,
           date: new Date().toLocaleString(),
-        });
+        };
+
+        // Ajouter la notification pour l'utilisateur ciblé
+        appData.notifications.unshift(notif);
+
+        // Si l'action est de type audit/flux/sortie/retour/entrée, s'assurer
+        // que le superviseur (userId 1) reçoit aussi une copie.
+        try {
+          const auditKeywords =
+            /AUDIT|SORTIE|RETOUR|TRAFIC|ENTR[EÉ]E|COMMANDE|IMPORT/i;
+          const isAuditLike =
+            auditKeywords.test(String(m || "")) || normalizedFlux === "ITC";
+          if (u !== 1 && isAuditLike) {
+            appData.notifications.unshift({
+              ...notif,
+              userId: 1,
+            });
+          }
+        } catch (e) {
+          // ne pas bloquer l'enregistrement si l'ajout du superviseur échoue
+          console.warn(
+            "addNotification: unable to duplicate for supervisor",
+            e,
+          );
+        }
+
         save();
         updateNotifications();
       }
