@@ -3291,17 +3291,23 @@
 
         let allMovements = [];
 
-        // Récupération des Sorties (Bons Livrés)
+        // Récupération des Sorties (Bons Livrés) - robust date parsing
         (appData.demandes || []).forEach((d) => {
-          if (d.status === "LIVREE" && d.dateLivraison) {
-            const parts = d.dateLivraison.split("/");
-            if (parseInt(parts[1]) - 1 === month) {
+          if (d.status === "LIVREE") {
+            const ts = getSortieTimestamp(d.dateLivraison || d.date || "");
+            if (!ts) return;
+            const dt = new Date(ts);
+            if (dt.getMonth() === month) {
+              const day = String(dt.getDate()).padStart(2, "0");
+              const mon = String(dt.getMonth() + 1).padStart(2, "0");
+              const year = dt.getFullYear();
               allMovements.push({
-                date: d.dateLivraison,
+                date: `${day}/${mon}/${year}`,
                 type: "SORTIE",
                 op: d.op || "ITC",
-                item: d.items.map((i) => i.label).join(", "),
-                qty: d.items.reduce(
+                item:
+                  (d.items || []).map((i) => i.label).join(", ") || "Matériel",
+                qty: (d.items || []).reduce(
                   (sum, i) => sum + (parseInt(i.qty) || 0),
                   0,
                 ),
@@ -3311,24 +3317,28 @@
           }
         });
 
-        // Dans updateRapportHebdo, remplacez la boucle des entrées par celle-ci :
+        // Récupération des Entrées (notifications) - robust date parsing
         (appData.notifications || []).forEach((n) => {
-          // On cherche le mot clé que vous utilisez dans handleRec
-          if (n.message.includes("TRAFIC : ENTRÉE STOCK")) {
-            const dateParts = n.date.split(" ")[0].split("/"); // Récupère DD/MM/YYYY
-            const m = parseInt(dateParts[1]) - 1;
+          if (!n || !n.date) return;
+          const ts = getSortieTimestamp(n.date);
+          if (!ts) return;
+          const dt = new Date(ts);
+          if (dt.getMonth() !== month) return;
 
-            if (m === month) {
-              const qtyMatch = n.message.match(/QUANTITÉ\s*:\s*(\d+)/i);
-              allMovements.push({
-                date: dateParts[0] + "/" + dateParts[1] + "/" + dateParts[2],
-                type: "ENTRÉE",
-                op: "ITC",
-                item: n.message.split("(")[1]?.split(")")[0] || "Matériel",
-                qty: qtyMatch ? parseInt(qtyMatch[1]) : 0,
-                dest: "MAGASIN CENTRAL",
-              });
-            }
+          if (String(n.message || "").includes("TRAFIC : ENTRÉE STOCK")) {
+            const qtyMatch = (n.message || "").match(/QUANTITÉ\s*:\s*(\d+)/i);
+            const itemMatch = (n.message || "").match(/\(([^)]+)\)/);
+            const day = String(dt.getDate()).padStart(2, "0");
+            const mon = String(dt.getMonth() + 1).padStart(2, "0");
+            const year = dt.getFullYear();
+            allMovements.push({
+              date: `${day}/${mon}/${year}`,
+              type: "ENTRÉE",
+              op: "ITC",
+              item: itemMatch ? itemMatch[1] : "Matériel",
+              qty: qtyMatch ? parseInt(qtyMatch[1]) : 0,
+              dest: "MAGASIN CENTRAL",
+            });
           }
         });
 
