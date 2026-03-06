@@ -1,0 +1,13 @@
+{
+  "name": "application-gestion-materiels-tools",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "create-user": "node scripts/create_firebase_user.js",
+    "migrate-itc-b01": "node scripts/migrate_itc_to_b01.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.0.0",
+    "yargs": "^17.0.1"
+  }
+}

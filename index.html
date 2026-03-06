@@ -159,14 +159,25 @@
 
     <script>
       const TRANSLATIONS = {
-        fr: {
-          loginTitle: "GESTION MATERIEL",
-          emailPlaceholder: "EMAIL PROFESSIONNEL",
-          passwordPlaceholder: "MOT DE PASSE",
-          authButton: "AUTHENTIFICATION",
-          forgotPassword: "Mot de passe oublié ?",
-          privacyLink: "Politique de confidentialité",
-          footerPrivacy: "Politique de confidentialité",
+        try {
+          // if gestionnaire, scope operators to those they manage
+          if (currentUser && currentUser.role === 'GESTIONNAIRE' && Array.isArray(currentUser.managedOps) && currentUser.managedOps.length) {
+            // normalize keys (maps generic ITC -> ITC-B01/ITC-B02) and keep only unique, known operators
+            const normalized = currentUser.managedOps
+              .map(o => normalizeOperatorKey(String(o || '')))
+              .filter(Boolean);
+            // dedupe while preserving order
+            const seen = new Set();
+            operatorsForTotals = normalized.filter(k => {
+              const up = String(k).toUpperCase();
+              if (seen.has(up)) return false;
+              seen.add(up);
+              return true;
+            });
+          }
+        } catch (err) {
+          console.warn('error building operatorsForTotals', err)
+        }
         },
         en: {
           loginTitle: "MATERIAL MANAGEMENT",
@@ -209,84 +220,10 @@
       document.addEventListener("DOMContentLoaded", () => {
         const lang = localStorage.getItem("app_lang") || "fr";
         setLanguage(lang);
-        // Afficher une aide pour les tests locaux (OAuth domains)
-        try {
-          showFirebaseAuthNotice();
-        } catch (e) {
-          // ignore
-        }
+        // Aide locale Firebase supprimée
       });
 
-      // Affiche une bannière d'information si on est sur localhost/127.0.0.1
-      function showFirebaseAuthNotice() {
-        const host = location.hostname;
-        if (host !== "localhost" && host !== "127.0.0.1") return;
-
-        const existing = document.getElementById("firebase-auth-notice");
-        if (existing) return;
-
-        const banner = document.createElement("div");
-        banner.id = "firebase-auth-notice";
-        banner.style.position = "fixed";
-        banner.style.left = "12px";
-        banner.style.right = "12px";
-        banner.style.top = "12px";
-        banner.style.zIndex = 99999;
-        banner.style.background = "#fff7ed";
-        banner.style.border = "1px solid #fbbf24";
-        banner.style.padding = "10px 12px";
-        banner.style.borderRadius = "8px";
-        banner.style.boxShadow = "0 6px 20px rgba(0,0,0,0.06)";
-        banner.style.display = "flex";
-        banner.style.alignItems = "center";
-        banner.style.justifyContent = "space-between";
-
-        const msg = document.createElement("div");
-        msg.style.fontSize = "13px";
-        msg.style.color = "#92400e";
-        msg.innerText =
-          "Info: Si vous utilisez OAuth (popups/redirects), ajoutez 'localhost' et '127.0.0.1' dans la console Firebase → Authentication → Settings → Authorized domains.";
-
-        const actions = document.createElement("div");
-        actions.style.display = "flex";
-        actions.style.gap = "8px";
-
-        const openBtn = document.createElement("button");
-        openBtn.innerText = "Ouvrir console Firebase";
-        openBtn.style.background = "#f59e0b";
-        openBtn.style.color = "white";
-        openBtn.style.border = "none";
-        openBtn.style.padding = "8px 10px";
-        openBtn.style.borderRadius = "6px";
-        openBtn.style.cursor = "pointer";
-        openBtn.onclick = () => {
-          const projectId =
-            typeof firebaseConfig !== "undefined" && firebaseConfig.projectId
-              ? firebaseConfig.projectId
-              : null;
-          const url = projectId
-            ? `https://console.firebase.google.com/project/${projectId}/authentication/settings`
-            : "https://console.firebase.google.com/project/_/authentication/settings";
-          window.open(url, "_blank");
-        };
-
-        const dismiss = document.createElement("button");
-        dismiss.innerText = "Ignorer";
-        dismiss.style.background = "transparent";
-        dismiss.style.color = "#92400e";
-        dismiss.style.border = "1px solid #f59e0b";
-        dismiss.style.padding = "6px 10px";
-        dismiss.style.borderRadius = "6px";
-        dismiss.style.cursor = "pointer";
-        dismiss.onclick = () => banner.remove();
-
-        actions.appendChild(openBtn);
-        actions.appendChild(dismiss);
-
-        banner.appendChild(msg);
-        banner.appendChild(actions);
-        document.body.appendChild(banner);
-      }
+      // showFirebaseAuthNotice removed
 
       function togglePassword() {
         const pwd = document.getElementById("login-password");
@@ -565,13 +502,24 @@
                 Consultation Stock
               </p>
               <div
+                id="menu-stock-itc-b01"
                 onclick="
-                  showSection('stock-itc');
+                  showSection('stock-itc-b01');
                   toggleSidebarMobile();
                 "
-                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic hidden"
               >
-                <i class="fas fa-box w-5 text-gray-400"></i> STOCK ITC
+                <i class="fas fa-box w-5 text-gray-400"></i> STOCK ITC BUREAU 01
+              </div>
+              <div
+                id="menu-stock-itc-b02"
+                onclick="
+                  showSection('stock-itc-b02');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic hidden"
+              >
+                <i class="fas fa-box w-5 text-gray-400"></i> STOCK ITC BUREAU 02
               </div>
               <div
                 onclick="
@@ -691,7 +639,22 @@
       // Dernier compteur local de notifications non lues (pour détecter nouvelles notifs)
       let lastNotificationCount = 0;
       let appData = {
-        stock: [],
+        stock: [
+          // Stock initial pour Gestionnaire Bureau 02 (exemples)
+          {
+            op: "ITC-B02",
+            label: "CÂBLE FO 2MM",
+            qty: 50,
+            type: "CONNECTIQUES",
+          },
+          {
+            op: "ITC-B02",
+            label: "PATCHCORD SC",
+            qty: 30,
+            type: "CONNECTIQUES",
+          },
+          { op: "MOOV", label: "SIM MOOV", qty: 120, type: "CONNECTIQUES" },
+        ],
         demandes: [],
         techDemandes: [],
         sorties: [],
@@ -710,9 +673,19 @@
           },
           {
             id: 2,
-            name: "GESTIONNAIRE",
+            name: "GESTIONNAIRE BUREAU 01",
             role: "Gestionnaire",
             email: "gest@itc.ci",
+            // Opérateurs gérés par ce gestionnaire (bureau 01)
+            managedOps: ["ITC-B01", "MTN", "OCI", "CIC"],
+          },
+          {
+            id: 9,
+            name: "GESTIONNAIRE BUREAU 02",
+            role: "Gestionnaire",
+            email: "gest_b02@itc.ci",
+            // Gestionnaire bureau 02 gère ITC-B02 et MOOV
+            managedOps: ["ITC-B02", "MOOV"],
           },
           {
             id: 7,
@@ -1262,6 +1235,44 @@
         if (menuCockpit)
           menuCockpit.classList.toggle("hidden", r === "TECHNICIEN");
 
+        // 6. Menu spécifique : STOCK ITC BUREAU 02 (visible seulement au superviseur
+        // ou au gestionnaire qui gère ITC-B02)
+        try {
+          const menuItcB02 = document.getElementById("menu-stock-itc-b02");
+          if (menuItcB02) {
+            let showItcB02 = false;
+            if (r === "SUPERVISEUR") showItcB02 = true;
+            if (r === "GESTIONNAIRE" && Array.isArray(currentUser.managedOps)) {
+              showItcB02 = currentUser.managedOps
+                .map((o) => String(o).toUpperCase())
+                .includes("ITC-B02");
+            }
+            menuItcB02.classList.toggle("hidden", !showItcB02);
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // 7. Menu spécifique : STOCK ITC BUREAU 01 (visible seulement au superviseur
+        // ou au gestionnaire qui gère ITC-B01)
+        try {
+          const menuItcB01 = document.getElementById("menu-stock-itc-b01");
+          if (menuItcB01) {
+            let showItcB01 = false;
+            if (r === "SUPERVISEUR") showItcB01 = true;
+            if (r === "GESTIONNAIRE" && Array.isArray(currentUser.managedOps)) {
+              const managed = currentUser.managedOps.map((o) =>
+                String(o).toUpperCase(),
+              );
+              showItcB01 =
+                managed.includes("ITC-B01") || managed.includes("ITC");
+            }
+            menuItcB01.classList.toggle("hidden", !showItcB01);
+          }
+        } catch (e) {
+          // ignore
+        }
+
         console.log("Mise à jour des menus terminée.");
       }
       function updateUserInfo() {
@@ -1310,7 +1321,15 @@
         if (normalized === "CIC") return "CIC";
         if (normalized === "MOOV") return "MOOV";
         if (normalized === "MTN") return "MTN";
-        return "ITC";
+
+        // Preserve ITC bureau variants if present
+        if (normalized.includes("ITC-B02")) return "ITC-B02";
+        if (normalized.includes("ITC-B01")) return "ITC-B01";
+
+        // Default ITC to ITC-B01 for backward compatibility
+        if (normalized.includes("ITC")) return "ITC-B01";
+
+        return normalized || "ITC-B01";
       }
 
       // Convertit une étiquette en clé sûre pour Firebase Realtime Database
@@ -1356,7 +1375,7 @@
           statsEquipe[equipe] = (statsEquipe[equipe] || 0) + totalItems;
         });
 
-        const operators = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
         const operatorStats = operators.reduce((acc, op) => {
           acc[op] = {
             availableTotal: 0,
@@ -1372,7 +1391,11 @@
           if (!operatorStats[op]) return;
 
           const qty = parseInt(stockItem.qty) || 0;
-          const availableQty = op === "ITC" ? qty : Math.max(qty, 1);
+          const availableQty = String(op || "")
+            .toUpperCase()
+            .startsWith("ITC")
+            ? qty
+            : Math.max(qty, 1);
           operatorStats[op].availableTotal += availableQty;
         });
 
@@ -1417,7 +1440,14 @@
               .toUpperCase();
             const labelKey = sanitizeFirebaseKey(label);
             const rawQty = parseInt(qtyMatch?.[1]) || 0;
-            const qty = rawQty > 0 ? rawQty : op === "ITC" ? 0 : 1;
+            const qty =
+              rawQty > 0
+                ? rawQty
+                : String(op || "")
+                      .toUpperCase()
+                      .startsWith("ITC")
+                  ? 0
+                  : 1;
 
             if (!label || qty <= 0) return;
 
@@ -1478,7 +1508,7 @@
         const statsTech = snapshot.statsTech;
         const statsEquipe = snapshot.statsEquipe;
         const operatorStats = snapshot.operatorStats;
-        const operators = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
 
         const renderDesignationTotals = (totals, colorClass) => {
           const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
@@ -1712,7 +1742,8 @@
                       ? archives
                           .map((archive) => {
                             const operators = [
-                              "ITC",
+                              "ITC-B01",
+                              "ITC-B02",
                               "CIC",
                               "OCI",
                               "MOOV",
@@ -1801,7 +1832,7 @@
 
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        const operators = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
 
         doc.setFontSize(13);
         doc.text(
@@ -1864,7 +1895,7 @@
         const archive = getConsumptionArchiveByKey(keyEncoded);
         if (!archive) return alert("Archive introuvable.");
 
-        const operators = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
         const rows = [];
 
         operators.forEach((op) => {
@@ -3079,6 +3110,10 @@
         container.scrollTop = 0; // Remet le défilement en haut
 
         // --- AIGUILLAGE LOGIQUE ---
+        // Special casing for nicer titles
+        if (id === "stock-itc-b01") {
+          viewTitle.innerText = "STOCK ITC BUREAU 01";
+        }
         if (id === "cockpit") {
           renderCockpit(container);
         } else if (id === "stats-consommation") {
@@ -3768,12 +3803,48 @@
           (d) => d.status === "EN ATTENTE GESTIONNAIRE",
         ).length;
 
-        const alerts = stock.filter(
-          (s) => s.op === "ITC" && (parseInt(s.qty) || 0) < 5,
-        ).length;
+        // alerts will be computed after determining which operators are shown to the user
+        let alerts = 0;
 
         // Calculer les totaux par opérateur (séparés)
-        const operatorsForTotals = ["ITC", "OCI", "CIC", "MOOV", "MTN"];
+        let operatorsForTotals = [
+          "ITC-B01",
+          "ITC-B02",
+          "OCI",
+          "CIC",
+          "MOOV",
+          "MTN",
+        ];
+        try {
+          if (
+            currentUser &&
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE" &&
+            Array.isArray(currentUser.managedOps) &&
+            currentUser.managedOps.length > 0
+          ) {
+            operatorsForTotals = currentUser.managedOps.map((o) =>
+              String(o || "").toUpperCase(),
+            );
+          }
+        } catch (e) {
+          // fallback to defaults
+        }
+
+        // Calculer les alertes uniquement pour les opérateurs visibles dans operatorsForTotals
+        try {
+          const normalizedTargets = (operatorsForTotals || []).map((o) =>
+            normalizeOperatorKey(o),
+          );
+          alerts = stock.filter((s) => {
+            const op = normalizeOperatorKey(s.op);
+            const qty = parseInt(s.qty) || 0;
+            return normalizedTargets.includes(op) && qty < 5;
+          }).length;
+        } catch (e) {
+          // en cas d'erreur, laisser alerts à 0
+          alerts = 0;
+        }
+
         const totalsByOp = operatorsForTotals.map((op) => ({
           op,
           total: stock
@@ -3805,9 +3876,14 @@
                     <p class=\"text-3xl text-red-600\">${alerts}</p>
                 </div>`;
 
-        // 3. AFFICHAGE DES GROUPES PAR OPÉRATEUR
-        ["ITC", "OCI", "CIC", "MOOV", "MTN"].forEach((key) => {
-          const group = stock.filter((s) => s.op === key);
+        // 3. AFFICHAGE DES GROUPES PAR OPÉRATEUR (respecte managedOps pour les gestionnaires)
+        const groupsToShow = operatorsForTotals;
+        groupsToShow.forEach((key) => {
+          const group = stock.filter(
+            (s) =>
+              String(s.op || "").toUpperCase() ===
+              String(key || "").toUpperCase(),
+          );
 
           html += `
                   <div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 border-slate-200">
@@ -3819,7 +3895,9 @@
                                   .map((m) => {
                                     let qtyVal = parseInt(m.qty) || 0;
                                     let badgeColor =
-                                      key === "ITC" && qtyVal < 5
+                                      String(key || "")
+                                        .toUpperCase()
+                                        .startsWith("ITC") && qtyVal < 5
                                         ? "text-red-600 bg-red-50"
                                         : "text-indigo-600 bg-indigo-50";
 
@@ -3828,12 +3906,26 @@
                                     <span class="w-1/2 truncate uppercase">${m.label}</span>
                                     <div class="flex items-center gap-2">
                                       <span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">
-                                        ${key === "ITC" || key === "MTN" ? qtyVal + " U" : "DISPO"}
+                                        ${
+                                          String(key || "")
+                                            .toUpperCase()
+                                            .startsWith("ITC") ||
+                                          String(key || "").toUpperCase() ===
+                                            "MTN"
+                                            ? qtyVal + " U"
+                                            : "DISPO"
+                                        }
                                       </span>
 
                                       ${
-                                        currentUser.role === "Gestionnaire" &&
-                                        (key === "ITC" || key === "MTN")
+                                        String(
+                                          currentUser.role || "",
+                                        ).toUpperCase() === "GESTIONNAIRE" &&
+                                        (String(key || "")
+                                          .toUpperCase()
+                                          .startsWith("ITC") ||
+                                          String(key || "").toUpperCase() ===
+                                            "MTN")
                                           ? `<button onclick="ouvrirModifStock('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1">
                                           <i class="fas fa-edit"></i>
                                         </button>`
@@ -3841,7 +3933,9 @@
                                       }
 
                                       ${
-                                        currentUser.role === "Gestionnaire"
+                                        String(
+                                          currentUser.role || "",
+                                        ).toUpperCase() === "GESTIONNAIRE"
                                           ? `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 hover:text-red-500 ml-1">
                                           <i class="fas fa-trash"></i>
                                         </button>`
@@ -4077,7 +4171,11 @@
         const div = document.createElement("div");
         div.className =
           "flex gap-2 items-center art-row bg-slate-50 p-2 rounded-xl";
-        const stockITC = appData.stock.filter((s) => s.op === "ITC");
+        const stockITC = appData.stock.filter((s) =>
+          String(s.op || "")
+            .toUpperCase()
+            .startsWith("ITC"),
+        );
         div.innerHTML = `<select class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase">${stockITC.map((s) => `<option value="${s.label}">${s.label} (${s.qty} DISPO)</option>`).join("")}</select><input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />`;
         document.getElementById("cmd-list").appendChild(div);
       }
@@ -4403,12 +4501,16 @@
         const r = appData.retours.find((x) => x.id === id);
         if (r.etat === "NEUF") {
           const s = appData.stock.find(
-            (st) => st.label === r.label && st.op === "ITC",
+            (st) =>
+              st.label === r.label &&
+              String(st.op || "")
+                .toUpperCase()
+                .startsWith("ITC"),
           );
           if (s) s.qty += r.qty;
           else
             appData.stock.push({
-              op: "ITC",
+              op: "ITC-B01",
               label: r.label,
               qty: r.qty,
               type: "RETOUR",
@@ -4509,14 +4611,39 @@
           qty: parseInt(document.getElementById("r-qty").value) || 0,
           type: document.getElementById("r-type").value.toUpperCase(),
         };
+        // If operator selected is generic "ITC", map it to the specific bureau
+        try {
+          const sel = String(mat.op || "").toUpperCase();
+          if (
+            sel === "ITC" &&
+            currentUser &&
+            Array.isArray(currentUser.managedOps)
+          ) {
+            const managed = currentUser.managedOps.map((o) =>
+              String(o).toUpperCase(),
+            );
+            // Prefer B02 if the user manages it, otherwise B01 if they manage ITC or B01
+            if (managed.includes("ITC-B02")) mat.op = "ITC-B02";
+            else if (managed.includes("ITC-B01") || managed.includes("ITC"))
+              mat.op = "ITC-B01";
+            // if none matched, keep as ITC (no change)
+          }
+        } catch (e) {
+          // ignore and proceed with original mat.op
+        }
 
         // 2. RECHERCHE SÉCURISÉE : On cherche si l'article existe déjà pour cet opérateur
         const existing = appData.stock.find(
           (s) => s.op === mat.op && s.label === mat.label,
         );
 
-        if (existing && mat.op === "ITC") {
-          // Si c'est du stock ITC, on additionne la quantité
+        if (
+          existing &&
+          String(mat.op || "")
+            .toUpperCase()
+            .startsWith("ITC")
+        ) {
+          // Si c'est du stock ITC (variantes comme ITC-B01/ITC-B02), on additionne la quantité
           existing.qty = (parseInt(existing.qty) || 0) + mat.qty;
         } else {
           // Sinon, on crée une nouvelle entrée dans le stock
@@ -4552,6 +4679,33 @@
       function renderStock(opKey, container) {
         // 1. Définition des opérateurs à afficher
         const ops = [opKey.toUpperCase()];
+
+        // Si l'utilisateur est un gestionnaire, vérifier qu'il a le droit de voir ce stock
+        try {
+          if (
+            currentUser &&
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE" &&
+            Array.isArray(currentUser.managedOps)
+          ) {
+            const managed = currentUser.managedOps.map((o) =>
+              String(o).toUpperCase(),
+            );
+            const opUp = String(opKey || "").toUpperCase();
+            const allowed =
+              managed.includes(opUp) ||
+              (opUp.startsWith("ITC") && managed.includes("ITC"));
+            if (!allowed) {
+              container.innerHTML = `
+              <div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic font-black">
+                <h3 class="uppercase text-red-500">Accès refusé</h3>
+                <p class="text-[10px] opacity-60">Vous n'êtes pas autorisé à consulter ce stock.</p>
+              </div>`;
+              return;
+            }
+          }
+        } catch (e) {
+          // en cas d'erreur, on continue et on affiche normalement
+        }
 
         // 2. SÉCURITÉ CRUCIALE : On utilise une liste vide [] si appData.stock n'existe pas encore.
         // Cela empêche l'erreur "Cannot read properties of undefined (reading 'filter')"
@@ -4618,7 +4772,9 @@
                                 }">${s.qty} U</span>
                                 ${
                                   currentUser &&
-                                  currentUser.role === "Gestionnaire"
+                                  String(
+                                    currentUser.role || "",
+                                  ).toUpperCase() === "GESTIONNAIRE"
                                     ? ` <div class="mt-2 flex justify-center gap-2">
                                           <button onclick="ouvrirModifStock('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 text-[9px] bg-white border px-2 py-1 rounded">Modifier</button>
                                           <button onclick="deleteMaterial('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-red-500 hover:text-red-700 text-[9px] bg-white border px-2 py-1 rounded">Supprimer</button>
