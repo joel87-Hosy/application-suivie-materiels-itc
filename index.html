@@ -209,7 +209,84 @@
       document.addEventListener("DOMContentLoaded", () => {
         const lang = localStorage.getItem("app_lang") || "fr";
         setLanguage(lang);
+        // Afficher une aide pour les tests locaux (OAuth domains)
+        try {
+          showFirebaseAuthNotice();
+        } catch (e) {
+          // ignore
+        }
       });
+
+      // Affiche une bannière d'information si on est sur localhost/127.0.0.1
+      function showFirebaseAuthNotice() {
+        const host = location.hostname;
+        if (host !== "localhost" && host !== "127.0.0.1") return;
+
+        const existing = document.getElementById("firebase-auth-notice");
+        if (existing) return;
+
+        const banner = document.createElement("div");
+        banner.id = "firebase-auth-notice";
+        banner.style.position = "fixed";
+        banner.style.left = "12px";
+        banner.style.right = "12px";
+        banner.style.top = "12px";
+        banner.style.zIndex = 99999;
+        banner.style.background = "#fff7ed";
+        banner.style.border = "1px solid #fbbf24";
+        banner.style.padding = "10px 12px";
+        banner.style.borderRadius = "8px";
+        banner.style.boxShadow = "0 6px 20px rgba(0,0,0,0.06)";
+        banner.style.display = "flex";
+        banner.style.alignItems = "center";
+        banner.style.justifyContent = "space-between";
+
+        const msg = document.createElement("div");
+        msg.style.fontSize = "13px";
+        msg.style.color = "#92400e";
+        msg.innerText =
+          "Info: Si vous utilisez OAuth (popups/redirects), ajoutez 'localhost' et '127.0.0.1' dans la console Firebase → Authentication → Settings → Authorized domains.";
+
+        const actions = document.createElement("div");
+        actions.style.display = "flex";
+        actions.style.gap = "8px";
+
+        const openBtn = document.createElement("button");
+        openBtn.innerText = "Ouvrir console Firebase";
+        openBtn.style.background = "#f59e0b";
+        openBtn.style.color = "white";
+        openBtn.style.border = "none";
+        openBtn.style.padding = "8px 10px";
+        openBtn.style.borderRadius = "6px";
+        openBtn.style.cursor = "pointer";
+        openBtn.onclick = () => {
+          const projectId =
+            typeof firebaseConfig !== "undefined" && firebaseConfig.projectId
+              ? firebaseConfig.projectId
+              : null;
+          const url = projectId
+            ? `https://console.firebase.google.com/project/${projectId}/authentication/settings`
+            : "https://console.firebase.google.com/project/_/authentication/settings";
+          window.open(url, "_blank");
+        };
+
+        const dismiss = document.createElement("button");
+        dismiss.innerText = "Ignorer";
+        dismiss.style.background = "transparent";
+        dismiss.style.color = "#92400e";
+        dismiss.style.border = "1px solid #f59e0b";
+        dismiss.style.padding = "6px 10px";
+        dismiss.style.borderRadius = "6px";
+        dismiss.style.cursor = "pointer";
+        dismiss.onclick = () => banner.remove();
+
+        actions.appendChild(openBtn);
+        actions.appendChild(dismiss);
+
+        banner.appendChild(msg);
+        banner.appendChild(actions);
+        document.body.appendChild(banner);
+      }
 
       function togglePassword() {
         const pwd = document.getElementById("login-password");
@@ -720,6 +797,38 @@
         if (data) {
           appData = normalizeAppData(data);
 
+          // Si l'utilisateur est déjà authentifié côté Firebase mais que
+          // `currentUser` n'a pas encore été initialisé (par exemple si
+          // les données de l'app étaient attendues), on tente d'initialiser
+          // le profil local à partir de `appData.users` pour garantir que
+          // l'interface se rafraîchisse correctement en temps réel.
+          try {
+            const fbUser = firebase.auth().currentUser;
+            if (fbUser && !currentUser && Array.isArray(appData.users)) {
+              const profile = appData.users.find(
+                (u) => u.email.toLowerCase() === fbUser.email.toLowerCase(),
+              );
+              if (profile) {
+                currentUser = profile;
+                updateMenuVisibility();
+                updateUserInfo();
+                updateNotifications();
+                // Afficher la section par défaut si nécessaire
+                try {
+                  showSection("cockpit");
+                } catch (e) {
+                  // ignore si showSection non disponible
+                }
+                console.log(
+                  "Utilisateur ITC connecté : " +
+                    (currentUser.name || currentUser.nom || currentUser.email),
+                );
+              }
+            }
+          } catch (e) {
+            console.warn("Erreur initialisation currentUser depuis appData", e);
+          }
+
           const migrationResult = migrateLegacySorties(appData);
           if (migrationResult.changed && !isSavingSortiesMigration) {
             isSavingSortiesMigration = true;
@@ -1046,7 +1155,10 @@
             // 5. Affichage de la section par défaut (Cockpit)
             showSection("cockpit");
 
-            console.log("Utilisateur ITC connecté : " + currentUser.nom);
+            console.log(
+              "Utilisateur ITC connecté : " +
+                (currentUser.name || currentUser.nom || currentUser.email),
+            );
           } else {
             console.error("Profil introuvable pour cet email : " + user.email);
             // Optionnel : déconnecter si l'email n'est pas autorisé dans l'ERP
