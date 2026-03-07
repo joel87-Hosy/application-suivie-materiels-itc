@@ -641,6 +641,25 @@
       let appData = {
         stock: [
           // Stock initial pour Gestionnaire Bureau 02 (exemples)
+          // Stock initial pour ITC Bureau 01 (coord / gestion)
+          {
+            op: "ITC-B01",
+            label: "CÂBLE FO 2MM",
+            qty: 40,
+            type: "CONNECTIQUES",
+          },
+          {
+            op: "ITC-B01",
+            label: "PATCHCORD SC",
+            qty: 25,
+            type: "CONNECTIQUES",
+          },
+          {
+            op: "ITC-B01",
+            label: "RACK 1U",
+            qty: 10,
+            type: "HARDWARE",
+          },
           {
             op: "ITC-B02",
             label: "CÂBLE FO 2MM",
@@ -1259,13 +1278,16 @@
           const menuItcB01 = document.getElementById("menu-stock-itc-b01");
           if (menuItcB01) {
             let showItcB01 = false;
-            if (r === "SUPERVISEUR") showItcB01 = true;
+            // Afficher pour le superviseur et aussi pour la coordinatrice
+            if (r === "SUPERVISEUR" || r === "COORDINATRICE") showItcB01 = true;
             if (r === "GESTIONNAIRE" && Array.isArray(currentUser.managedOps)) {
               const managed = currentUser.managedOps.map((o) =>
                 String(o).toUpperCase(),
               );
               showItcB01 =
-                managed.includes("ITC-B01") || managed.includes("ITC");
+                showItcB01 ||
+                managed.includes("ITC-B01") ||
+                managed.includes("ITC");
             }
             menuItcB01.classList.toggle("hidden", !showItcB01);
           }
