@@ -13,7 +13,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
@@ -38,10 +37,8 @@
         background: #ec4899;
         border-radius: 10px;
       }
+
       .notification-badge {
-        position: absolute;
-        top: -5px;
-        right: -5px;
         background: #ef4444;
         color: white;
         border-radius: 50%;
@@ -159,25 +156,14 @@
 
     <script>
       const TRANSLATIONS = {
-        try {
-          // if gestionnaire, scope operators to those they manage
-          if (currentUser && currentUser.role === 'GESTIONNAIRE' && Array.isArray(currentUser.managedOps) && currentUser.managedOps.length) {
-            // normalize keys (maps generic ITC -> ITC-B01/ITC-B02) and keep only unique, known operators
-            const normalized = currentUser.managedOps
-              .map(o => normalizeOperatorKey(String(o || '')))
-              .filter(Boolean);
-            // dedupe while preserving order
-            const seen = new Set();
-            operatorsForTotals = normalized.filter(k => {
-              const up = String(k).toUpperCase();
-              if (seen.has(up)) return false;
-              seen.add(up);
-              return true;
-            });
-          }
-        } catch (err) {
-          console.warn('error building operatorsForTotals', err)
-        }
+        fr: {
+          loginTitle: "GESTION MATERIELS",
+          emailPlaceholder: "EMAIL PROFESSIONNEL",
+          passwordPlaceholder: "MOT DE PASSE",
+          authButton: "AUTHENTIFICATION",
+          forgotPassword: "Mot de passe oublié ?",
+          privacyLink: "Politique de confidentialité",
+          footerPrivacy: "Politique de confidentialité",
         },
         en: {
           loginTitle: "MATERIAL MANAGEMENT",
@@ -241,6 +227,62 @@
             icon.classList.remove("fa-eye-slash");
             icon.classList.add("fa-eye");
           }
+        }
+      }
+
+      // Filtre les lignes du tableau de stock par désignation (recherche)
+      function filterStockList(opKey) {
+        try {
+          const input = document.getElementById(`stock-search-${opKey}`);
+          if (!input) return;
+          const q = String(input.value || "")
+            .trim()
+            .toUpperCase();
+          const rows = Array.from(
+            document.querySelectorAll(`#app-container tr.stock-row`),
+          ).filter((r) => {
+            // Filtrer uniquement les lignes correspondant à l'opérateur affiché
+            const rowOp = String(r.getAttribute("data-op") || "").toUpperCase();
+            return rowOp === String(opKey || "").toUpperCase();
+          });
+
+          let found = 0;
+          rows.forEach((r) => {
+            const label = String(
+              r.getAttribute("data-label") || "",
+            ).toUpperCase();
+            if (!q || label.includes(q)) {
+              r.style.display = "";
+              found++;
+            } else {
+              r.style.display = "none";
+            }
+          });
+
+          const info = document.getElementById(`stock-search-result-${opKey}`);
+          if (info)
+            info.innerText =
+              found === 0 ? "Aucun résultat" : `${found} résultat(s)`;
+        } catch (e) {
+          console.warn("Erreur filterStockList", e);
+        }
+      }
+
+      function clearStockFilter(opKey) {
+        try {
+          const input = document.getElementById(`stock-search-${opKey}`);
+          if (input) input.value = "";
+          const rows = Array.from(
+            document.querySelectorAll(`#app-container tr.stock-row`),
+          ).filter((r) => {
+            const rowOp = String(r.getAttribute("data-op") || "").toUpperCase();
+            return rowOp === String(opKey || "").toUpperCase();
+          });
+          rows.forEach((r) => (r.style.display = ""));
+          const info = document.getElementById(`stock-search-result-${opKey}`);
+          if (info) info.innerText = "";
+        } catch (e) {
+          console.warn("Erreur clearStockFilter", e);
         }
       }
     </script>
@@ -2067,6 +2109,7 @@
         if (!appData.stock) appData.stock = [];
 
         const op = document.getElementById("s-op").value;
+        const opKey = normalizeOperatorKey(op);
         const ref = document.getElementById("s-ref").value.toUpperCase();
         const tech = document.getElementById("s-tech").value.toUpperCase();
         const rows = document.querySelectorAll(".art-row-sortie");
@@ -2078,22 +2121,34 @@
           const label = row.querySelector(".art-l").value.toUpperCase().trim();
           const qty = parseInt(row.querySelector(".art-q").value) || 0;
 
-          // Trouver l'article en stock pour cet opérateur
-          const itemInStock = appData.stock.find(
-            (s) => s.op === op && s.label === label,
-          );
+          // Trouver l'article en stock pour cet opérateur (comparaisons normalisées)
+          const itemInStock = appData.stock.find((s) => {
+            try {
+              return (
+                normalizeOperatorKey(s.op) === opKey &&
+                String(s.label || "")
+                  .toUpperCase()
+                  .trim() === label
+              );
+            } catch (e) {
+              return false;
+            }
+          });
 
           if (itemInStock) {
-            if (itemInStock.qty >= qty) {
-              itemInStock.qty -= qty;
+            const available = parseInt(itemInStock.qty) || 0;
+            if (available >= qty) {
+              itemInStock.qty = available - qty;
               logs.push(`${label} (-${qty})`);
             } else {
               errors.push(
-                `Stock insuffisant pour ${label} (Dispo: ${itemInStock.qty})`,
+                `Stock insuffisant pour ${label} (Dispo: ${available})`,
               );
             }
           } else {
-            errors.push(`L'article ${label} n'existe pas en stock pour ${op}`);
+            errors.push(
+              `L'article ${label} n'existe pas en stock pour ${opKey}`,
+            );
           }
         });
 
@@ -3816,19 +3871,13 @@
 
       // --- COCKPIT & ALERTES ---
       function renderCockpit(container) {
-        // 1. SÉCURITÉ : On définit des listes vides par défaut si les données manquent
         const stock = appData.stock || [];
         const demandes = appData.demandes || [];
 
-        // 2. CALCULS SÉCURISÉS
-        const pending = demandes.filter(
-          (d) => d.status === "EN ATTENTE GESTIONNAIRE",
+        const pending = (
+          demandes.filter((d) => d.status === "EN ATTENTE GESTIONNAIRE") || []
         ).length;
 
-        // alerts will be computed after determining which operators are shown to the user
-        let alerts = 0;
-
-        // Calculer les totaux par opérateur (séparés)
         let operatorsForTotals = [
           "ITC-B01",
           "ITC-B02",
@@ -3848,57 +3897,98 @@
               String(o || "").toUpperCase(),
             );
           }
-        } catch (e) {
-          // fallback to defaults
-        }
+        } catch (e) {}
 
-        // Calculer les alertes uniquement pour les opérateurs visibles dans operatorsForTotals
+        // per-operator low stock sets
+        const perOperatorAlerts = {};
         try {
-          const normalizedTargets = (operatorsForTotals || []).map((o) =>
-            normalizeOperatorKey(o),
+          const normalizedTargets = (operatorsForTotals || []).map(
+            normalizeOperatorKey,
           );
-          alerts = stock.filter((s) => {
-            const op = normalizeOperatorKey(s.op);
-            const qty = parseInt(s.qty) || 0;
-            return normalizedTargets.includes(op) && qty < 5;
-          }).length;
-        } catch (e) {
-          // en cas d'erreur, laisser alerts à 0
-          alerts = 0;
-        }
+          normalizedTargets.forEach(
+            (nt) => (perOperatorAlerts[nt] = new Set()),
+          );
+          stock.forEach((s) => {
+            try {
+              const opNorm = normalizeOperatorKey(s.op);
+              const qty = parseInt(s.qty) || 0;
+              const label = String(s.label || "")
+                .toUpperCase()
+                .trim();
+              if (label && normalizedTargets.includes(opNorm) && qty < 5)
+                perOperatorAlerts[opNorm].add(label);
+            } catch (_) {}
+          });
+        } catch (e) {}
+
+        const alertLabels = Array.from(
+          new Set(
+            Object.values(perOperatorAlerts).flatMap((s) => Array.from(s)),
+          ),
+        );
+        const alerts = alertLabels.length;
 
         const totalsByOp = operatorsForTotals.map((op) => ({
           op,
           total: stock
             .filter((s) => String(s.op || "").toUpperCase() === op)
-            .reduce((a, b) => a + (parseInt(b.qty) || 0), 0),
+            .reduce((sum, it) => sum + (parseInt(it.qty) || 0), 0),
         }));
 
-        let html = `
-              <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6 font-black">
-                ${totalsByOp
-                  .map(
-                    (t) => `
-                  <div class="p-4 rounded-2xl shadow-lg bg-white text-center">
-                    <p class="text-[8px] text-slate-500 uppercase font-black">STOCK ${t.op}</p>
-                    <p class="text-2xl font-black text-indigo-900">${t.total} U</p>
-                  </div>
-                `,
-                  )
-                  .join("")}
-              </div>
+        // build html safely
+        const parts = [];
+        parts.push(
+          '<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6 font-black">',
+        );
+        totalsByOp.forEach((t) => {
+          parts.push(
+            '<div class="p-4 rounded-2xl shadow-lg bg-white text-center">',
+          );
+          parts.push(
+            `<p class="text-[8px] text-slate-500 uppercase font-black">STOCK ${escapeHtml(t.op)}</p>`,
+          );
+          parts.push(
+            `<p class="text-2xl font-black text-indigo-900">${t.total} U</p>`,
+          );
+          parts.push("</div>");
+        });
+        parts.push("</div>");
 
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-8 italic font-bold">
-                <div class=\"bg-white p-6 rounded-3xl shadow-lg border-t-4 border-yellow-500\">
-                    <p class=\"text-[8px] text-slate-400 uppercase font-black\">Commandes en attente</p>
-                    <p class=\"text-3xl text-slate-800\">${pending}</p>
-                </div>
-                <div class=\"bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500\">
-                    <p class=\"text-[8px] text-slate-400 uppercase font-black tracking-widest\">Alertes Rupture</p>
-                    <p class=\"text-3xl text-red-600\">${alerts}</p>
-                </div>`;
+        parts.push(
+          '<div class="grid grid-cols-1 md:grid-cols-2 gap-8 italic font-bold">',
+        );
+        parts.push(
+          '<div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-yellow-500">',
+        );
+        parts.push(
+          '<p class="text-[8px] text-slate-400 uppercase font-black">Commandes en attente</p>',
+        );
+        parts.push(`<p class="text-3xl text-slate-800">${pending}</p>`);
+        parts.push("</div>");
 
-        // 3. AFFICHAGE DES GROUPES PAR OPÉRATEUR (respecte managedOps pour les gestionnaires)
+        parts.push(
+          '<div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500">',
+        );
+        parts.push(
+          '<p class="text-[8px] text-slate-400 uppercase font-black tracking-widest">Alertes Rupture</p>',
+        );
+        parts.push(`<p class="text-3xl text-red-600">${alerts}</p>`);
+        // per-operator details
+        parts.push('<div class="text-[10px] text-slate-600 mt-2">');
+        const ops = Object.keys(perOperatorAlerts || {});
+        if (!ops || ops.length === 0) {
+          parts.push("Aucun matériel en rupture");
+        } else {
+          ops.forEach((opNorm) => {
+            const labels = Array.from(perOperatorAlerts[opNorm] || []);
+            parts.push(
+              `<div class="mb-1"><strong class="uppercase">${escapeHtml(opNorm)}</strong>: ${labels.length} - ${labels.length > 0 ? escapeHtml(labels.join(", ")) : "-"}</div>`,
+            );
+          });
+        }
+        parts.push("</div></div>");
+
+        // groups per operator
         const groupsToShow = operatorsForTotals;
         groupsToShow.forEach((key) => {
           const group = stock.filter(
@@ -3906,75 +3996,60 @@
               String(s.op || "").toUpperCase() ===
               String(key || "").toUpperCase(),
           );
-
-          html += `
-                  <div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 border-slate-200">
-                      <h3 class="text-xl font-black mb-6 uppercase text-indigo-900">${key}</h3>
-                      <div class="space-y-2">
-                          ${
-                            group.length > 0
-                              ? group
-                                  .map((m) => {
-                                    let qtyVal = parseInt(m.qty) || 0;
-                                    let badgeColor =
-                                      String(key || "")
-                                        .toUpperCase()
-                                        .startsWith("ITC") && qtyVal < 5
-                                        ? "text-red-600 bg-red-50"
-                                        : "text-indigo-600 bg-indigo-50";
-
-                                    return `
-                                  <div class="flex.justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">
-                                    <span class="w-1/2 truncate uppercase">${m.label}</span>
-                                    <div class="flex items-center gap-2">
-                                      <span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">
-                                        ${
-                                          String(key || "")
-                                            .toUpperCase()
-                                            .startsWith("ITC") ||
-                                          String(key || "").toUpperCase() ===
-                                            "MTN"
-                                            ? qtyVal + " U"
-                                            : "DISPO"
-                                        }
-                                      </span>
-
-                                      ${
-                                        String(
-                                          currentUser.role || "",
-                                        ).toUpperCase() === "GESTIONNAIRE" &&
-                                        (String(key || "")
-                                          .toUpperCase()
-                                          .startsWith("ITC") ||
-                                          String(key || "").toUpperCase() ===
-                                            "MTN")
-                                          ? `<button onclick="ouvrirModifStock('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1">
-                                          <i class="fas fa-edit"></i>
-                                        </button>`
-                                          : ""
-                                      }
-
-                                      ${
-                                        String(
-                                          currentUser.role || "",
-                                        ).toUpperCase() === "GESTIONNAIRE"
-                                          ? `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 hover:text-red-500 ml-1">
-                                          <i class="fas fa-trash"></i>
-                                        </button>`
-                                          : ""
-                                      }
-                                    </div>
-                                  </div>`;
-                                  })
-                                  .join("")
-                              : '<p class="text-[8px] text-slate-400 opacity-50">Aucun matériel répertorié</p>'
-                          }
-                      </div>
-                  </div>`;
+          parts.push(
+            '<div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 border-slate-200">',
+          );
+          parts.push(
+            `<h3 class="text-xl font-black mb-6 uppercase text-indigo-900">${escapeHtml(key)}</h3>`,
+          );
+          parts.push('<div class="space-y-2">');
+          if (group.length > 0) {
+            group.forEach((m) => {
+              const qtyVal = parseInt(m.qty) || 0;
+              const badgeColor =
+                String(key || "")
+                  .toUpperCase()
+                  .startsWith("ITC") && qtyVal < 5
+                  ? "text-red-600 bg-red-50"
+                  : "text-indigo-600 bg-indigo-50";
+              parts.push(
+                '<div class="flex.justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">',
+              );
+              parts.push(
+                `<span class="w-1/2 truncate uppercase">${escapeHtml(m.label)}</span>`,
+              );
+              parts.push('<div class="flex items-center gap-2">');
+              parts.push(
+                `<span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">${
+                  String(key || "")
+                    .toUpperCase()
+                    .startsWith("ITC") ||
+                  String(key || "").toUpperCase() === "MTN"
+                    ? qtyVal + " U"
+                    : "DISPO"
+                }</span>`,
+              );
+              if (
+                String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
+              ) {
+                parts.push(
+                  `<button onclick="ouvrirModifStock('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1"><i class="fas fa-edit"></i></button>`,
+                );
+                parts.push(
+                  `<button onclick="deleteMaterial('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-slate-200 hover:text-red-500 ml-1"><i class="fas fa-trash"></i></button>`,
+                );
+              }
+              parts.push("</div></div>");
+            });
+          } else {
+            parts.push(
+              '<p class="text-[8px] text-slate-400 opacity-50">Aucun matériel répertorié</p>',
+            );
+          }
+          parts.push("</div></div>");
         });
 
-        html += `</div>`;
-        container.innerHTML = html;
+        container.innerHTML = parts.join("");
       }
       function ouvrirModifStock(op, label) {
         const item = appData.stock.find(
