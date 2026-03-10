@@ -2663,6 +2663,34 @@
       function renderRapportsSorties(container, options = {}) {
         if (!container) return;
         const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
+        // If current user is a Gestionnaire, restrict visible sorties to their managed operators
+        let visibleSorties = sorties;
+        try {
+          if (
+            currentUser &&
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE" &&
+            Array.isArray(currentUser.managedOps) &&
+            currentUser.managedOps.length > 0
+          ) {
+            const allowed = new Set(
+              currentUser.managedOps
+                .map((o) => normalizeOperatorKey(String(o || "")))
+                .filter(Boolean),
+            );
+
+            visibleSorties = sorties.filter((s) => {
+              try {
+                const opNorm = normalizeOperatorKey(s.op);
+                return allowed.has(opNorm);
+              } catch (e) {
+                return false;
+              }
+            });
+          }
+        } catch (e) {
+          // fallback: show all sorties on error
+          visibleSorties = sorties;
+        }
         const isReadOnly = !!options.readOnly;
         const canEdit = !isReadOnly && canCurrentUserEditSorties();
 
@@ -2672,9 +2700,9 @@
           return;
         }
 
-        // Group sorties by reference
+        // Group sorties by reference (use filtered visibleSorties)
         const groupsMap = {};
-        sorties.forEach((s) => {
+        visibleSorties.forEach((s) => {
           const refValue = String(s?.ref || "SANS RÉF").trim();
           const key = refValue.toUpperCase() || "SANS RÉF";
           if (!groupsMap[key])
