@@ -2700,18 +2700,49 @@
           return;
         }
 
-        // Group sorties by reference (use filtered visibleSorties)
+        // Group sorties: for Gestionnaire group by month, otherwise by reference
         const groupsMap = {};
+        const isGestionnaire =
+          currentUser &&
+          String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE";
+
         visibleSorties.forEach((s) => {
-          const refValue = String(s?.ref || "SANS RÉF").trim();
-          const key = refValue.toUpperCase() || "SANS RÉF";
-          if (!groupsMap[key])
-            groupsMap[key] = {
-              refKey: key,
-              refLabel: refValue || "SANS RÉF",
-              sorties: [],
-            };
-          groupsMap[key].sorties.push(s);
+          if (isGestionnaire) {
+            // group by month-year using sortie date
+            const ts = getSortieTimestamp(s.date);
+            if (!ts) {
+              const key = "SANS_DATE";
+              if (!groupsMap[key])
+                groupsMap[key] = {
+                  refKey: key,
+                  refLabel: "Sans date",
+                  sorties: [],
+                };
+              groupsMap[key].sorties.push(s);
+            } else {
+              const d = new Date(ts);
+              const monthIndex = d.getMonth();
+              const year = d.getFullYear();
+              const key = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+              const label =
+                typeof getMonthLabel === "function"
+                  ? getMonthLabel(monthIndex, year)
+                  : `${monthIndex + 1}/${year}`;
+              if (!groupsMap[key])
+                groupsMap[key] = { refKey: key, refLabel: label, sorties: [] };
+              groupsMap[key].sorties.push(s);
+            }
+          } else {
+            const refValue = String(s?.ref || "SANS RÉF").trim();
+            const key = refValue.toUpperCase() || "SANS RÉF";
+            if (!groupsMap[key])
+              groupsMap[key] = {
+                refKey: key,
+                refLabel: refValue || "SANS RÉF",
+                sorties: [],
+              };
+            groupsMap[key].sorties.push(s);
+          }
         });
 
         const groups = Object.values(groupsMap).sort((a, b) => {
