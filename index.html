@@ -4319,7 +4319,21 @@
         const tech = appData.techDemandes.find((x) => x.id === id);
         window._currentTechProcess = tech;
         const container = document.getElementById("app-container");
-        container.innerHTML = `<div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold font-black"><h3 class="mb-6 border-b-2 text-pink-600 uppercase">Conversion du besoin</h3><input id="c-motif" type="text" class="w-full border-2 p-3 rounded-xl mb-6 text-xs uppercase bg-slate-50" value="${tech.objectif}" required /><div id="cmd-list" class="space-y-3"></div><button onclick="addRow()" class="text-indigo-600 text-[9px] mt-4 uppercase">+ ARTICLE</button><button onclick="submitCmd()" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] mt-8 uppercase font-black">Envoyer Magasin</button></div>`;
+        // Build gestionnaire options (assignable managers)
+        const gestionnaires = (appData.users || []).filter(
+          (u) =>
+            String(u.role || "")
+              .toUpperCase()
+              .includes("GESTION") ||
+            String(u.role || "")
+              .toUpperCase()
+              .includes("MAGASIN"),
+        );
+        const gestOptions = gestionnaires
+          .map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`)
+          .join("");
+
+        container.innerHTML = `<div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold font-black"><h3 class="mb-6 border-b-2 text-pink-600 uppercase">Conversion du besoin</h3><input id="c-motif" type="text" class="w-full border-2 p-3 rounded-xl mb-6 text-xs uppercase bg-slate-50" value="${tech.objectif}" required /><div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"><div><label class="text-[8px] text-slate-400 uppercase">Assigner au gestionnaire</label><select id="assign-gestionnaire" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50">${gestOptions}</select></div><div><label class="text-[8px] text-slate-400 uppercase">Motif (modifiable)</label><input id="c-motif-2" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" value="${tech.objectif}" /></div></div><div id="cmd-list" class="space-y-3"></div><button onclick="addRow()" class="text-indigo-600 text-[9px] mt-4 uppercase">+ ARTICLE</button><button onclick="submitCmd()" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] mt-8 uppercase font-black">Envoyer Magasin</button></div>`;
         addRow();
       }
 
@@ -4353,23 +4367,78 @@
           prestataire: "ITC / " + (tech.equipe || "TERRAIN"),
           op: "ITC",
           items,
-          motif: tech.objectif.toUpperCase(),
+          motif: (
+            document.getElementById("c-motif-2")?.value || tech.objectif
+          ).toUpperCase(),
+          // Assigned gestionnaire (if selected)
+          assignedGestionnaireId: (function () {
+            try {
+              const v = document.getElementById("assign-gestionnaire");
+              return v ? parseInt(v.value) : null;
+            } catch (e) {
+              return null;
+            }
+          })(),
+          assignedGestionnaireName: (function () {
+            try {
+              const v = document.getElementById("assign-gestionnaire");
+              return v ? gestionnaireNameById(parseInt(v.value)) || "" : "";
+            } catch (e) {
+              return "";
+            }
+          })(),
           status: "EN ATTENTE GESTIONNAIRE", // Disponible immédiatement pour le tech
           date: new Date().toLocaleDateString(),
         };
 
         appData.demandes.unshift(c);
         tech.statut = "VALIDÉ";
+        // Notify the technician
         addNotification(
           tech.technicienId,
           `VOTRE BON ${c.id} EST PRÊT. TÉLÉCHARGEZ LE PDF.`,
         );
+        // Notify the selected gestionnaire if any
+        if (c.assignedGestionnaireId) {
+          addNotification(
+            c.assignedGestionnaireId,
+            `NOUVELLE COMMANDE À TRAITER : ${c.id} (assignée par ${currentUser.name})`,
+          );
+        }
         save();
-        alert("COMMANDE ENVOYÉE AU MAGASIN ET BON TRANSMIS AU TECHNICIEN.");
+        alert(
+          "COMMANDE ENVOYÉE AU MAGASIN. Gestionnaire assigné: " +
+            (c.assignedGestionnaireName || "Automatique"),
+        );
         showSection("cockpit");
       }
 
+      function gestionnaireNameById(id) {
+        try {
+          const u = (appData.users || []).find(
+            (x) => parseInt(x.id) == parseInt(id),
+          );
+          return u ? u.name : null;
+        } catch (e) {
+          return null;
+        }
+      }
+
       function renderCoordCreationDirecte(container) {
+        // Build gestionnaire options for direct command form
+        const directGestionnaires = (appData.users || []).filter(
+          (u) =>
+            String(u.role || "")
+              .toUpperCase()
+              .includes("GESTION") ||
+            String(u.role || "")
+              .toUpperCase()
+              .includes("MAGASIN"),
+        );
+        const directGestOptions = directGestionnaires
+          .map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`)
+          .join("");
+
         container.innerHTML = `
               <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold font-black">
                   <h3 class="mb-6 border-b-2 text-pink-600 uppercase italic">Commande Directe (Manuelle)</h3>
@@ -4389,6 +4458,19 @@
                               <label class="text-[8px] text-slate-400 uppercase">Projet / Motif de sortie</label>
                               <input id="d-motif" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" placeholder="EX: CHANTIER PLATEAU" required />
                           </div>
+                      </div>
+
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                          <label class="text-[8px] text-slate-400 uppercase">Assigner au gestionnaire</label>
+                          <select id="assign-gestionnaire-direct" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50">
+                            <option value="">-- Automatique --</option>
+                            ${directGestOptions}
+                          </select>
+                        </div>
+                        <div>
+                          <!-- reserved for future fields -->
+                        </div>
                       </div>
 
                   <datalist id="direct-itc-designations-list">
@@ -4489,22 +4571,52 @@
           op: document.getElementById("d-op").value,
           items,
           motif: document.getElementById("d-motif").value.toUpperCase(),
+          // assigned gestionnaire if chosen
+          assignedGestionnaireId: (function () {
+            try {
+              const v = document.getElementById("assign-gestionnaire-direct");
+              return v && v.value ? parseInt(v.value) : null;
+            } catch (e) {
+              return null;
+            }
+          })(),
+          assignedGestionnaireName: (function () {
+            try {
+              const v = document.getElementById("assign-gestionnaire-direct");
+              return v && v.value
+                ? gestionnaireNameById(parseInt(v.value)) || ""
+                : "";
+            } catch (e) {
+              return "";
+            }
+          })(),
           status: "EN ATTENTE GESTIONNAIRE",
           date: new Date().toLocaleDateString(),
         };
         appData.demandes.unshift(c);
-        // Notification au gestionnaire : validation requise
-        addNotification(
-          2,
-          `VALIDATION REQUISE : Commande ${c.id} soumise par ${currentUser.name}`,
-        );
+        // Notification au gestionnaire : validation requise (utilise la selection si fournie)
+        if (c.assignedGestionnaireId) {
+          addNotification(
+            c.assignedGestionnaireId,
+            `VALIDATION REQUISE : Commande ${c.id} soumise par ${currentUser.name}`,
+          );
+        } else {
+          // fallback to default gestionnaire (id 2)
+          addNotification(
+            2,
+            `VALIDATION REQUISE : Commande ${c.id} soumise par ${currentUser.name}`,
+          );
+        }
         // Confirmation pour la coordinatrice
         addNotification(
           currentUser.id,
           `Votre commande ${c.id} a été envoyée et est en attente de validation.`,
         );
         save();
-        alert("TRANSMIS. La commande attend validation.");
+        alert(
+          "TRANSMIS. Gestionnaire assigné: " +
+            (c.assignedGestionnaireName || "Automatique"),
+        );
         showSection("cockpit");
       }
 
