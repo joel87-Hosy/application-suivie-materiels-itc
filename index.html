@@ -4713,15 +4713,27 @@
                           <label class="text-[8px] text-slate-400 uppercase ml-1">Type de Matériel</label>
                           <select id="r-type" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50 outline-none focus:border-indigo-500" required>
                               <option value="" disabled selected>-- CHOISIR UN TYPE --</option>
-                              <option value="MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES">MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES</option>
-                              <option value="CABLES FIBRES OPTIQUES SOUTERRAINS">CÂBLES FIBRES OPTIQUES SOUTERRAINS</option>
-                              <option value="CABLES FIBRES OPTIQUES AÉRIENS">CÂBLES FIBRES OPTIQUES AÉRIENS</option>
-                              <option value="MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS">MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS</option>
-                              <option value="MATÉRIELS DE PROTECTION ET DE RACCORDEMENT">MATÉRIELS DE PROTECTION ET DE RACCORDEMENT</option>
-                              <option value="MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO">MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO</option>
-                              <option value="CONNECTIQUES FO">CONNECTIQUES FO</option>
-                              <option value="MATÉRIELS D'ÉTIQUETAGE">MATÉRIELS D'ÉTIQUETAGE</option>
-                              <option value="MATÉRIELS GÉNIE CIVIL (GC)">MATÉRIELS GÉNIE CIVIL (GC)</option>
+                              ${(
+                                (appData &&
+                                  Array.isArray(appData.materialTypes) &&
+                                  appData.materialTypes) || [
+                                  "MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES",
+                                  "CÂBLES FIBRES OPTIQUES SOUTERRAINS",
+                                  "CÂBLES FIBRES OPTIQUES AÉRIENS",
+                                  "MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS",
+                                  "MATÉRIELS DE PROTECTION ET DE RACCORDEMENT",
+                                  "MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO",
+                                  "CONNECTIQUES FO",
+                                  "MATÉRIELS D'ÉTIQUETAGE",
+                                  "MATÉRIELS GÉNIE CIVIL (GC)",
+                                ]
+                              )
+                                .map(
+                                  (t) =>
+                                    `<option value="${escapeHtml(String(t || ""))}">${escapeHtml(String(t || ""))}</option>`,
+                                )
+                                .join("")}
+                              <option value="__ADD_NEW__">+ Ajouter un type...</option>
                           </select>
                       </div>
 
@@ -4748,6 +4760,66 @@
         const matInput = document.getElementById("r-mat");
         if (matInput) {
           matInput.value = String(saved.mat || "").toUpperCase();
+        }
+
+        // Allow managers to add a new material type from the select
+        try {
+          const typeSelect = document.getElementById("r-type");
+          if (typeSelect) {
+            typeSelect.addEventListener("change", async () => {
+              try {
+                if (typeSelect.value === "__ADD_NEW__") {
+                  const v = window.prompt(
+                    "Entrez le nouveau type de matériel :",
+                  );
+                  if (!v) {
+                    typeSelect.value = "";
+                    return;
+                  }
+                  const newType = String(v || "")
+                    .trim()
+                    .toUpperCase();
+                  if (!newType) {
+                    typeSelect.value = "";
+                    return;
+                  }
+
+                  // Ensure appData.materialTypes exists
+                  if (!appData) appData = {};
+                  if (!Array.isArray(appData.materialTypes))
+                    appData.materialTypes = [];
+
+                  if (!appData.materialTypes.includes(newType)) {
+                    appData.materialTypes.push(newType);
+                    // Persist and refresh datalists/DOM
+                    save();
+                  }
+
+                  // Add option to select if not present and select it
+                  const exists = Array.from(typeSelect.options).some(
+                    (o) => String(o.value || "").toUpperCase() === newType,
+                  );
+                  if (!exists) {
+                    const opt = document.createElement("option");
+                    opt.value = newType;
+                    opt.text = newType;
+                    // insert before the add-new option
+                    const addOpt = Array.from(typeSelect.options).find(
+                      (o) => o.value === "__ADD_NEW__",
+                    );
+                    if (addOpt && addOpt.parentNode)
+                      addOpt.parentNode.insertBefore(opt, addOpt);
+                    else typeSelect.appendChild(opt);
+                  }
+                  typeSelect.value = newType;
+                }
+              } catch (e) {
+                console.warn("Erreur ajout type matériel:", e);
+              }
+            });
+          }
+        } catch (e) {
+          console.warn("Erreur initialisation add-type listener", e);
         }
 
         // On réinitialise l'affichage de la quantité selon la sélection par défaut (ITC)
