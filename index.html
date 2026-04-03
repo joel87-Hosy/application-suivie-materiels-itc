@@ -1446,23 +1446,29 @@
           .map((o) => normalizeOperatorKey(String(o || "")))
           .filter(Boolean);
 
+        const fingerprint =
+          `${String(user.name || "")} ${String(user.email || "")}`.toUpperCase();
+        const isBureau01 =
+          fingerprint.includes("BUREAU 01") ||
+          fingerprint.includes("GEST@ITC.CI") ||
+          fingerprint.includes("B01");
+        const isBureau02 =
+          fingerprint.includes("BUREAU 02") ||
+          fingerprint.includes("GEST_B02@ITC.CI") ||
+          fingerprint.includes("B02");
+
+        // Droits minimaux imposés par bureau (même si managedOps est partiel)
+        if (isBureau01) {
+          normalized.push("ITC-B01", "OCI", "CIC", "MTN");
+        }
+        if (isBureau02) {
+          normalized.push("ITC-B02", "MOOV");
+        }
+
         if (normalized.length === 0) {
-          const fingerprint =
-            `${String(user.name || "")} ${String(user.email || "")}`.toUpperCase();
-          if (
-            fingerprint.includes("BUREAU 01") ||
-            fingerprint.includes("GEST@ITC.CI") ||
-            fingerprint.includes("B01")
-          ) {
-            normalized.push("ITC-B01");
-          }
-          if (
-            fingerprint.includes("BUREAU 02") ||
-            fingerprint.includes("GEST_B02@ITC.CI") ||
-            fingerprint.includes("B02")
-          ) {
-            normalized.push("ITC-B02");
-          }
+          // Fallback historique conservé
+          if (isBureau01) normalized.push("ITC-B01", "OCI", "CIC", "MTN");
+          if (isBureau02) normalized.push("ITC-B02", "MOOV");
         }
 
         return [...new Set(normalized)];
