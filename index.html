@@ -1360,10 +1360,7 @@
             if (r === "SUPERVISEUR" || r === "COORDINATRICE") showItcB01 = true;
             if (r === "GESTIONNAIRE") {
               const managedNorm = getManagedOpsNormalized(currentUser);
-              showItcB01 =
-                showItcB01 ||
-                managedNorm.includes("ITC-B01") ||
-                managedNorm.some((m) => m.startsWith("ITC"));
+              showItcB01 = showItcB01 || managedNorm.includes("ITC-B01");
             }
             menuItcB01.classList.toggle("hidden", !showItcB01);
           }
@@ -2743,15 +2740,9 @@
         try {
           if (
             currentUser &&
-            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE" &&
-            Array.isArray(currentUser.managedOps) &&
-            currentUser.managedOps.length > 0
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
           ) {
-            const allowed = new Set(
-              currentUser.managedOps
-                .map((o) => normalizeOperatorKey(String(o || "")))
-                .filter(Boolean),
-            );
+            const allowed = new Set(getManagedOpsNormalized(currentUser));
 
             visibleSorties = sorties.filter((s) => {
               try {
@@ -2763,8 +2754,8 @@
             });
           }
         } catch (e) {
-          // fallback: show all sorties on error
-          visibleSorties = sorties;
+          // sécurité: en cas d'erreur de filtrage, ne pas exposer tous les rapports
+          visibleSorties = [];
         }
         const isReadOnly = !!options.readOnly;
         const canEdit = !isReadOnly && canCurrentUserEditSorties();
@@ -3650,6 +3641,9 @@
         const content = document.getElementById("hebdo-content");
 
         let allMovements = [];
+        const isGestionnaire =
+          String(currentUser?.role || "").toUpperCase() === "GESTIONNAIRE";
+        const allowedOps = new Set(getManagedOpsNormalized(currentUser));
 
         // Récupération des Sorties (Bons Livrés) - robust date parsing
         (appData.demandes || []).forEach((d) => {
@@ -3731,6 +3725,14 @@
             });
           }
         });
+
+        // Isolation stricte pour les gestionnaires :
+        // chaque bureau ne voit que ses propres flux.
+        if (isGestionnaire) {
+          allMovements = allMovements.filter((m) =>
+            allowedOps.has(normalizeOperatorKey(m.op || "")),
+          );
+        }
 
         // Tri par date/heure (timestamp)
         allMovements.sort((a, b) => {
@@ -5130,10 +5132,7 @@
             String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
           ) {
             const managedNorm = getManagedOpsNormalized(currentUser);
-            const allowed =
-              managedNorm.includes(opNorm) ||
-              (opNorm.startsWith("ITC") &&
-                managedNorm.some((m) => m.startsWith("ITC")));
+            const allowed = managedNorm.includes(opNorm);
             if (!allowed) {
               container.innerHTML = `
               <div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic font-black">
