@@ -3579,14 +3579,47 @@
           .start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
           .then(() => {
             const torchBtn = document.getElementById("torch-button");
-            torchBtn.addEventListener("click", () => {
-              isTorchOn = !isTorchOn;
-              html5QrCode
-                .applyVideoConstraints({ advanced: [{ torch: isTorchOn }] })
-                .catch((e) => {});
-              torchBtn.innerHTML = isTorchOn
-                ? '<i class="fas fa-lightbulb"></i> Éteindre'
-                : '<i class="fas fa-lightbulb"></i> Allumer';
+            if (!torchBtn) return;
+
+            let torchSupported = false;
+            try {
+              const capabilities = html5QrCode.getRunningTrackCapabilities
+                ? html5QrCode.getRunningTrackCapabilities()
+                : null;
+              torchSupported = !!(capabilities && capabilities.torch);
+            } catch (e) {
+              torchSupported = false;
+            }
+
+            if (!torchSupported) {
+              torchBtn.disabled = true;
+              torchBtn.classList.add("opacity-40", "cursor-not-allowed");
+              torchBtn.innerHTML =
+                '<i class="fas fa-lightbulb"></i> Lampe indisponible';
+              return;
+            }
+
+            torchBtn.addEventListener("click", async () => {
+              const nextState = !isTorchOn;
+              try {
+                // Certains navigateurs acceptent `torch` directement,
+                // d'autres préfèrent le format advanced.
+                await html5QrCode.applyVideoConstraints({
+                  torch: nextState,
+                  advanced: [{ torch: nextState }],
+                });
+                isTorchOn = nextState;
+                torchBtn.innerHTML = isTorchOn
+                  ? '<i class="fas fa-lightbulb"></i> Éteindre'
+                  : '<i class="fas fa-lightbulb"></i> Allumer';
+                showTempToast(
+                  isTorchOn ? "Lampe activée" : "Lampe désactivée",
+                  1200,
+                );
+              } catch (e) {
+                console.warn("Impossible d'activer la lampe", e);
+                showTempToast("Lampe non supportée sur cet appareil", 1800);
+              }
             });
           })
           .catch((err) => {
