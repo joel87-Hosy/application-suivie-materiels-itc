@@ -831,25 +831,31 @@
         if (data) {
           appData = normalizeAppData(data);
 
-          // Si l'utilisateur est déjà authentifié côté Firebase mais que
-          // `currentUser` n'a pas encore été initialisé (par exemple si
-          // les données de l'app étaient attendues), on tente d'initialiser
-          // le profil local à partir de `appData.users` pour garantir que
-          // l'interface se rafraîchisse correctement en temps réel.
+          // Si l'utilisateur est authentifié côté Firebase, on maintient
+          // toujours currentUser synchronisé avec le profil présent dans
+          // appData.users (rôle/managedOps peuvent évoluer en temps réel).
           try {
             const fbUser = firebase.auth().currentUser;
-            if (fbUser && !currentUser && Array.isArray(appData.users)) {
+            if (fbUser && Array.isArray(appData.users)) {
               const profile = appData.users.find(
                 (u) => u.email.toLowerCase() === fbUser.email.toLowerCase(),
               );
               if (profile) {
+                const hadUser = !!currentUser;
                 currentUser = profile;
                 updateMenuVisibility();
                 updateUserInfo();
                 updateNotifications();
-                // Afficher la section par défaut si nécessaire
+                // Afficher la section par défaut seulement si l'interface est vide
                 try {
-                  showSection("cockpit");
+                  const container = document.getElementById("app-container");
+                  if (
+                    !hadUser &&
+                    container &&
+                    container.innerHTML.trim() === ""
+                  ) {
+                    showSection("cockpit");
+                  }
                 } catch (e) {
                   // ignore si showSection non disponible
                 }
@@ -1198,7 +1204,17 @@
           const userCredential = await firebase
             .auth()
             .signInWithEmailAndPassword(email, password);
-          const userProfile = appData.users.find((u) => u.email === email);
+          // Après connection, forcer la lecture depuis le serveur puis
+          // retrouver le profil dans les données fraîchement chargées.
+          try {
+            await refreshAppDataFromServer();
+          } catch (e) {
+            console.warn("refresh après login échoué", e);
+          }
+
+          const userProfile = (appData.users || []).find(
+            (u) => String(u.email || "").toLowerCase() === email,
+          );
 
           if (userProfile) {
             currentUser = userProfile;
@@ -1215,77 +1231,17 @@
                 ? "tech-nouvelle-demande"
                 : "cockpit",
             );
-
-            // Forcer une lecture fraîche côté serveur pour s'assurer que
-            // l'interface montre l'état le plus récent pour ce compte.
-            try {
-              await refreshAppDataFromServer();
-            } catch (e) {
-              console.warn("refresh après login échoué", e);
-            }
+          } else {
+            console.warn(
+              "Profil introuvable dans appData après refresh pour :",
+              email,
+            );
           }
         } catch (error) {
           alert("ÉCHEC D'AUTHENTIFICATION : " + error.message);
         }
       }
 
-      // Persistance de la session
-      firebase.auth().onAuthStateChanged((user) => {
-        if (user) {
-          // 1. Sécurité : On vérifie que les données de l'application sont bien chargées
-          if (!appData || !appData.users) {
-            console.warn("Attente du chargement des données ITC...");
-            // On peut forcer un petit délai ou attendre le prochain cycle du listener
-            return;
-          }
-
-          // 2. Recherche du profil avec sécurité sur l'email
-          const profile = appData.users.find(
-            (u) => u.email.toLowerCase() === user.email.toLowerCase(),
-          );
-
-          if (profile) {
-            currentUser = profile;
-
-            // 3. Mise à jour de l'interface
-            document.getElementById("login-screen").classList.add("hidden");
-            document.getElementById("main-app").classList.remove("hidden");
-
-            // 4. Initialisation des composants
-            updateMenuVisibility();
-            updateUserInfo();
-            updateNotifications();
-
-            // 5. Affichage de la section par défaut (Cockpit)
-            showSection("cockpit");
-
-            // Forcer un fetch serveur pour s'assurer que les données affichées
-            // correspondent bien à l'état actuel lorsque l'utilisateur change.
-            try {
-              refreshAppDataFromServer();
-            } catch (e) {
-              console.warn(
-                "refreshAppDataFromServer failed on auth state change",
-                e,
-              );
-            }
-
-            console.log(
-              "Utilisateur ITC connecté : " +
-                (currentUser.name || currentUser.nom || currentUser.email),
-            );
-          } else {
-            console.error("Profil introuvable pour cet email : " + user.email);
-            // Optionnel : déconnecter si l'email n'est pas autorisé dans l'ERP
-            // firebase.auth().signOut();
-          }
-        } else {
-          // Gestion de la déconnexion : on affiche le login
-          document.getElementById("login-screen").classList.remove("hidden");
-          document.getElementById("main-app").classList.add("hidden");
-          currentUser = null;
-        }
-      });
       function logout() {
         // 1. Déconnexion de Firebase Auth
         firebase
@@ -1384,10 +1340,9 @@
           if (menuItcB02) {
             let showItcB02 = false;
             if (r === "SUPERVISEUR") showItcB02 = true;
-            if (r === "GESTIONNAIRE" && Array.isArray(currentUser.managedOps)) {
-              showItcB02 = currentUser.managedOps
-                .map((o) => String(o).toUpperCase())
-                .includes("ITC-B02");
+            if (r === "GESTIONNAIRE") {
+              const managedNorm = getManagedOpsNormalized(currentUser);
+              showItcB02 = managedNorm.includes("ITC-B02");
             }
             menuItcB02.classList.toggle("hidden", !showItcB02);
           }
@@ -1403,14 +1358,12 @@
             let showItcB01 = false;
             // Afficher pour le superviseur et aussi pour la coordinatrice
             if (r === "SUPERVISEUR" || r === "COORDINATRICE") showItcB01 = true;
-            if (r === "GESTIONNAIRE" && Array.isArray(currentUser.managedOps)) {
-              const managed = currentUser.managedOps.map((o) =>
-                String(o).toUpperCase(),
-              );
+            if (r === "GESTIONNAIRE") {
+              const managedNorm = getManagedOpsNormalized(currentUser);
               showItcB01 =
                 showItcB01 ||
-                managed.includes("ITC-B01") ||
-                managed.includes("ITC");
+                managedNorm.includes("ITC-B01") ||
+                managedNorm.some((m) => m.startsWith("ITC"));
             }
             menuItcB01.classList.toggle("hidden", !showItcB01);
           }
@@ -1475,6 +1428,47 @@
         if (normalized.includes("ITC")) return "ITC-B01";
 
         return normalized || "ITC-B01";
+      }
+
+      function getManagedOpsNormalized(user) {
+        if (!user) return [];
+
+        const raw = user.managedOps;
+        let ops = [];
+
+        if (Array.isArray(raw)) {
+          ops = raw;
+        } else if (typeof raw === "string") {
+          ops = raw.split(/[;,|]/g);
+        } else if (raw && typeof raw === "object") {
+          // Support Firebase object-like arrays: {0: "ITC-B01", 1: "MTN", ...}
+          ops = Object.values(raw);
+        }
+
+        const normalized = ops
+          .map((o) => normalizeOperatorKey(String(o || "")))
+          .filter(Boolean);
+
+        if (normalized.length === 0) {
+          const fingerprint =
+            `${String(user.name || "")} ${String(user.email || "")}`.toUpperCase();
+          if (
+            fingerprint.includes("BUREAU 01") ||
+            fingerprint.includes("GEST@ITC.CI") ||
+            fingerprint.includes("B01")
+          ) {
+            normalized.push("ITC-B01");
+          }
+          if (
+            fingerprint.includes("BUREAU 02") ||
+            fingerprint.includes("GEST_B02@ITC.CI") ||
+            fingerprint.includes("B02")
+          ) {
+            normalized.push("ITC-B02");
+          }
+        }
+
+        return [...new Set(normalized)];
       }
 
       // Convertit une étiquette en clé sûre pour Firebase Realtime Database
@@ -5035,14 +5029,8 @@
         // If operator selected is generic "ITC", map it to the specific bureau
         try {
           const sel = String(mat.op || "").toUpperCase();
-          if (
-            sel === "ITC" &&
-            currentUser &&
-            Array.isArray(currentUser.managedOps)
-          ) {
-            const managed = currentUser.managedOps.map((o) =>
-              String(o).toUpperCase(),
-            );
+          if (sel === "ITC" && currentUser) {
+            const managed = getManagedOpsNormalized(currentUser);
             // Prefer B02 if the user manages it, otherwise B01 if they manage ITC or B01
             if (managed.includes("ITC-B02")) mat.op = "ITC-B02";
             else if (managed.includes("ITC-B01") || managed.includes("ITC"))
@@ -5098,23 +5086,20 @@
       }
 
       function renderStock(opKey, container) {
-        // 1. Définition des opérateurs à afficher
-        const ops = [opKey.toUpperCase()];
+        // 1. Normalisation de l'opérateur demandé (robuste contre variantes/casse)
+        const opNorm = normalizeOperatorKey(opKey || "");
 
         // Si l'utilisateur est un gestionnaire, vérifier qu'il a le droit de voir ce stock
         try {
           if (
             currentUser &&
-            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE" &&
-            Array.isArray(currentUser.managedOps)
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
           ) {
-            const managed = currentUser.managedOps.map((o) =>
-              String(o).toUpperCase(),
-            );
-            const opUp = String(opKey || "").toUpperCase();
+            const managedNorm = getManagedOpsNormalized(currentUser);
             const allowed =
-              managed.includes(opUp) ||
-              (opUp.startsWith("ITC") && managed.includes("ITC"));
+              managedNorm.includes(opNorm) ||
+              (opNorm.startsWith("ITC") &&
+                managedNorm.some((m) => m.startsWith("ITC")));
             if (!allowed) {
               container.innerHTML = `
               <div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic font-black">
@@ -5129,11 +5114,12 @@
         }
 
         // 2. SÉCURITÉ CRUCIALE : On utilise une liste vide [] si appData.stock n'existe pas encore.
-        // Cela empêche l'erreur "Cannot read properties of undefined (reading 'filter')"
         const fullStock = (appData && appData.stock) || [];
 
-        // 3. Filtrage sécurisé
-        const stockEntite = fullStock.filter((s) => ops.includes(s.op));
+        // 3. Filtrage sécurisé en comparant des clés normalisées
+        const stockEntite = fullStock.filter(
+          (s) => normalizeOperatorKey(String(s.op || "")) === opNorm,
+        );
 
         // 4. Groupe les matériels par type pour affichage en conteneurs
         const byType = {};
@@ -5731,27 +5717,24 @@
         showSection("cockpit");
       }
 
-      // INITIALISATION
-      if (appData.currentUserId) {
-        currentUser = appData.users.find((u) => u.id === appData.currentUserId);
-        if (currentUser) {
-          document.getElementById("login-screen").classList.add("hidden");
-          document.getElementById("main-app").classList.remove("hidden");
-          updateMenuVisibility();
-          updateUserInfo();
-          updateNotifications();
-          showSection(
-            currentUser.role === "Technicien"
-              ? "tech-nouvelle-demande"
-              : "cockpit",
-          );
-        }
-      }
-
-      firebase.auth().onAuthStateChanged((user) => {
+      firebase.auth().onAuthStateChanged(async (user) => {
         if (user) {
+          // Forcer la lecture serveur pour s'assurer d'avoir les données à jour
+          try {
+            await refreshAppDataFromServer();
+          } catch (e) {
+            console.warn(
+              "refreshAppDataFromServer failed on bottom auth state",
+              e,
+            );
+          }
+
           // Un utilisateur est présent dans le cache Firebase
-          const userProfile = appData.users.find((u) => u.email === user.email);
+          const userProfile = (appData.users || []).find(
+            (u) =>
+              String(u.email || "").toLowerCase() ===
+              String(user.email || "").toLowerCase(),
+          );
           if (userProfile) {
             currentUser = userProfile;
             document.getElementById("login-screen").classList.add("hidden");
@@ -5763,6 +5746,10 @@
             if (document.getElementById("app-container").innerHTML === "") {
               showSection("cockpit");
             }
+          } else {
+            console.error(
+              "Profil introuvable pour cet email après refresh : " + user.email,
+            );
           }
         } else {
           // AUCUN utilisateur : On force l'affichage du login
