@@ -949,6 +949,68 @@
         }
       }
 
+      // Force une lecture fraîche côté serveur pour s'assurer d'afficher
+      // l'état le plus récent après un changement d'utilisateur/connexion.
+      function refreshAppDataFromServer() {
+        return db
+          .ref("itc_data")
+          .once("value")
+          .then((snapshot) => {
+            const data = snapshot.val();
+            if (!data) return;
+            appData = normalizeAppData(data);
+
+            try {
+              refreshDesignationsDatalists();
+            } catch (e) {
+              // ignore
+            }
+
+            if (currentUser) {
+              try {
+                updateMenuVisibility();
+                updateUserInfo();
+                updateNotifications();
+              } catch (e) {
+                // ignore
+              }
+            }
+
+            // Rafraîchir la section visible immédiatement
+            try {
+              const container = document.getElementById("app-container");
+              if (container) {
+                if (currentSectionId === "cockpit") renderCockpit(container);
+                else if (currentSectionId === "stats-consommation")
+                  renderStatsConsommation(container);
+                else if (currentSectionId === "archives-consommations")
+                  renderArchivesConsommations(container);
+                else if (currentSectionId === "trafic-audit")
+                  renderTraficAudit(container);
+                else if (currentSectionId === "coord-demandes-tech")
+                  renderCoordFluxTech(container);
+                else if (currentSectionId === "demandes-coordonnatrice")
+                  renderDemandesGestionnaire(container);
+                else if (currentSectionId === "tech-mes-demandes")
+                  renderTechMesDemandes(container);
+                else if (currentSectionId.startsWith("stock-"))
+                  renderStock(
+                    currentSectionId.replace("stock-", ""),
+                    container,
+                  );
+              }
+            } catch (e) {
+              console.warn(
+                "Erreur lors du rafraîchissement de la section après fetch serveur",
+                e,
+              );
+            }
+          })
+          .catch((err) => {
+            console.warn("Erreur refreshAppDataFromServer", err);
+          });
+      }
+
       // Utility: rebuild datalist options from all designations present in appData.stock
       function refreshDesignationsDatalists() {
         if (!appData || !Array.isArray(appData.stock)) return;
@@ -1153,6 +1215,14 @@
                 ? "tech-nouvelle-demande"
                 : "cockpit",
             );
+
+            // Forcer une lecture fraîche côté serveur pour s'assurer que
+            // l'interface montre l'état le plus récent pour ce compte.
+            try {
+              await refreshAppDataFromServer();
+            } catch (e) {
+              console.warn("refresh après login échoué", e);
+            }
           }
         } catch (error) {
           alert("ÉCHEC D'AUTHENTIFICATION : " + error.message);
@@ -1188,6 +1258,17 @@
 
             // 5. Affichage de la section par défaut (Cockpit)
             showSection("cockpit");
+
+            // Forcer un fetch serveur pour s'assurer que les données affichées
+            // correspondent bien à l'état actuel lorsque l'utilisateur change.
+            try {
+              refreshAppDataFromServer();
+            } catch (e) {
+              console.warn(
+                "refreshAppDataFromServer failed on auth state change",
+                e,
+              );
+            }
 
             console.log(
               "Utilisateur ITC connecté : " +
