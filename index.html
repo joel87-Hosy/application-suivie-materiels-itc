@@ -13,6 +13,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
@@ -3552,6 +3553,15 @@
 
                   <button onclick="showSection('cockpit')" class="w-full text-slate-400 text-[8px] uppercase font-black text-center py-2 transition hover:text-slate-600">Retour au tableau de bord</button>
               </div>`;
+
+        if (typeof Html5Qrcode === "undefined") {
+          container.innerHTML = `
+            <div class="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-8 text-center">
+              <h3 class="text-red-600 font-black uppercase mb-3">Scanner indisponible</h3>
+              <p class="text-[10px] text-slate-600 uppercase">La librairie caméra n'a pas été chargée. Vérifiez la connexion internet puis rechargez la page.</p>
+            </div>`;
+          return;
+        }
 
         // --- Initialisation de la caméra (ne s'exécute que si le 'return' plus haut n'a pas été déclenché) ---
         const html5QrCode = new Html5Qrcode("reader");
