@@ -3497,26 +3497,22 @@
         // Vérification de la date à l'ouverture du scanner
         verifierReinitialisationQuotidienne();
 
-        // --- MODIFICATION AJOUTÉE ICI ---
-        // 1. Sécurité : On s'assure que appData existe
+        // Sécurité : On s'assure que appData existe
         if (!appData) return;
 
-        // 2. On récupère la liste des demandes de manière sécurisée
+        // On récupère la liste des demandes de manière sécurisée
         const demandes = appData.demandes || [];
-
-        // 3. Si aucune demande n'existe, on affiche un message et ON ARRÊTE LÀ (return)
-        // Cela évite de lancer la caméra inutilement.
-        if (demandes.length === 0) {
-          container.innerHTML = `<p class="p-10 text-center opacity-50 uppercase font-black">Aucune donnée à scanner pour le moment</p>`;
-          return;
-        }
-        // --------------------------------
 
         container.innerHTML = `
               <div class="max-w-md mx-auto space-y-4">
                   <div class="bg-white p-6 rounded-3xl shadow-xl text-center">
                       <h3 class="mb-4 uppercase text-pink-600 font-black italic">Scanner de Bons ITC</h3>
                       <div id="reader" class="rounded-2xl overflow-hidden border-4 border-slate-100 bg-black"></div>
+                      ${
+                        demandes.length === 0
+                          ? '<p class="mt-3 text-[8px] text-amber-600 uppercase font-black">Aucune demande en attente pour le moment, mais le scanner reste disponible.</p>'
+                          : ""
+                      }
                       <div class="flex justify-center gap-4 mt-4">
                           <button id="torch-button" class="bg-yellow-400 text-slate-900 px-4 py-2 rounded-xl text-[8px] font-black uppercase">
                               <i class="fas fa-lightbulb"></i> Lampe
