@@ -3662,9 +3662,10 @@
               const mon = String(dt.getMonth() + 1).padStart(2, "0");
               const year = dt.getFullYear();
               allMovements.push({
+                ts,
                 date: `${day}/${mon}/${year}`,
                 type: "SORTIE",
-                op: d.op || "ITC",
+                op: normalizeOperatorKey(d.op || "ITC"),
                 item:
                   (d.items || []).map((i) => i.label).join(", ") || "Matériel",
                 qty: (d.items || []).reduce(
@@ -3675,6 +3676,34 @@
               });
             }
           }
+        });
+
+        // Récupération des Sorties physiques (rapports magasin)
+        (appData.sorties || []).forEach((s) => {
+          const ts = getSortieTimestamp(s?.date || "");
+          if (!ts) return;
+          const dt = new Date(ts);
+          if (dt.getMonth() !== month) return;
+
+          const items = getSortieItems(s);
+          const qtyTotal = items.reduce(
+            (sum, i) => sum + (parseInt(i.qty) || 0),
+            0,
+          );
+
+          const day = String(dt.getDate()).padStart(2, "0");
+          const mon = String(dt.getMonth() + 1).padStart(2, "0");
+          const year = dt.getFullYear();
+
+          allMovements.push({
+            ts,
+            date: `${day}/${mon}/${year}`,
+            type: "SORTIE",
+            op: normalizeOperatorKey(s?.op || "ITC"),
+            item: items.map((i) => i.label).join(", ") || s?.ref || "Matériel",
+            qty: qtyTotal,
+            dest: s?.tech || s?.createdBy || "N/A",
+          });
         });
 
         // Récupération des Entrées (notifications) - robust date parsing
@@ -3692,6 +3721,7 @@
             const mon = String(dt.getMonth() + 1).padStart(2, "0");
             const year = dt.getFullYear();
             allMovements.push({
+              ts,
               date: `${day}/${mon}/${year}`,
               type: "ENTRÉE",
               op: "ITC",
@@ -3702,9 +3732,13 @@
           }
         });
 
-        // Tri par date
-        allMovements.sort((a, b) => b.date.localeCompare(a.date));
-
+        // Tri par date/heure (timestamp)
+        allMovements.sort((a, b) => {
+          const ta = Number(a.ts) || 0;
+          const tb = Number(b.ts) || 0;
+          if (tb !== ta) return tb - ta;
+          return String(b.date || "").localeCompare(String(a.date || ""));
+        });
         let html = `
               <table class="w-full text-left border-collapse">
                   <thead>
