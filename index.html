@@ -6750,19 +6750,39 @@
         }
       }
       function renderTraficAudit(container) {
+        const getAuditTimestamp = (dateText) => {
+          const raw = String(dateText || "").trim();
+          const match = raw.match(
+            /(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\D+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/,
+          );
+          if (match) {
+            const day = parseInt(match[1], 10);
+            const month = parseInt(match[2], 10) - 1;
+            const year = parseInt(match[3], 10);
+            const hour = parseInt(match[4] || "0", 10);
+            const minute = parseInt(match[5] || "0", 10);
+            const second = parseInt(match[6] || "0", 10);
+            return new Date(year, month, day, hour, minute, second).getTime();
+          }
+          const parsed = Date.parse(raw);
+          return Number.isNaN(parsed) ? 0 : parsed;
+        };
+
         // 1. SÉCURITÉ : On utilise une liste vide [] si appData.notifications n'existe pas
         // Cela empêche l'erreur "Cannot read properties of undefined (reading 'filter')"
         const sourceNotifications = appData.notifications || [];
 
         // 2. FILTRAGE : On garde ta logique (userId === 1) mais on sécurise le tout
-        // On ajoute .reverse() pour voir les événements récents en premier
+        // Tri explicite pour garantir les événements récents en premier
         const notifs = sourceNotifications
           .filter((n) => n.userId === 1)
           .map((n) => ({
             ...n,
             auditFlux: normalizeAuditFlux(n.auditFlux),
           }))
-          .reverse();
+          .sort(
+            (a, b) => getAuditTimestamp(b?.date) - getAuditTimestamp(a?.date),
+          );
 
         const totalToday = notifs.filter((n) => {
           const d = String(n?.date || "");
