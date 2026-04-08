@@ -151,6 +151,35 @@
         background-color: rgba(30, 64, 175, 0.06);
       }
 
+      .sortie-ref-block {
+        transition:
+          transform 200ms ease,
+          box-shadow 220ms ease,
+          border-color 220ms ease,
+          background-color 220ms ease;
+      }
+
+      .sortie-ref-block:hover {
+        transform: translateY(-2px);
+        border-color: rgba(99, 102, 241, 0.45);
+        box-shadow: 0 16px 30px rgba(79, 70, 229, 0.14);
+      }
+
+      .sortie-report-card {
+        transition:
+          transform 180ms ease,
+          box-shadow 180ms ease,
+          border-color 180ms ease,
+          background-color 180ms ease;
+      }
+
+      .sortie-report-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(148, 163, 184, 0.5);
+        background-color: rgba(248, 250, 252, 0.95);
+        box-shadow: 0 12px 22px rgba(15, 23, 42, 0.08);
+      }
+
       @media (max-width: 768px) {
         body {
           font-size: 11px;
@@ -179,6 +208,11 @@
         .dashboard-hover-alert:hover,
         .dashboard-hover-chart:hover,
         .dashboard-hover-operator:hover {
+          border-color: inherit !important;
+          background: inherit !important;
+        }
+        .sortie-ref-block:hover,
+        .sortie-report-card:hover {
           border-color: inherit !important;
           background: inherit !important;
         }
@@ -3098,6 +3132,184 @@
         return match ? match[1] : "--:--";
       }
 
+      let sortiesCharts = [];
+
+      function destroySortiesCharts() {
+        try {
+          sortiesCharts.forEach((chart) => chart?.destroy?.());
+        } catch (_) {}
+        sortiesCharts = [];
+      }
+
+      function buildSortiesInsights(sortiesList) {
+        const byOperator = {};
+        const byMonth = {};
+        const byDest = {};
+
+        (sortiesList || []).forEach((s) => {
+          const op = String(s?.op || "INCONNU").toUpperCase();
+          const tech = String(s?.tech || "INCONNU").toUpperCase();
+          const ts = getSortieTimestamp(s?.date);
+          const items = getSortieItems(s) || [];
+          const qtyTotal = items.reduce(
+            (sum, it) => sum + (parseInt(it?.qty, 10) || 0),
+            0,
+          );
+
+          byOperator[op] = (byOperator[op] || 0) + qtyTotal;
+          byDest[tech] = (byDest[tech] || 0) + 1;
+
+          if (ts) {
+            const d = new Date(ts);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            byMonth[key] = (byMonth[key] || 0) + qtyTotal;
+          }
+        });
+
+        const sortedMonths = Object.keys(byMonth).sort((a, b) =>
+          a.localeCompare(b),
+        );
+        const monthLabels = sortedMonths.slice(-6).map((key) => {
+          const [yy, mm] = key.split("-");
+          const monthIndex = Math.max(0, Math.min(11, parseInt(mm, 10) - 1));
+          const yearNum = parseInt(yy, 10) || new Date().getFullYear();
+          return typeof getMonthLabel === "function"
+            ? getMonthLabel(monthIndex, yearNum)
+            : `${mm}/${yy}`;
+        });
+        const monthValues = sortedMonths.slice(-6).map((key) => byMonth[key]);
+
+        const topDestPairs = Object.entries(byDest)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 6);
+
+        const opPairs = Object.entries(byOperator).sort((a, b) => b[1] - a[1]);
+
+        return {
+          operatorLabels: opPairs.map(([label]) => label),
+          operatorValues: opPairs.map(([, value]) => value),
+          monthLabels,
+          monthValues,
+          destLabels: topDestPairs.map(([label]) => label),
+          destValues: topDestPairs.map(([, value]) => value),
+        };
+      }
+
+      function renderRapportsSortiesCharts(sortiesList) {
+        destroySortiesCharts();
+        const insights = buildSortiesInsights(sortiesList);
+
+        try {
+          const opCanvas = document.getElementById("sorties-op-chart");
+          if (opCanvas && insights.operatorLabels.length) {
+            const opChart = new Chart(opCanvas.getContext("2d"), {
+              type: "bar",
+              data: {
+                labels: insights.operatorLabels,
+                datasets: [
+                  {
+                    label: "Volume sorti (U)",
+                    data: insights.operatorValues,
+                    backgroundColor: [
+                      "#4f46e5",
+                      "#0891b2",
+                      "#16a34a",
+                      "#ea580c",
+                      "#db2777",
+                      "#7c3aed",
+                    ],
+                    borderRadius: 8,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  y: { beginAtZero: true, ticks: { precision: 0 } },
+                },
+              },
+            });
+            sortiesCharts.push(opChart);
+          }
+        } catch (e) {
+          console.warn("Erreur chart sorties operateur", e);
+        }
+
+        try {
+          const monthCanvas = document.getElementById("sorties-month-chart");
+          if (monthCanvas && insights.monthLabels.length) {
+            const monthChart = new Chart(monthCanvas.getContext("2d"), {
+              type: "line",
+              data: {
+                labels: insights.monthLabels,
+                datasets: [
+                  {
+                    label: "Tendance mensuelle (U)",
+                    data: insights.monthValues,
+                    borderColor: "#4f46e5",
+                    backgroundColor: "rgba(79,70,229,0.16)",
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 3,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  y: { beginAtZero: true, ticks: { precision: 0 } },
+                },
+              },
+            });
+            sortiesCharts.push(monthChart);
+          }
+        } catch (e) {
+          console.warn("Erreur chart sorties mensuel", e);
+        }
+
+        try {
+          const destCanvas = document.getElementById("sorties-dest-chart");
+          if (destCanvas && insights.destLabels.length) {
+            const destChart = new Chart(destCanvas.getContext("2d"), {
+              type: "doughnut",
+              data: {
+                labels: insights.destLabels,
+                datasets: [
+                  {
+                    data: insights.destValues,
+                    backgroundColor: [
+                      "#0f766e",
+                      "#0369a1",
+                      "#4338ca",
+                      "#b45309",
+                      "#be185d",
+                      "#475569",
+                    ],
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: "bottom",
+                    labels: { boxWidth: 10, font: { size: 10 } },
+                  },
+                },
+              },
+            });
+            sortiesCharts.push(destChart);
+          }
+        } catch (e) {
+          console.warn("Erreur chart sorties destinataire", e);
+        }
+      }
+
       function applySortiesSupervisionFilters() {
         const opFilter = (
           document.getElementById("sup-sorties-op")?.value || ""
@@ -3163,6 +3375,10 @@
         const isReadOnly = !!options.readOnly;
         const canEdit = !isReadOnly && canCurrentUserEditSorties();
 
+        const sortedVisibleSorties = [...visibleSorties].sort(
+          (a, b) => getSortieTimestamp(b?.date) - getSortieTimestamp(a?.date),
+        );
+
         if (sorties.length === 0) {
           container.innerHTML =
             '<div class="p-6 text-center text-slate-500">Aucun rapport de sortie enregistré.</div>';
@@ -3175,7 +3391,7 @@
           currentUser &&
           String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE";
 
-        visibleSorties.forEach((s) => {
+        sortedVisibleSorties.forEach((s) => {
           if (isGestionnaire) {
             // group by month-year using sortie date
             const ts = getSortieTimestamp(s.date);
@@ -3224,25 +3440,83 @@
           return tb - ta;
         });
 
+        groups.forEach((group) => {
+          group.sorties.sort(
+            (a, b) => getSortieTimestamp(b?.date) - getSortieTimestamp(a?.date),
+          );
+        });
+
+        const totalSortiesCount = sortedVisibleSorties.length;
+        const totalUnitsOut = sortedVisibleSorties.reduce((sum, s) => {
+          const items = getSortieItems(s) || [];
+          const qty = items.reduce(
+            (acc, it) => acc + (parseInt(it?.qty, 10) || 0),
+            0,
+          );
+          return sum + qty;
+        }, 0);
+        const avgUnitsPerSortie = totalSortiesCount
+          ? (totalUnitsOut / totalSortiesCount).toFixed(1)
+          : "0.0";
+        const latestSortie = sortedVisibleSorties[0] || null;
+        const latestSortieLabel = latestSortie
+          ? `${String(latestSortie.date || "-")} • ${String(latestSortie.op || "-").toUpperCase()}`
+          : "AUCUN MOUVEMENT";
+
         const parts = [];
         parts.push(
-          '<div class="max-w-5xl mx-auto bg-white p-6 rounded-3xl shadow-xl">',
+          '<div class="max-w-6xl mx-auto bg-white p-6 rounded-3xl shadow-xl border border-slate-200">',
         );
         parts.push(
-          '<h3 class="mb-2 uppercase text-indigo-600 font-black">Rapports - Sorties Bon Physique</h3>',
+          '<h3 class="mb-2 uppercase text-indigo-700 font-black flex items-center gap-2"><i class="fas fa-file-lines"></i>Rapports - Sorties Bon Physique</h3>',
         );
+        if (isReadOnly) {
+          parts.push(
+            '<div class="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-50 border border-cyan-200 text-cyan-700 text-[9px] font-black"><i class="fas fa-user-shield"></i>MODE SUPERVISION - CONSULTATION UNIQUEMENT</div>',
+          );
+        }
+        parts.push(
+          '<p class="text-[9px] text-slate-500 mb-4">Classement automatique: du plus récent au plus ancien.</p>',
+        );
+        parts.push('<div class="grid grid-cols-1 xl:grid-cols-4 gap-4 mb-5">');
+        parts.push(
+          '<div class="dashboard-hover-block dashboard-hover-kpi bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-800 text-white border border-indigo-400/30 rounded-2xl p-4 shadow-sm"><p class="text-[9px] text-indigo-100/90 font-black mb-2 flex items-center gap-2"><i class="fas fa-chart-simple text-cyan-300"></i>KPI SYNTHESE</p><div class="grid grid-cols-2 gap-2 text-[9px]"><div class="bg-white/10 rounded-lg px-2 py-2"><div class="opacity-80">SORTIES</div><div class="text-lg font-black">' +
+            escapeHtml(String(totalSortiesCount)) +
+            '</div></div><div class="bg-white/10 rounded-lg px-2 py-2"><div class="opacity-80">UNITES</div><div class="text-lg font-black">' +
+            escapeHtml(String(totalUnitsOut)) +
+            '</div></div><div class="col-span-2 bg-white/10 rounded-lg px-2 py-2"><div class="opacity-80">MOYENNE / SORTIE</div><div class="text-base font-black">' +
+            escapeHtml(String(avgUnitsPerSortie).replace(".", ",")) +
+            ' U</div></div></div><div class="mt-2 text-[8px] text-indigo-100/85">Dernier mouvement: ' +
+            escapeHtml(latestSortieLabel) +
+            "</div></div>",
+        );
+        parts.push(
+          '<div class="dashboard-hover-block dashboard-hover-chart bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"><p class="text-[9px] text-slate-600 font-black mb-2 flex items-center gap-2"><i class="fas fa-chart-column text-indigo-600"></i>VOLUME PAR OPERATEUR</p><div class="h-[180px]"><canvas id="sorties-op-chart"></canvas></div></div>',
+        );
+        parts.push(
+          '<div class="dashboard-hover-block dashboard-hover-chart bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"><p class="text-[9px] text-slate-600 font-black mb-2 flex items-center gap-2"><i class="fas fa-chart-line text-emerald-600"></i>TENDANCE MENSUELLE</p><div class="h-[180px]"><canvas id="sorties-month-chart"></canvas></div></div>',
+        );
+        parts.push(
+          '<div class="dashboard-hover-block dashboard-hover-chart bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"><p class="text-[9px] text-slate-600 font-black mb-2 flex items-center gap-2"><i class="fas fa-user-group text-cyan-600"></i>TOP DESTINATAIRES</p><div class="h-[180px]"><canvas id="sorties-dest-chart"></canvas></div></div>',
+        );
+        parts.push("</div>");
         parts.push('<div class="space-y-4">');
 
         groups.forEach((group) => {
           parts.push(
-            '<div class="sortie-ref-block p-4 rounded-xl border border-indigo-200 bg-indigo-50/40">',
+            '<div class="sortie-ref-block p-4 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50/90 to-white">',
           );
           parts.push('<div class="flex items-center justify-between">');
           parts.push("<div>");
           parts.push(
-            '<p class="text-[10px] font-black text-indigo-700">Référence: ' +
+            '<p class="text-[10px] font-black text-indigo-700 tracking-wide">Référence: ' +
               escapeHtml(group.refLabel) +
               "</p>",
+          );
+          parts.push(
+            '<p class="text-[8px] text-indigo-500 mt-1">' +
+              escapeHtml(String(group.sorties.length || 0)) +
+              " rapport(s)</p>",
           );
           parts.push("</div>");
           parts.push('<div class="flex items-center gap-2">');
@@ -3258,7 +3532,13 @@
 
           // list sorties in this group
           group.sorties.forEach((s) => {
-            parts.push('<div class="mt-3 p-4 bg-white rounded-lg border">');
+            parts.push(
+              '<div class="sortie-report-card mt-3 p-4 bg-white rounded-xl border border-slate-200" data-op="' +
+                escapeHtml(String(s.op || "")) +
+                '" data-date="' +
+                escapeHtml(extractIsoDateFromLocaleString(s.date || "")) +
+                '">',
+            );
             parts.push('<div class="flex justify-between items-start gap-4">');
             // left: details
             parts.push('<div class="min-w-0">');
@@ -3341,6 +3621,7 @@
         parts.push("</div>");
 
         container.innerHTML = parts.join("");
+        renderRapportsSortiesCharts(sortedVisibleSorties);
       }
 
       function editSortieRefBlock(refKeyEncoded) {
