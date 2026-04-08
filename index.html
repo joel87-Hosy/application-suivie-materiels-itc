@@ -69,6 +69,41 @@
         animation: sectionFadeIn 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
       }
 
+      .hover-lift {
+        transition:
+          transform 180ms ease,
+          box-shadow 180ms ease,
+          border-color 180ms ease,
+          background-color 180ms ease;
+        will-change: transform;
+      }
+
+      .hover-lift:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
+      }
+
+      .hover-raise-btn {
+        transition:
+          transform 160ms ease,
+          box-shadow 160ms ease,
+          filter 160ms ease;
+      }
+
+      .hover-raise-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 18px rgba(15, 23, 42, 0.18);
+        filter: saturate(1.06);
+      }
+
+      .table-hover-row {
+        transition: background-color 140ms ease;
+      }
+
+      .table-hover-row:hover {
+        background-color: rgba(30, 64, 175, 0.06);
+      }
+
       @media (max-width: 768px) {
         body {
           font-size: 11px;
@@ -85,6 +120,12 @@
       @media (prefers-reduced-motion: reduce) {
         .ux-reveal {
           animation: none !important;
+        }
+        .hover-lift:hover,
+        .hover-raise-btn:hover {
+          transform: none !important;
+          box-shadow: none !important;
+          filter: none !important;
         }
       }
     </style>
@@ -3502,12 +3543,23 @@
           ).slice(0, 18);
 
           cards.forEach((el, index) => {
+            el.classList.add("hover-lift");
             el.classList.remove("ux-reveal");
             el.style.animationDelay = `${Math.min(index * 40, 500)}ms`;
             // eslint-disable-next-line no-unused-expressions
             void el.offsetWidth;
             el.classList.add("ux-reveal");
           });
+
+          const buttons = Array.from(
+            container.querySelectorAll("button, .cursor-pointer"),
+          );
+          buttons.forEach((btn) => btn.classList.add("hover-raise-btn"));
+
+          const rows = Array.from(
+            container.querySelectorAll("tbody tr, tr.stock-row"),
+          );
+          rows.forEach((row) => row.classList.add("table-hover-row"));
         } catch (e) {
           console.warn("Erreur enhanceSectionUX", e);
         }
