@@ -84,6 +84,52 @@
         box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
       }
 
+      .dashboard-hover-block {
+        transition:
+          transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+          box-shadow 220ms ease,
+          border-color 220ms ease,
+          background-color 220ms ease;
+        will-change: transform;
+      }
+
+      .dashboard-hover-block:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 18px 34px rgba(15, 23, 42, 0.16);
+      }
+
+      .dashboard-hover-kpi:hover {
+        border-color: rgba(59, 130, 246, 0.45);
+        box-shadow:
+          0 18px 30px rgba(15, 23, 42, 0.14),
+          0 0 0 1px rgba(59, 130, 246, 0.22);
+      }
+
+      .dashboard-hover-alert:hover {
+        transform: translateY(-4px) scale(1.01);
+        border-color: rgba(244, 63, 94, 0.4);
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 1) 0%,
+          rgba(254, 242, 242, 1) 100%
+        );
+      }
+
+      .dashboard-hover-chart:hover {
+        transform: translateY(-5px);
+        border-color: rgba(99, 102, 241, 0.4);
+        box-shadow:
+          0 22px 36px rgba(15, 23, 42, 0.15),
+          0 0 0 1px rgba(99, 102, 241, 0.2);
+      }
+
+      .dashboard-hover-operator:hover {
+        transform: translateY(-4px) scale(1.006);
+        box-shadow:
+          0 20px 34px rgba(15, 23, 42, 0.16),
+          0 0 0 1px rgba(51, 65, 85, 0.12);
+      }
+
       .hover-raise-btn {
         transition:
           transform 160ms ease,
@@ -123,10 +169,18 @@
           animation: none !important;
         }
         .hover-lift:hover,
-        .hover-raise-btn:hover {
+        .hover-raise-btn:hover,
+        .dashboard-hover-block:hover {
           transform: none !important;
           box-shadow: none !important;
           filter: none !important;
+        }
+        .dashboard-hover-kpi:hover,
+        .dashboard-hover-alert:hover,
+        .dashboard-hover-chart:hover,
+        .dashboard-hover-operator:hover {
+          border-color: inherit !important;
+          background: inherit !important;
         }
       }
     </style>
@@ -2243,7 +2297,7 @@
         URL.revokeObjectURL(url);
       }
 
-      async function exportArchiveConsommationPDF(keyEncoded) {
+      function exportArchiveConsommationPDF(keyEncoded) {
         const archive = getConsumptionArchiveByKey(keyEncoded);
         if (!archive) return alert("Archive introuvable.");
 
@@ -2251,65 +2305,79 @@
         const doc = new jsPDF();
         const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
 
-        await addLogoToPdf(doc, 14, 8, 34, 14);
+        getLogoDataUrl()
+          .catch(() => "")
+          .then((logoDataUrl) => {
+            if (logoDataUrl) {
+              doc.addImage(logoDataUrl, "PNG", 14, 8, 34, 14);
+            }
 
-        doc.setFontSize(13);
-        doc.text(
-          `Archive Consommation - ${archive.label || archive.key}`,
-          14,
-          20,
-        );
-        doc.setFontSize(9);
-        doc.text(`Archivé le: ${archive.archivedAt || "-"}`, 14, 27);
+            doc.setFontSize(13);
+            doc.text(
+              `Archive Consommation - ${archive.label || archive.key}`,
+              14,
+              20,
+            );
+            doc.setFontSize(9);
+            doc.text(`Archivé le: ${archive.archivedAt || "-"}`, 14, 27);
 
-        for (let index = 0; index < operators.length; index++) {
-          const op = operators[index];
-          const stats = archive.operatorStats?.[op] || {
-            availableTotal: 0,
-            entrantsByDesignation: {},
-            sortantsByDesignation: {},
-          };
+            for (let index = 0; index < operators.length; index++) {
+              const op = operators[index];
+              const stats = archive.operatorStats?.[op] || {
+                availableTotal: 0,
+                entrantsByDesignation: {},
+                sortantsByDesignation: {},
+              };
 
-          const entrantTotal = Object.values(
-            stats.entrantsByDesignation || {},
-          ).reduce((sum, qty) => sum + qty, 0);
-          const sortantTotal = Object.values(
-            stats.sortantsByDesignation || {},
-          ).reduce((sum, qty) => sum + qty, 0);
+              const entrantTotal = Object.values(
+                stats.entrantsByDesignation || {},
+              ).reduce((sum, qty) => sum + qty, 0);
+              const sortantTotal = Object.values(
+                stats.sortantsByDesignation || {},
+              ).reduce((sum, qty) => sum + qty, 0);
 
-          if (index > 0) doc.addPage();
-          if (index > 0) await addLogoToPdf(doc, 14, 8, 34, 14);
+              if (index > 0) {
+                doc.addPage();
+                if (logoDataUrl) {
+                  doc.addImage(logoDataUrl, "PNG", 14, 8, 34, 14);
+                }
+              }
 
-          doc.setFontSize(12);
-          doc.text(`Opérateur: ${op}`, 14, 20);
-          doc.setFontSize(10);
-          doc.text(`Disponible: ${stats.availableTotal || 0} U`, 14, 28);
-          doc.text(`Entrants: ${entrantTotal} U`, 14, 34);
-          doc.text(`Sortants: ${sortantTotal} U`, 14, 40);
+              doc.setFontSize(12);
+              doc.text(`Opérateur: ${op}`, 14, 20);
+              doc.setFontSize(10);
+              doc.text(`Disponible: ${stats.availableTotal || 0} U`, 14, 28);
+              doc.text(`Entrants: ${entrantTotal} U`, 14, 34);
+              doc.text(`Sortants: ${sortantTotal} U`, 14, 40);
 
-          const entrantRows = Object.entries(
-            stats.entrantsByDesignation || {},
-          ).map(([label, qty]) => [label, String(qty)]);
-          doc.autoTable({
-            startY: 48,
-            head: [["Entrants par désignation", "Qté"]],
-            body:
-              entrantRows.length > 0 ? entrantRows : [["Aucune donnée", "0"]],
+              const entrantRows = Object.entries(
+                stats.entrantsByDesignation || {},
+              ).map(([label, qty]) => [label, String(qty)]);
+              doc.autoTable({
+                startY: 48,
+                head: [["Entrants par désignation", "Qté"]],
+                body:
+                  entrantRows.length > 0
+                    ? entrantRows
+                    : [["Aucune donnée", "0"]],
+              });
+
+              const nextStartY = (doc.lastAutoTable?.finalY || 60) + 8;
+              const sortantRows = Object.entries(
+                stats.sortantsByDesignation || {},
+              ).map(([label, qty]) => [label, String(qty)]);
+              doc.autoTable({
+                startY: nextStartY,
+                head: [["Sortants par désignation", "Qté"]],
+                body:
+                  sortantRows.length > 0
+                    ? sortantRows
+                    : [["Aucune donnée", "0"]],
+              });
+            }
+
+            doc.save(`Archive_Consommation_${archive.key || Date.now()}.pdf`);
           });
-
-          const nextStartY = (doc.lastAutoTable?.finalY || 60) + 8;
-          const sortantRows = Object.entries(
-            stats.sortantsByDesignation || {},
-          ).map(([label, qty]) => [label, String(qty)]);
-          doc.autoTable({
-            startY: nextStartY,
-            head: [["Sortants par désignation", "Qté"]],
-            body:
-              sortantRows.length > 0 ? sortantRows : [["Aucune donnée", "0"]],
-          });
-        }
-
-        doc.save(`Archive_Consommation_${archive.key || Date.now()}.pdf`);
       }
 
       async function exportArchiveConsommationExcel(keyEncoded) {
@@ -4753,7 +4821,7 @@
         totalsByOp.forEach((t) => {
           const meta = getOperatorMeta(t.op);
           parts.push(
-            `<div class="p-4 rounded-2xl shadow-lg bg-white text-center border ${meta.border}">`,
+            `<div class="dashboard-hover-block dashboard-hover-kpi p-4 rounded-2xl shadow-lg bg-white text-center border ${meta.border}">`,
           );
           parts.push(
             `<p class="text-[8px] text-slate-500 uppercase font-black flex items-center justify-center gap-2"><i class="fas ${meta.icon}"></i>${escapeHtml(meta.label)}</p>`,
@@ -4769,13 +4837,13 @@
           '<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 italic font-bold mb-6">',
         );
         parts.push(
-          '<div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-yellow-500"><p class="text-[8px] text-slate-400 uppercase font-black flex items-center gap-2"><i class="fas fa-hourglass-half text-yellow-500"></i>COMMANDES EN ATTENTE</p>',
+          '<div class="dashboard-hover-block dashboard-hover-alert bg-white p-6 rounded-3xl shadow-lg border-t-4 border-yellow-500"><p class="text-[8px] text-slate-400 uppercase font-black flex items-center gap-2"><i class="fas fa-hourglass-half text-yellow-500"></i>COMMANDES EN ATTENTE</p>',
         );
         parts.push(
           `<p class="text-3xl text-slate-800 mt-1">${pending}</p></div>`,
         );
         parts.push(
-          '<div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500"><p class="text-[8px] text-slate-400 uppercase font-black tracking-widest flex items-center gap-2"><i class="fas fa-triangle-exclamation text-red-500"></i>ALERTES RUPTURE</p>',
+          '<div class="dashboard-hover-block dashboard-hover-alert bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500"><p class="text-[8px] text-slate-400 uppercase font-black tracking-widest flex items-center gap-2"><i class="fas fa-triangle-exclamation text-red-500"></i>ALERTES RUPTURE</p>',
         );
         parts.push(`<p class="text-3xl text-red-600 mt-1">${alerts}</p>`);
         parts.push('<div class="text-[10px] text-slate-600 mt-2 space-y-1">');
@@ -4795,10 +4863,10 @@
 
         parts.push('<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">');
         parts.push(
-          '<div class="bg-white p-5 rounded-3xl shadow-lg border border-slate-200"><h4 class="text-[10px] font-black text-slate-600 mb-4 flex items-center gap-2"><i class="fas fa-chart-column text-indigo-600"></i>REPARTITION STOCK PAR OPERATEUR</h4><div class="h-[260px]"><canvas id="cockpit-stock-chart"></canvas></div></div>',
+          '<div class="dashboard-hover-block dashboard-hover-chart bg-white p-5 rounded-3xl shadow-lg border border-slate-200"><h4 class="text-[10px] font-black text-slate-600 mb-4 flex items-center gap-2"><i class="fas fa-chart-column text-indigo-600"></i>REPARTITION STOCK PAR OPERATEUR</h4><div class="h-[260px]"><canvas id="cockpit-stock-chart"></canvas></div></div>',
         );
         parts.push(
-          '<div class="bg-white p-5 rounded-3xl shadow-lg border border-slate-200"><h4 class="text-[10px] font-black text-slate-600 mb-4 flex items-center gap-2"><i class="fas fa-chart-pie text-rose-500"></i>REPARTITION DES ALERTES</h4><div class="h-[260px]"><canvas id="cockpit-alert-chart"></canvas></div></div>',
+          '<div class="dashboard-hover-block dashboard-hover-chart bg-white p-5 rounded-3xl shadow-lg border border-slate-200"><h4 class="text-[10px] font-black text-slate-600 mb-4 flex items-center gap-2"><i class="fas fa-chart-pie text-rose-500"></i>REPARTITION DES ALERTES</h4><div class="h-[260px]"><canvas id="cockpit-alert-chart"></canvas></div></div>',
         );
         parts.push("</div>");
 
@@ -4811,7 +4879,7 @@
               String(key || "").toUpperCase(),
           );
           parts.push(
-            `<div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 ${meta.border}">`,
+            `<div class="dashboard-hover-block dashboard-hover-operator bg-white p-6 rounded-3xl shadow-xl border-l-8 ${meta.border}">`,
           );
           parts.push(
             `<h3 class="text-xl font-black mb-6 uppercase text-indigo-900 flex items-center gap-2"><i class="fas ${meta.icon}"></i>${escapeHtml(meta.label)}</h3>`,
