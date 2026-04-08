@@ -6249,7 +6249,123 @@
         el.style.display = shouldShow ? "block" : "none";
       }
 
+      let stockConsultationCharts = [];
+
+      function destroyStockConsultationCharts() {
+        try {
+          stockConsultationCharts.forEach((chart) => chart?.destroy?.());
+        } catch (_) {}
+        stockConsultationCharts = [];
+      }
+
+      function renderStockConsultationCharts(stockEntite) {
+        destroyStockConsultationCharts();
+
+        const safeStock = Array.isArray(stockEntite) ? stockEntite : [];
+        if (!safeStock.length) return;
+
+        try {
+          const byType = {};
+          safeStock.forEach((s) => {
+            const t = String(s?.type || "NON DÉFINI").toUpperCase();
+            byType[t] = (byType[t] || 0) + (parseInt(s?.qty, 10) || 0);
+          });
+          const typeLabels = Object.keys(byType);
+          const typeValues = typeLabels.map((k) => byType[k]);
+
+          const pieCanvas = document.getElementById("stock-type-chart");
+          if (pieCanvas && typeLabels.length) {
+            const typeChart = new Chart(pieCanvas.getContext("2d"), {
+              type: "doughnut",
+              data: {
+                labels: typeLabels,
+                datasets: [
+                  {
+                    data: typeValues,
+                    backgroundColor: [
+                      "#4f46e5",
+                      "#0ea5e9",
+                      "#16a34a",
+                      "#f59e0b",
+                      "#e11d48",
+                      "#64748b",
+                      "#7c3aed",
+                    ],
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: "bottom",
+                    labels: { boxWidth: 10, font: { size: 10 } },
+                  },
+                },
+              },
+            });
+            stockConsultationCharts.push(typeChart);
+          }
+        } catch (e) {
+          console.warn("Erreur chart stock par type", e);
+        }
+
+        try {
+          const topItems = [...safeStock]
+            .sort(
+              (a, b) =>
+                (parseInt(b?.qty, 10) || 0) - (parseInt(a?.qty, 10) || 0),
+            )
+            .slice(0, 8);
+          const labels = topItems.map((s) =>
+            String(s?.label || "-").toUpperCase(),
+          );
+          const values = topItems.map((s) => parseInt(s?.qty, 10) || 0);
+
+          const barCanvas = document.getElementById("stock-top-items-chart");
+          if (barCanvas && labels.length) {
+            const topChart = new Chart(barCanvas.getContext("2d"), {
+              type: "bar",
+              data: {
+                labels,
+                datasets: [
+                  {
+                    label: "Quantité disponible",
+                    data: values,
+                    backgroundColor: "rgba(79, 70, 229, 0.78)",
+                    borderRadius: 8,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: {
+                    ticks: {
+                      maxRotation: 0,
+                      minRotation: 0,
+                      callback: (value, index) => {
+                        const txt = labels[index] || "";
+                        return txt.length > 12 ? txt.slice(0, 12) + "..." : txt;
+                      },
+                    },
+                  },
+                  y: { beginAtZero: true, ticks: { precision: 0 } },
+                },
+              },
+            });
+            stockConsultationCharts.push(topChart);
+          }
+        } catch (e) {
+          console.warn("Erreur chart top stock", e);
+        }
+      }
+
       function renderStock(opKey, container) {
+        destroyStockConsultationCharts();
         // 1. Normalisation de l'opérateur demandé (robuste contre variantes/casse)
         const opNorm = normalizeOperatorKey(opKey || "");
 
@@ -6282,6 +6398,22 @@
           (s) => normalizeOperatorKey(String(s.op || "")) === opNorm,
         );
 
+        const operatorMeta =
+          typeof getOperatorMeta === "function"
+            ? getOperatorMeta(opNorm)
+            : { label: String(opKey || "").toUpperCase(), icon: "fa-cubes" };
+
+        const totalUnits = stockEntite.reduce(
+          (sum, s) => sum + (parseInt(s.qty, 10) || 0),
+          0,
+        );
+        const lowStockCount = stockEntite.filter(
+          (s) => (parseInt(s.qty, 10) || 0) < 5,
+        ).length;
+        const uniqueTypesCount = new Set(
+          stockEntite.map((s) => String(s.type || "NON DÉFINI").toUpperCase()),
+        ).size;
+
         // 4. Groupe les matériels par type pour affichage en conteneurs
         const byType = {};
         stockEntite.forEach((s) => {
@@ -6293,14 +6425,48 @@
         const types = Object.keys(byType).sort();
 
         let html = `
-          <div class="bg-white rounded-3xl shadow-xl overflow-hidden font-bold italic">
-              <div class="p-6 bg-slate-900 text-white flex justify-between items-center">
-                  <h3 class="text-xl uppercase font-black tracking-widest italic">
-                      <i class="fas fa-cubes mr-2 opacity-50"></i> STOCK ${opKey.toUpperCase().replace("-", "/")}
-                  </h3>
-                  <span class="bg-slate-700 px-3 py-1 rounded-xl text-xs">${stockEntite.length} Réf.</span>
+          <div class="bg-white rounded-3xl shadow-xl overflow-hidden font-bold italic border border-slate-200">
+              <div class="p-6 bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-800 text-white">
+                <div class="flex justify-between items-center gap-3 flex-wrap">
+                  <div>
+                    <p class="text-[8px] tracking-[0.18em] opacity-75">CONSULTATION STOCK</p>
+                    <h3 class="text-xl uppercase font-black tracking-widest italic mt-1 flex items-center gap-2">
+                      <i class="fas ${escapeHtml(String(operatorMeta.icon || "fa-cubes"))} text-cyan-300"></i> ${escapeHtml(String(operatorMeta.label || opKey || "STOCK"))}
+                    </h3>
+                  </div>
+                  <span class="bg-white/15 px-3 py-1 rounded-xl text-xs border border-white/20">${stockEntite.length} Réf.</span>
+                </div>
               </div>
-              <div class="p-6 space-y-4">
+              <div class="p-6 space-y-5">
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div class="dashboard-hover-block dashboard-hover-kpi rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                    <p class="text-[8px] text-slate-500 uppercase">Références</p>
+                    <p class="text-xl text-slate-800 font-black mt-1">${stockEntite.length}</p>
+                  </div>
+                  <div class="dashboard-hover-block dashboard-hover-kpi rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                    <p class="text-[8px] text-slate-500 uppercase">Unités en stock</p>
+                    <p class="text-xl text-indigo-700 font-black mt-1">${totalUnits}</p>
+                  </div>
+                  <div class="dashboard-hover-block dashboard-hover-alert rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                    <p class="text-[8px] text-slate-500 uppercase">Alertes rupture</p>
+                    <p class="text-xl ${lowStockCount > 0 ? "text-red-600" : "text-emerald-600"} font-black mt-1">${lowStockCount}</p>
+                  </div>
+                  <div class="dashboard-hover-block dashboard-hover-kpi rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                    <p class="text-[8px] text-slate-500 uppercase">Types de matériel</p>
+                    <p class="text-xl text-cyan-700 font-black mt-1">${uniqueTypesCount}</p>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <div class="dashboard-hover-block dashboard-hover-chart bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                    <p class="text-[9px] text-slate-600 font-black mb-2 flex items-center gap-2"><i class="fas fa-chart-pie text-indigo-600"></i>RÉPARTITION PAR TYPE</p>
+                    <div class="h-[220px]"><canvas id="stock-type-chart"></canvas></div>
+                  </div>
+                  <div class="dashboard-hover-block dashboard-hover-chart bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                    <p class="text-[9px] text-slate-600 font-black mb-2 flex items-center gap-2"><i class="fas fa-chart-column text-emerald-600"></i>TOP ARTICLES PAR QUANTITÉ</p>
+                    <div class="h-[220px]"><canvas id="stock-top-items-chart"></canvas></div>
+                  </div>
+                </div>
         `;
 
         if (stockEntite.length === 0) {
@@ -6314,7 +6480,7 @@
           types.forEach((type) => {
             const items = byType[type];
             html += `
-              <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div class="dashboard-hover-block rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
                 <div class="flex items-center justify-between mb-3">
                   <div>
                     <h4 class="text-[11px] font-black uppercase text-indigo-900">${escapeHtml(type)}</h4>
@@ -6328,7 +6494,7 @@
                       ${items
                         .map(
                           (s) => `
-                            <tr class="hover:bg-indigo-50 transition duration-150">
+                            <tr class="stock-row hover:bg-indigo-50 transition duration-150">
                               <td class="py-3 text-xs font-black uppercase">${escapeHtml(
                                 s.label,
                               )}</td>
@@ -6365,6 +6531,7 @@
 
         html += `</div></div>`;
         container.innerHTML = html;
+        renderStockConsultationCharts(stockEntite);
       }
 
       // Ouvre un modal permettant de transférer un article dans un autre conteneur (type)
