@@ -2262,7 +2262,8 @@
         doc.setFontSize(9);
         doc.text(`Archivé le: ${archive.archivedAt || "-"}`, 14, 27);
 
-        operators.forEach((op, index) => {
+        for (let index = 0; index < operators.length; index++) {
+          const op = operators[index];
           const stats = archive.operatorStats?.[op] || {
             availableTotal: 0,
             entrantsByDesignation: {},
@@ -2306,7 +2307,7 @@
             body:
               sortantRows.length > 0 ? sortantRows : [["Aucune donnée", "0"]],
           });
-        });
+        }
 
         doc.save(`Archive_Consommation_${archive.key || Date.now()}.pdf`);
       }
@@ -2381,7 +2382,8 @@
           await addLogoToWorksheet(workbook, worksheet);
           worksheet.getCell("D1").value = "ARCHIVE CONSOMMATION";
           worksheet.getCell("D2").value = archive.label || archive.key || "";
-          worksheet.getCell("D3").value = `Archivé le: ${archive.archivedAt || "-"}`;
+          worksheet.getCell("D3").value =
+            `Archivé le: ${archive.archivedAt || "-"}`;
 
           worksheet.columns = [
             { header: "Mois", key: "Mois", width: 20 },
@@ -3458,7 +3460,8 @@
 
         let cursorY = 36;
 
-        sorties.forEach((s, idx) => {
+        for (let idx = 0; idx < sorties.length; idx++) {
+          const s = sorties[idx];
           if (cursorY > pageHeight - 45) {
             doc.addPage();
             await addLogoToPdf(doc, 14, 8, 34, 14);
@@ -3487,7 +3490,7 @@
           });
 
           cursorY = (doc.lastAutoTable?.finalY || cursorY + 36) + 8;
-        });
+        }
 
         doc.save(`Rapports_Sorties_${refKey}_${Date.now()}.pdf`);
       }
