@@ -565,6 +565,7 @@
                 <i class="fas fa-box w-5 text-gray-400"></i> STOCK ITC BUREAU 02
               </div>
               <div
+                id="menu-stock-oci"
                 onclick="
                   showSection('stock-oci');
                   toggleSidebarMobile();
@@ -574,6 +575,7 @@
                 <i class="fas fa-box w-5 text-orange-400"></i> STOCK OCI
               </div>
               <div
+                id="menu-stock-cic"
                 onclick="
                   showSection('stock-cic');
                   toggleSidebarMobile();
@@ -583,6 +585,7 @@
                 <i class="fas fa-box w-5 text-orange-300"></i> STOCK CIC
               </div>
               <div
+                id="menu-stock-moov"
                 onclick="
                   showSection('stock-moov');
                   toggleSidebarMobile();
@@ -592,6 +595,7 @@
                 <i class="fas fa-box w-5 text-blue-400"></i> STOCK MOOV
               </div>
               <div
+                id="menu-stock-mtn"
                 onclick="
                   showSection('stock-mtn');
                   toggleSidebarMobile();
@@ -1369,6 +1373,46 @@
           // ignore
         }
 
+        // 8. Menu spécifique : STOCK MOOV (visible seulement au superviseur
+        // ou au gestionnaire qui gère MOOV, normalement bureau 02)
+        try {
+          const menuMoov = document.getElementById("menu-stock-moov");
+          if (menuMoov) {
+            let showMoov = false;
+            if (r === "SUPERVISEUR") showMoov = true;
+            if (r === "GESTIONNAIRE") {
+              const managedNorm = getManagedOpsNormalized(currentUser);
+              showMoov = managedNorm.includes("MOOV");
+            }
+            menuMoov.classList.toggle("hidden", !showMoov);
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // 9. Menus OCI/CIC/MTN : pour un gestionnaire, visibles seulement
+        // s'il gère l'opérateur concerné.
+        try {
+          const stockMenusByOp = [
+            { id: "menu-stock-oci", op: "OCI" },
+            { id: "menu-stock-cic", op: "CIC" },
+            { id: "menu-stock-mtn", op: "MTN" },
+          ];
+
+          stockMenusByOp.forEach(({ id, op }) => {
+            const menu = document.getElementById(id);
+            if (!menu) return;
+
+            let show = true;
+            if (r === "GESTIONNAIRE") {
+              show = isOperatorAllowedForUser(currentUser, op);
+            }
+            menu.classList.toggle("hidden", !show);
+          });
+        } catch (e) {
+          // ignore
+        }
+
         console.log("Mise à jour des menus terminée.");
       }
       function updateUserInfo() {
@@ -1428,6 +1472,61 @@
         return normalized || "ITC-B01";
       }
 
+      function isGestionnaireUser(user) {
+        return (
+          String(user?.role || "")
+            .trim()
+            .toUpperCase() === "GESTIONNAIRE"
+        );
+      }
+
+      function isOperatorAllowedForUser(user, opValue) {
+        if (!isGestionnaireUser(user)) return true;
+
+        const managed = new Set(getManagedOpsNormalized(user));
+        const raw = String(opValue || "")
+          .trim()
+          .toUpperCase();
+
+        // "ITC" est une valeur UI générique : autoriser si l'utilisateur gère
+        // un des bureaux ITC.
+        if (raw === "ITC") {
+          return (
+            managed.has("ITC") ||
+            managed.has("ITC-B01") ||
+            managed.has("ITC-B02")
+          );
+        }
+
+        // Variantes Orange/OCI-CIC -> droits OCI/CIC.
+        if (["ORANGE", "OCI-CIC", "ORANGE/OCI"].includes(raw)) {
+          return managed.has("OCI") || managed.has("CIC");
+        }
+
+        return managed.has(normalizeOperatorKey(raw));
+      }
+
+      function constrainOperatorSelectForCurrentUser(selectId) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+
+        const options = Array.from(select.options || []);
+        let firstAllowed = "";
+
+        options.forEach((opt) => {
+          const value = String(opt.value || "");
+          if (!value) return;
+          const allowed = isOperatorAllowedForUser(currentUser, value);
+          opt.hidden = !allowed;
+          opt.disabled = !allowed;
+          if (allowed && !firstAllowed) firstAllowed = value;
+        });
+
+        if (!isOperatorAllowedForUser(currentUser, select.value)) {
+          select.value = firstAllowed || "";
+        }
+      }
+
       function getManagedOpsNormalized(user) {
         if (!user) return [];
 
@@ -1464,6 +1563,23 @@
         }
         if (isBureau02) {
           normalized.push("ITC-B02", "MOOV");
+        }
+
+        // Règle métier stricte : le gestionnaire Bureau 01 ne doit jamais gérer MOOV.
+        // Si des droits hérités/anciens existent dans managedOps, on les retire.
+        if (isBureau01 && !isBureau02) {
+          for (let i = normalized.length - 1; i >= 0; i--) {
+            if (normalized[i] === "MOOV") normalized.splice(i, 1);
+          }
+        }
+
+        // Règle métier stricte : le gestionnaire Bureau 02 ne doit jamais gérer
+        // ITC-B01, OCI, CIC, MTN. Si des droits hérités existent, on les retire.
+        if (isBureau02 && !isBureau01) {
+          const forbidden = new Set(["ITC-B01", "OCI", "CIC", "MTN"]);
+          for (let i = normalized.length - 1; i >= 0; i--) {
+            if (forbidden.has(normalized[i])) normalized.splice(i, 1);
+          }
         }
 
         if (normalized.length === 0) {
@@ -2167,6 +2283,8 @@
                       </div>
                   </form>
               </div>`;
+
+        constrainOperatorSelectForCurrentUser("s-op");
       }
 
       // Fonction pour ajouter une ligne d'article dynamiquement
@@ -2188,6 +2306,10 @@
         if (!appData.stock) appData.stock = [];
 
         const op = document.getElementById("s-op").value;
+        if (!isOperatorAllowedForUser(currentUser, op)) {
+          alert("Accès refusé pour cet opérateur.");
+          return;
+        }
         const opKey = normalizeOperatorKey(op);
         const ref = document.getElementById("s-ref").value.toUpperCase();
         const tech = document.getElementById("s-tech").value.toUpperCase();
@@ -2471,7 +2593,10 @@
           document.body.appendChild(modal);
         }
 
-        const operators = ["ITC", "ORANGE", "MOOV", "MTN"];
+        let operators = ["ITC", "ORANGE", "MOOV", "MTN"].filter((op) =>
+          isOperatorAllowedForUser(currentUser, op),
+        );
+        if (operators.length === 0) operators = ["ITC"];
 
         modal.innerHTML = `
                 <div class="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] italic font-bold">
@@ -2551,6 +2676,10 @@
           .getElementById("edit-sortie-op")
           .value.toUpperCase()
           .trim();
+        if (!isOperatorAllowedForUser(currentUser, newOp)) {
+          alert("Action non autorisée pour cet opérateur.");
+          return;
+        }
         const newTech = document
           .getElementById("edit-sortie-tech")
           .value.toUpperCase()
@@ -4662,6 +4791,8 @@
                   </form>
               </div>`;
 
+        constrainOperatorSelectForCurrentUser("d-op");
+
         // On ajoute une première ligne vide au démarrage
         addDirectRow();
       }
@@ -4749,6 +4880,10 @@
           status: "EN ATTENTE GESTIONNAIRE",
           date: new Date().toLocaleDateString(),
         };
+        if (!isOperatorAllowedForUser(currentUser, c.op)) {
+          alert("Accès refusé pour cet opérateur.");
+          return;
+        }
         appData.demandes.unshift(c);
         // Notification au gestionnaire : validation requise (utilise la selection si fournie)
         if (c.assignedGestionnaireId) {
@@ -5025,6 +5160,8 @@
                   </form>
               </div>`;
 
+        constrainOperatorSelectForCurrentUser("r-op");
+
         const matInput = document.getElementById("r-mat");
         if (matInput) {
           matInput.value = String(saved.mat || "").toUpperCase();
@@ -5090,8 +5227,9 @@
           console.warn("Erreur initialisation add-type listener", e);
         }
 
-        // On réinitialise l'affichage de la quantité selon la sélection par défaut (ITC)
-        toggleQtyField("ITC");
+        // On réinitialise l'affichage de la quantité selon l'opérateur visible.
+        const rOp = document.getElementById("r-op");
+        toggleQtyField(rOp ? rOp.value : "ITC");
       }
 
       function handleRec(e) {
@@ -5107,6 +5245,10 @@
           qty: parseInt(document.getElementById("r-qty").value) || 0,
           type: document.getElementById("r-type").value.toUpperCase(),
         };
+        if (!isOperatorAllowedForUser(currentUser, mat.op)) {
+          alert("Accès refusé pour cet opérateur.");
+          return;
+        }
         // If operator selected is generic "ITC", map it to the specific bureau
         try {
           const sel = String(mat.op || "").toUpperCase();
@@ -5508,7 +5650,15 @@
 
         const auditSelect = document.getElementById("audit-flow-select");
         if (auditSelect) {
+          constrainOperatorSelectForCurrentUser("audit-flow-select");
           auditSelect.value = currentAuditFlow;
+          if (!isOperatorAllowedForUser(currentUser, auditSelect.value)) {
+            const firstAllowed = Array.from(auditSelect.options || []).find(
+              (o) => !o.disabled && !o.hidden,
+            );
+            if (firstAllowed) currentAuditFlow = firstAllowed.value;
+            auditSelect.value = currentAuditFlow;
+          }
         }
         applyAuditFlowFilter();
       }
