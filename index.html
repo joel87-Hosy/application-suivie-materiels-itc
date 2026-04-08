@@ -52,6 +52,41 @@
         font-weight: bold;
         z-index: 9999;
       }
+
+      /* UX premium: reveal animations + responsive text rhythm */
+      @keyframes sectionFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .ux-reveal {
+        animation: sectionFadeIn 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+
+      @media (max-width: 768px) {
+        body {
+          font-size: 11px;
+        }
+        #view-title {
+          font-size: 11px;
+          letter-spacing: 0.06em;
+        }
+        #app-container {
+          padding: 0.75rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ux-reveal {
+          animation: none !important;
+        }
+      }
     </style>
   </head>
   <body
@@ -2240,9 +2275,20 @@
         const container = document.getElementById("app-container");
         container.innerHTML = `
               <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
-                  <h3 class="mb-8 border-b-4 border-red-600 pb-2 text-red-900 uppercase font-black italic">
-                      <i class="fas fa-file-signature mr-2"></i> Sortie sur Bon Physique
-                  </h3>
+                  <div class="mb-8 rounded-2xl p-5 bg-gradient-to-r from-red-700 via-rose-700 to-orange-600 text-white">
+                      <div class="flex items-center justify-between gap-4 flex-wrap">
+                        <div>
+                          <p class="text-[8px] tracking-[0.2em] opacity-80">TRAÇABILITÉ MAGASIN</p>
+                          <h3 class="mt-1 text-xl uppercase font-black italic">
+                            <i class="fas fa-file-signature mr-2"></i> Sortie sur Bon Physique
+                          </h3>
+                        </div>
+                        <div class="bg-white/20 px-4 py-2 rounded-xl text-center min-w-[140px]">
+                          <p class="text-[8px] uppercase">Lignes brouillon</p>
+                          <p class="text-2xl font-black">${Array.isArray(saved.items) ? saved.items.length : 1}</p>
+                        </div>
+                      </div>
+                  </div>
                   <form onsubmit="handleSortiePhysique(event)" class="space-y-6">
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border-2">
                           <div>
@@ -2277,9 +2323,9 @@
                         <p class="text-[7px] text-slate-400 uppercase">Suggestions issues du stock (tous opérateurs)</p>
                       </div>
 
-                      <div class="flex gap-4">
-                          <button type="button" onclick="addArticleRowSortie()" class="bg-slate-200 text-slate-700 px-6 py-3 rounded-xl text-[9px] uppercase font-black">+ Ajouter un article</button>
-                          <button type="submit" class="flex-1 bg-red-600 text-white py-4 rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-black transition">Confirmer la Sortie de Stock</button>
+                        <div class="flex gap-4">
+                          <button type="button" onclick="addArticleRowSortie()" class="bg-slate-200 text-slate-700 px-6 py-3 rounded-xl text-[9px] uppercase font-black inline-flex items-center gap-2"><i class="fas fa-plus"></i> Ajouter un article</button>
+                          <button type="submit" class="flex-1 bg-red-600 text-white py-4 rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-black transition inline-flex items-center justify-center gap-2"><i class="fas fa-check-circle"></i> Confirmer la Sortie de Stock</button>
                       </div>
                   </form>
               </div>`;
@@ -3437,6 +3483,36 @@
         renderCoordCreationDirecte(document.getElementById("main-content"));
       }
       // --- SECTION ROUTER ---
+      function enhanceSectionUX(id) {
+        try {
+          const container = document.getElementById("app-container");
+          if (!container) return;
+
+          // Animate section root
+          container.classList.remove("ux-reveal");
+          // Force reflow to restart animation when navigating quickly
+          void container.offsetWidth;
+          container.classList.add("ux-reveal");
+
+          // Stagger key cards for richer perceived performance
+          const cards = Array.from(
+            container.querySelectorAll(
+              ".rounded-3xl, .rounded-2xl, .audit-flow-card, .sortie-report-card, tr.stock-row",
+            ),
+          ).slice(0, 18);
+
+          cards.forEach((el, index) => {
+            el.classList.remove("ux-reveal");
+            el.style.animationDelay = `${Math.min(index * 40, 500)}ms`;
+            // eslint-disable-next-line no-unused-expressions
+            void el.offsetWidth;
+            el.classList.add("ux-reveal");
+          });
+        } catch (e) {
+          console.warn("Erreur enhanceSectionUX", e);
+        }
+      }
+
       function showSection(id) {
         currentSectionId = id;
         const container = document.getElementById("app-container");
@@ -3502,6 +3578,8 @@
         } else {
           container.innerHTML = `<div class="p-10 text-center opacity-50 uppercase font-black">Section "${id}" en cours de déploiement...</div>`;
         }
+
+        enhanceSectionUX(id);
 
         // 5. GESTION DES NOTIFICATIONS (Après le rendu)
         const sectionsANotifs = [
@@ -4214,6 +4292,161 @@
       });
 
       // --- COCKPIT & ALERTES ---
+      let cockpitCharts = [];
+
+      function destroyCockpitCharts() {
+        try {
+          cockpitCharts.forEach((chart) => chart?.destroy?.());
+        } catch (_) {}
+        cockpitCharts = [];
+      }
+
+      function getOperatorMeta(op) {
+        const key = normalizeOperatorKey(op);
+        const map = {
+          "ITC-B01": {
+            icon: "fa-building",
+            label: "ITC BUREAU 01",
+            color: "#4338ca",
+            badge: "bg-indigo-50 text-indigo-700",
+            border: "border-indigo-300",
+          },
+          "ITC-B02": {
+            icon: "fa-building-user",
+            label: "ITC BUREAU 02",
+            color: "#0f766e",
+            badge: "bg-teal-50 text-teal-700",
+            border: "border-teal-300",
+          },
+          OCI: {
+            icon: "fa-signal",
+            label: "OCI",
+            color: "#f97316",
+            badge: "bg-orange-50 text-orange-700",
+            border: "border-orange-300",
+          },
+          CIC: {
+            icon: "fa-network-wired",
+            label: "CIC",
+            color: "#fb7185",
+            badge: "bg-rose-50 text-rose-700",
+            border: "border-rose-300",
+          },
+          MTN: {
+            icon: "fa-tower-cell",
+            label: "MTN",
+            color: "#eab308",
+            badge: "bg-yellow-50 text-yellow-700",
+            border: "border-yellow-300",
+          },
+          MOOV: {
+            icon: "fa-satellite-dish",
+            label: "MOOV",
+            color: "#0284c7",
+            badge: "bg-sky-50 text-sky-700",
+            border: "border-sky-300",
+          },
+        };
+        return (
+          map[key] || {
+            icon: "fa-box",
+            label: key,
+            color: "#64748b",
+            badge: "bg-slate-100 text-slate-700",
+            border: "border-slate-300",
+          }
+        );
+      }
+
+      function renderCockpitCharts(totalsByOp, perOperatorAlerts) {
+        destroyCockpitCharts();
+        if (typeof Chart === "undefined") return;
+
+        try {
+          const stockCanvas = document.getElementById("cockpit-stock-chart");
+          if (stockCanvas) {
+            const stockChart = new Chart(stockCanvas.getContext("2d"), {
+              type: "bar",
+              data: {
+                labels: totalsByOp.map((t) => getOperatorMeta(t.op).label),
+                datasets: [
+                  {
+                    data: totalsByOp.map((t) => parseInt(t.total) || 0),
+                    backgroundColor: totalsByOp.map(
+                      (t) => getOperatorMeta(t.op).color,
+                    ),
+                    borderRadius: 10,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: {
+                    grid: { display: false },
+                    ticks: {
+                      color: "#475569",
+                      font: { size: 10, weight: "bold" },
+                    },
+                  },
+                  y: {
+                    beginAtZero: true,
+                    ticks: { color: "#64748b", font: { size: 10 } },
+                    grid: { color: "rgba(148,163,184,0.2)" },
+                  },
+                },
+              },
+            });
+            cockpitCharts.push(stockChart);
+          }
+        } catch (e) {
+          console.warn("Erreur cockpit stock chart", e);
+        }
+
+        try {
+          const alertCanvas = document.getElementById("cockpit-alert-chart");
+          if (alertCanvas) {
+            const alertChart = new Chart(alertCanvas.getContext("2d"), {
+              type: "doughnut",
+              data: {
+                labels: totalsByOp.map((t) => getOperatorMeta(t.op).label),
+                datasets: [
+                  {
+                    data: totalsByOp.map(
+                      (t) => Array.from(perOperatorAlerts[t.op] || []).length,
+                    ),
+                    backgroundColor: totalsByOp.map(
+                      (t) => getOperatorMeta(t.op).color,
+                    ),
+                    borderWidth: 0,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: "bottom",
+                    labels: {
+                      boxWidth: 10,
+                      usePointStyle: true,
+                      font: { size: 10 },
+                    },
+                  },
+                },
+                cutout: "58%",
+              },
+            });
+            cockpitCharts.push(alertChart);
+          }
+        } catch (e) {
+          console.warn("Erreur cockpit alert chart", e);
+        }
+      }
+
       function renderCockpit(container) {
         const stock = appData.stock || [];
         const demandes = appData.demandes || [];
@@ -4233,17 +4466,21 @@
         try {
           if (
             currentUser &&
-            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE" &&
-            Array.isArray(currentUser.managedOps) &&
-            currentUser.managedOps.length > 0
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
           ) {
-            operatorsForTotals = currentUser.managedOps.map((o) =>
-              String(o || "").toUpperCase(),
-            );
+            const managed = new Set(getManagedOpsNormalized(currentUser));
+            const cockpitOrder = [
+              "ITC-B01",
+              "OCI",
+              "CIC",
+              "MTN",
+              "ITC-B02",
+              "MOOV",
+            ];
+            operatorsForTotals = cockpitOrder.filter((op) => managed.has(op));
           }
         } catch (e) {}
 
-        // per-operator low stock sets
         const perOperatorAlerts = {};
         try {
           const normalizedTargets = (operatorsForTotals || []).map(
@@ -4279,72 +4516,100 @@
             .reduce((sum, it) => sum + (parseInt(it.qty) || 0), 0),
         }));
 
-        // build html safely
+        const roleLabel = String(
+          currentUser?.role || "UTILISATEUR",
+        ).toUpperCase();
+        const roleName = String(currentUser?.name || "").toUpperCase();
+
         const parts = [];
         parts.push(
-          '<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6 font-black">',
+          '<div class="mb-6 rounded-3xl p-5 bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-800 text-white shadow-2xl">',
+        );
+        parts.push(
+          '<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">',
+        );
+        parts.push(
+          '<div><p class="text-[9px] tracking-[0.2em] opacity-70">TABLEAU DE BORD PROFESSIONNEL</p>',
+        );
+        parts.push(
+          `<h2 class="text-xl md:text-2xl font-black mt-1"><i class="fas fa-gauge-high mr-2 text-cyan-300"></i>${escapeHtml(roleLabel)}</h2>`,
+        );
+        parts.push(
+          `<p class="text-[10px] opacity-80 mt-1">${escapeHtml(roleName)} - VUE OPERATIONNELLE DES STOCKS</p></div>`,
+        );
+        parts.push(
+          `<div class="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl border border-white/20 text-[10px]"><i class="fas fa-layer-group"></i><span>${totalsByOp.length} BLOCS ACTIFS</span></div>`,
+        );
+        parts.push("</div></div>");
+
+        parts.push(
+          '<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6 font-black">',
         );
         totalsByOp.forEach((t) => {
+          const meta = getOperatorMeta(t.op);
           parts.push(
-            '<div class="p-4 rounded-2xl shadow-lg bg-white text-center">',
+            `<div class="p-4 rounded-2xl shadow-lg bg-white text-center border ${meta.border}">`,
           );
           parts.push(
-            `<p class="text-[8px] text-slate-500 uppercase font-black">STOCK ${escapeHtml(t.op)}</p>`,
+            `<p class="text-[8px] text-slate-500 uppercase font-black flex items-center justify-center gap-2"><i class="fas ${meta.icon}"></i>${escapeHtml(meta.label)}</p>`,
           );
           parts.push(
-            `<p class="text-2xl font-black text-indigo-900">${t.total} U</p>`,
+            `<p class="text-2xl font-black text-indigo-900 mt-1">${t.total} U</p>`,
           );
           parts.push("</div>");
         });
         parts.push("</div>");
 
         parts.push(
-          '<div class="grid grid-cols-1 md:grid-cols-2 gap-8 italic font-bold">',
+          '<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 italic font-bold mb-6">',
         );
         parts.push(
-          '<div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-yellow-500">',
+          '<div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-yellow-500"><p class="text-[8px] text-slate-400 uppercase font-black flex items-center gap-2"><i class="fas fa-hourglass-half text-yellow-500"></i>COMMANDES EN ATTENTE</p>',
         );
         parts.push(
-          '<p class="text-[8px] text-slate-400 uppercase font-black">Commandes en attente</p>',
-        );
-        parts.push(`<p class="text-3xl text-slate-800">${pending}</p>`);
-        parts.push("</div>");
-
-        parts.push(
-          '<div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500">',
+          `<p class="text-3xl text-slate-800 mt-1">${pending}</p></div>`,
         );
         parts.push(
-          '<p class="text-[8px] text-slate-400 uppercase font-black tracking-widest">Alertes Rupture</p>',
+          '<div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500"><p class="text-[8px] text-slate-400 uppercase font-black tracking-widest flex items-center gap-2"><i class="fas fa-triangle-exclamation text-red-500"></i>ALERTES RUPTURE</p>',
         );
-        parts.push(`<p class="text-3xl text-red-600">${alerts}</p>`);
-        // per-operator details
-        parts.push('<div class="text-[10px] text-slate-600 mt-2">');
+        parts.push(`<p class="text-3xl text-red-600 mt-1">${alerts}</p>`);
+        parts.push('<div class="text-[10px] text-slate-600 mt-2 space-y-1">');
         const ops = Object.keys(perOperatorAlerts || {});
         if (!ops || ops.length === 0) {
-          parts.push("Aucun matériel en rupture");
+          parts.push("AUCUN MATERIEL EN RUPTURE");
         } else {
           ops.forEach((opNorm) => {
             const labels = Array.from(perOperatorAlerts[opNorm] || []);
+            const meta = getOperatorMeta(opNorm);
             parts.push(
-              `<div class="mb-1"><strong class="uppercase">${escapeHtml(opNorm)}</strong>: ${labels.length} - ${labels.length > 0 ? escapeHtml(labels.join(", ")) : "-"}</div>`,
+              `<div><strong class="uppercase"><i class="fas ${meta.icon} mr-1"></i>${escapeHtml(meta.label)}</strong>: ${labels.length} - ${labels.length > 0 ? escapeHtml(labels.join(", ")) : "-"}</div>`,
             );
           });
         }
-        parts.push("</div></div>");
+        parts.push("</div></div></div>");
 
-        // groups per operator
+        parts.push('<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">');
+        parts.push(
+          '<div class="bg-white p-5 rounded-3xl shadow-lg border border-slate-200"><h4 class="text-[10px] font-black text-slate-600 mb-4 flex items-center gap-2"><i class="fas fa-chart-column text-indigo-600"></i>REPARTITION STOCK PAR OPERATEUR</h4><div class="h-[260px]"><canvas id="cockpit-stock-chart"></canvas></div></div>',
+        );
+        parts.push(
+          '<div class="bg-white p-5 rounded-3xl shadow-lg border border-slate-200"><h4 class="text-[10px] font-black text-slate-600 mb-4 flex items-center gap-2"><i class="fas fa-chart-pie text-rose-500"></i>REPARTITION DES ALERTES</h4><div class="h-[260px]"><canvas id="cockpit-alert-chart"></canvas></div></div>',
+        );
+        parts.push("</div>");
+
         const groupsToShow = operatorsForTotals;
         groupsToShow.forEach((key) => {
+          const meta = getOperatorMeta(key);
           const group = stock.filter(
             (s) =>
               String(s.op || "").toUpperCase() ===
               String(key || "").toUpperCase(),
           );
           parts.push(
-            '<div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 border-slate-200">',
+            `<div class="bg-white p-6 rounded-3xl shadow-xl border-l-8 ${meta.border}">`,
           );
           parts.push(
-            `<h3 class="text-xl font-black mb-6 uppercase text-indigo-900">${escapeHtml(key)}</h3>`,
+            `<h3 class="text-xl font-black mb-6 uppercase text-indigo-900 flex items-center gap-2"><i class="fas ${meta.icon}"></i>${escapeHtml(meta.label)}</h3>`,
           );
           parts.push('<div class="space-y-2">');
           if (group.length > 0) {
@@ -4355,9 +4620,9 @@
                   .toUpperCase()
                   .startsWith("ITC") && qtyVal < 5
                   ? "text-red-600 bg-red-50"
-                  : "text-indigo-600 bg-indigo-50";
+                  : meta.badge;
               parts.push(
-                '<div class="flex.justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">',
+                '<div class="flex justify-between p-3 bg-slate-50 rounded-xl border items-center transition hover:bg-white">',
               );
               parts.push(
                 `<span class="w-1/2 truncate uppercase">${escapeHtml(m.label)}</span>`,
@@ -4387,13 +4652,14 @@
             });
           } else {
             parts.push(
-              '<p class="text-[8px] text-slate-400 opacity-50">Aucun matériel répertorié</p>',
+              '<p class="text-[8px] text-slate-400 opacity-50">AUCUN MATERIEL REPERTORIE</p>',
             );
           }
           parts.push("</div></div>");
         });
 
         container.innerHTML = parts.join("");
+        renderCockpitCharts(totalsByOp, perOperatorAlerts);
       }
       function ouvrirModifStock(op, label) {
         const item = appData.stock.find(
@@ -4436,15 +4702,35 @@
             ["EN ATTENTE GESTIONNAIRE", "PRET", "LIVREE"].includes(d.status),
         );
 
+        const kpiReady = myBS.filter((d) => d.status === "PRET").length;
+        const kpiDelivered = myBS.filter((d) => d.status === "LIVREE").length;
+        const kpiPending = myBS.filter(
+          (d) => d.status === "EN ATTENTE GESTIONNAIRE",
+        ).length;
+
         // Optionnel : On inverse pour voir les plus récents en premier
         // myBS.reverse();
 
         // 3. AFFICHAGE
         container.innerHTML = `
               <div class="bg-white rounded-3xl p-8 shadow-xl italic font-bold h-full">
-                  <h3 class="border-b-2 mb-6 uppercase text-pink-600 font-black italic">
-                      <i class="fas fa-file-invoice mr-2"></i> Mes Bons de Sortie (Disponibles)
-                  </h3>
+                  <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-fuchsia-700 via-pink-600 to-rose-500 text-white">
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p class="text-[8px] tracking-[0.2em] opacity-80">ESPACE TECHNICIEN</p>
+                        <h3 class="text-xl font-black mt-1"><i class="fas fa-file-invoice mr-2"></i>Mes Bons de Sortie</h3>
+                      </div>
+                      <div class="bg-white/20 px-4 py-2 rounded-xl text-center min-w-[110px]">
+                        <p class="text-[8px] uppercase">Total</p>
+                        <p class="text-2xl font-black">${myBS.length}</p>
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mt-3 text-[8px]">
+                      <div class="bg-white/20 rounded-lg px-2 py-1 text-center">EN ATTENTE: ${kpiPending}</div>
+                      <div class="bg-white/20 rounded-lg px-2 py-1 text-center">PRÊTS: ${kpiReady}</div>
+                      <div class="bg-white/20 rounded-lg px-2 py-1 text-center">LIVRÉS: ${kpiDelivered}</div>
+                    </div>
+                  </div>
 
                   <div class="grid grid-cols-1 gap-4 overflow-y-auto custom-scrollbar pr-2 max-h-[500px]">
                       ${
@@ -4452,7 +4738,7 @@
                           ? myBS
                               .map(
                                 (bs) => `
-                          <div class="bg-slate-50 p-5 rounded-2xl border border-slate-100 flex justify-between items-center hover:shadow-md transition duration-200">
+                            <div class="bg-slate-50 p-5 rounded-2xl border border-slate-100 flex justify-between items-center hover:shadow-md transition duration-200 gap-3 flex-wrap">
                               <div>
                                   <p class="text-indigo-900 font-black text-sm">
                                       <span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[8px] mr-2">BS</span>
@@ -4470,7 +4756,7 @@
                                   </p>
                               </div>
 
-                              <button onclick="downloadPDF('${bs.id}')" class="bg-indigo-600 text-white px-5 py-3 rounded-xl text-[9px] font-black uppercase shadow-lg hover:bg-indigo-700 hover:scale-105 transition transform">
+                                <button onclick="downloadPDF('${bs.id}')" class="bg-indigo-600 text-white px-5 py-3 rounded-xl text-[9px] font-black uppercase shadow-lg hover:bg-indigo-700 hover:scale-105 transition transform inline-flex items-center gap-2">
                                   <i class="fas fa-file-pdf mr-2"></i> PDF
                               </button>
                           </div>
@@ -4489,10 +4775,14 @@
       }
       function renderTechDemandeForm(container) {
         container.innerHTML = `
-              <div class="max-w-xl mx-auto bg-white p-8 rounded-3xl shadow-xl italic font-bold">
-                  <h3 class="mb-6 uppercase text-indigo-600 border-b-2 pb-2 font-black italic">
-                      <i class="fas fa-user-edit mr-2"></i> Identification & Besoins
-                  </h3>
+              <div class="max-w-2xl mx-auto bg-white p-8 rounded-3xl shadow-xl italic font-bold">
+                  <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-indigo-800 via-blue-700 to-cyan-600 text-white">
+                    <p class="text-[8px] tracking-[0.2em] opacity-80">SAISIE TERRAIN</p>
+                    <h3 class="mt-1 uppercase text-xl font-black italic">
+                        <i class="fas fa-user-edit mr-2"></i> Identification & Besoins
+                    </h3>
+                    <p class="text-[8px] opacity-80 mt-1">Remplissez précisément pour accélérer la préparation.</p>
+                  </div>
                   <form onsubmit="handleTechSubmit(event)" class="space-y-4">
                       <div class="grid grid-cols-2 gap-4">
                           <div>
@@ -4512,7 +4802,8 @@
                           <label class="text-[8px] text-slate-400 uppercase">Détails matériel & Quantités demandés</label>
                           <textarea id="t-besoin" class="w-full border-2 p-3 rounded-xl text-xs h-32 uppercase bg-slate-50 outline-none focus:border-indigo-500" placeholder="EX: 5X CONNECTEURS, 1X ROUTEUR..." required></textarea>
                       </div>
-                      <button type="submit" class="w-full bg-indigo-600 text-white py-4 rounded-2xl text-[10px] uppercase font-black shadow-lg hover:bg-indigo-700 transition">
+                        <button type="submit" class="w-full bg-indigo-600 text-white py-4 rounded-2xl text-[10px] uppercase font-black shadow-lg hover:bg-indigo-700 transition inline-flex items-center justify-center gap-2">
+                          <i class="fas fa-paper-plane"></i>
                           Envoyer à la coordination
                       </button>
                   </form>
@@ -4548,17 +4839,32 @@
           (d) => d.statut === "EN ATTENTE COORDINATION",
         );
 
+        const totalTeams = new Set(
+          data.map((d) => String(d.equipe || "").toUpperCase()).filter(Boolean),
+        ).size;
+
         // 3. AFFICHAGE
         container.innerHTML = `
               <div class="bg-white rounded-3xl shadow-xl p-8">
-                  <h3 class="mb-6 uppercase border-b-2 pb-2 text-orange-500 font-black italic">
-                      <i class="fas fa-truck-pickup mr-2"></i> Besoins Techniciens en attente
-                  </h3>
+                  <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-orange-700 via-amber-600 to-yellow-500 text-white">
+                    <div class="flex items-center justify-between gap-4 flex-wrap">
+                      <div>
+                        <p class="text-[8px] tracking-[0.2em] opacity-80">COORDINATION TERRAIN</p>
+                        <h3 class="mt-1 uppercase text-xl font-black italic">
+                          <i class="fas fa-truck-pickup mr-2"></i> Besoins Techniciens en attente
+                        </h3>
+                      </div>
+                      <div class="flex gap-2">
+                        <span class="bg-white/20 px-3 py-2 rounded-xl text-[9px] font-black">BESOINS: ${data.length}</span>
+                        <span class="bg-white/20 px-3 py-2 rounded-xl text-[9px] font-black">ÉQUIPES: ${totalTeams}</span>
+                      </div>
+                    </div>
+                  </div>
                   <div class="space-y-4">
                       ${data
                         .map(
                           (d) => `
-                          <div class="bg-slate-50 p-5 rounded-2xl border-2 border-slate-100 flex justify-between items-center transition hover:border-orange-300">
+                          <div class="bg-slate-50 p-5 rounded-2xl border-2 border-slate-100 flex justify-between items-center transition hover:border-orange-300 gap-4 flex-wrap">
                               <div class="w-2/3">
                                   <p class="font-black text-indigo-900 text-[11px]">
                                       ${d.technicienNom || "Technicien Inconnu"}
@@ -4577,8 +4883,9 @@
                                   <p class="text-[7px] text-slate-300 mt-2">ÉMIS LE : ${d.date || "Date inconnue"}</p>
                               </div>
 
-                              <div class="text-right">
-                                  <button onclick="preparerCmd('${d.id}')" class="bg-indigo-600 text-white px-6 py-3 rounded-xl text-[9px] uppercase font-black shadow-md hover:bg-indigo-700 transition">
+                                <div class="text-right">
+                                  <button onclick="preparerCmd('${d.id}')" class="bg-indigo-600 text-white px-6 py-3 rounded-xl text-[9px] uppercase font-black shadow-md hover:bg-indigo-700 transition inline-flex items-center gap-2">
+                                    <i class="fas fa-gears"></i>
                                       Traiter & Assigner
                                   </button>
                               </div>
@@ -4913,7 +5220,22 @@
 
       // --- RETOURS TERRAIN ---
       function renderRetourForm(container) {
-        container.innerHTML = `<div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black"><h3 class="mb-6 uppercase text-orange-500 border-b-2 pb-2">Déclarer un Retour</h3><form onsubmit="handleRetourSubmit(event)" class="space-y-4"><input id="ret-label" type="text" placeholder="MATÉRIEL RENDU" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required /><div class="grid grid-cols-2 gap-4"><input id="ret-qty" type="number" placeholder="QTÉ" class="w-full border-2 p-3 rounded-xl text-xs" required min="1" /><select id="ret-etat" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-100"><option value="NEUF">NEUF</option><option value="DÉFECTUEUX">DÉFECTUEUX</option></select></div><textarea id="ret-motif" placeholder="MOTIF DU RETOUR..." class="w-full border-2 p-3 rounded-xl text-xs h-24 uppercase bg-slate-50" required></textarea><button type="submit" class="w-full bg-orange-500 text-white py-4 rounded-2xl text-[10px] uppercase font-black">Valider Retour</button></form></div>`;
+        container.innerHTML = `
+              <div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black">
+                <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-orange-700 via-amber-600 to-yellow-500 text-white">
+                  <p class="text-[8px] tracking-[0.2em] opacity-80">RETOUR TERRAIN</p>
+                  <h3 class="mt-1 uppercase text-xl"><i class="fas fa-rotate-left mr-2"></i>Déclarer un Retour</h3>
+                </div>
+                <form onsubmit="handleRetourSubmit(event)" class="space-y-4">
+                  <input id="ret-label" type="text" placeholder="MATÉRIEL RENDU" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required />
+                  <div class="grid grid-cols-2 gap-4">
+                    <input id="ret-qty" type="number" placeholder="QTÉ" class="w-full border-2 p-3 rounded-xl text-xs" required min="1" />
+                    <select id="ret-etat" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-100"><option value="NEUF">NEUF</option><option value="DÉFECTUEUX">DÉFECTUEUX</option></select>
+                  </div>
+                  <textarea id="ret-motif" placeholder="MOTIF DU RETOUR..." class="w-full border-2 p-3 rounded-xl text-xs h-24 uppercase bg-slate-50" required></textarea>
+                  <button type="submit" class="w-full bg-orange-500 text-white py-4 rounded-2xl text-[10px] uppercase font-black inline-flex items-center justify-center gap-2"><i class="fas fa-paper-plane"></i>Valider Retour</button>
+                </form>
+              </div>`;
       }
 
       function handleRetourSubmit(e) {
@@ -4946,25 +5268,52 @@
           (d) => d.status === "EN ATTENTE GESTIONNAIRE",
         );
 
+        const statsByOp = {};
+        data.forEach((d) => {
+          const op = normalizeOperatorKey(d?.op || "ITC");
+          statsByOp[op] = (statsByOp[op] || 0) + 1;
+        });
+
+        const opsSummary = Object.entries(statsByOp)
+          .map(([op, count]) => {
+            const meta = getOperatorMeta(op);
+            return `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[8px] ${meta.badge}"><i class="fas ${meta.icon}"></i>${escapeHtml(meta.label)}: ${count}</span>`;
+          })
+          .join(" ");
+
         // 3. GÉNÉRATION DE L'INTERFACE
         container.innerHTML = `
               <div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic font-black">
-                  <h3 class="border-b-2 mb-6 uppercase text-yellow-600 font-black italic">
-                      Préparation Commandes
-                  </h3>
+                  <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-amber-700 via-orange-600 to-amber-500 text-white">
+                      <div class="flex items-center justify-between gap-4 flex-wrap">
+                          <div>
+                              <p class="text-[8px] opacity-80 tracking-[0.2em]">WORKFLOW MAGASIN</p>
+                              <h3 class="uppercase text-xl font-black mt-1"><i class="fas fa-clipboard-check mr-2"></i>Préparation Commandes</h3>
+                          </div>
+                          <div class="bg-white/20 px-4 py-2 rounded-xl text-center min-w-[120px]">
+                              <p class="text-[8px] uppercase opacity-90">En attente</p>
+                              <p class="text-2xl font-black">${data.length}</p>
+                          </div>
+                      </div>
+                      <div class="mt-3 flex flex-wrap gap-2">${opsSummary || '<span class="text-[8px] opacity-80">AUCUN FLUX EN ATTENTE</span>'}</div>
+                  </div>
 
-                  <div class="space-y-4">
+                  <div class="space-y-3">
                       ${data
                         .map(
                           (d) => `
-                          <div class="bg-slate-50 p-4 rounded-2xl flex justify-between items-center border hover:border-yellow-200 transition">
-                              <div>
-                                  <p class="font-black text-indigo-900">${d.id} | ${d.demandeurName}</p>
-                                  <p class="text-[7px] text-orange-500 uppercase italic">MOTIF : ${d.motif || "NON PRÉCISÉ"}</p>
+                          <div class="bg-slate-50 p-4 rounded-2xl border hover:border-amber-300 transition shadow-sm">
+                              <div class="flex items-center justify-between gap-3 flex-wrap">
+                                <div>
+                                  <p class="font-black text-indigo-900 flex items-center gap-2"><i class="fas fa-file-signature text-indigo-500"></i>${d.id} | ${d.demandeurName}</p>
+                                  <p class="text-[7px] text-orange-600 uppercase italic mt-1">MOTIF : ${d.motif || "NON PRÉCISÉ"}</p>
+                                  <p class="text-[7px] text-slate-500 uppercase mt-1">Opérateur : ${escapeHtml(getOperatorMeta(d?.op || "ITC").label)}</p>
+                                </div>
+                                <button onclick="prepSortie('${d.id}')" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-indigo-700 transition inline-flex items-center gap-2">
+                                    <i class="fas fa-boxes-stacked"></i>
+                                    Réserver
+                                </button>
                               </div>
-                              <button onclick="prepSortie('${d.id}')" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-indigo-700 transition">
-                                  Réserver
-                              </button>
                           </div>
                       `,
                         )
@@ -4994,17 +5343,41 @@
       function renderLivraisonForm(container) {
         const demandes = appData.demandes || []; // Gilet de sauvetage
         const aLivrer = demandes.filter((d) => d.status === "PREPAREE");
+        const totalItemsToDeliver = aLivrer.reduce(
+          (sum, d) =>
+            sum +
+            ((Array.isArray(d.items) ? d.items : []).reduce(
+              (s, i) => s + (parseInt(i.qty) || 0),
+              0,
+            ) || 0),
+          0,
+        );
 
         container.innerHTML = `
               <div class="bg-white p-8 rounded-3xl shadow-xl italic font-black">
-                  <h3 class="text-green-600 border-b-2 mb-6 uppercase">Sortie Physique (Scanner)</h3>
-                  <div class="space-y-4">
+                  <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-emerald-700 via-green-600 to-lime-500 text-white">
+                    <div class="flex items-center justify-between gap-4 flex-wrap">
+                      <div>
+                        <p class="text-[8px] tracking-[0.2em] opacity-80">OPÉRATIONS DE SORTIE</p>
+                        <h3 class="text-xl uppercase font-black mt-1"><i class="fas fa-truck-fast mr-2"></i>Sortie Physique (Scanner)</h3>
+                      </div>
+                      <div class="flex gap-3">
+                        <div class="bg-white/20 px-3 py-2 rounded-xl text-center min-w-[100px]"><p class="text-[8px] uppercase">Bons prêts</p><p class="text-xl">${aLivrer.length}</p></div>
+                        <div class="bg-white/20 px-3 py-2 rounded-xl text-center min-w-[100px]"><p class="text-[8px] uppercase">Articles</p><p class="text-xl">${totalItemsToDeliver}</p></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="space-y-3">
                       ${aLivrer
                         .map(
                           (d) => `
-                          <div class="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border">
-                              <span class="text-xs">${d.id} - ${d.demandeurName}</span>
-                              <button onclick="validerLivraison('${d.id}')" class="bg-green-600 text-white px-4 py-2 rounded-lg text-[9px] uppercase">Confirmer Sortie</button>
+                          <div class="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border hover:border-green-300 transition shadow-sm gap-3 flex-wrap">
+                              <div>
+                                <p class="text-xs text-slate-800"><i class="fas fa-receipt text-green-600 mr-2"></i>${d.id} - ${d.demandeurName}</p>
+                                <p class="text-[8px] text-slate-500 mt-1 uppercase">${escapeHtml(getOperatorMeta(d?.op || "ITC").label)} • ${Array.isArray(d.items) ? d.items.length : 0} ligne(s)</p>
+                              </div>
+                              <button onclick="validerLivraison('${d.id}')" class="bg-green-600 text-white px-4 py-2 rounded-lg text-[9px] uppercase inline-flex items-center gap-2 hover:bg-green-700 transition"><i class="fas fa-check-circle"></i>Confirmer Sortie</button>
                           </div>
                       `,
                         )
@@ -5048,7 +5421,12 @@
 
         container.innerHTML = `
               <div class="bg-white p-8 rounded-3xl shadow-xl italic font-black">
-                  <h3 class="text-orange-600 border-b-2 mb-6 uppercase">Gestion des Retours Chantier</h3>
+                  <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-amber-700 via-orange-600 to-rose-500 text-white">
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                      <h3 class="text-xl uppercase"><i class="fas fa-arrow-rotate-left mr-2"></i>Gestion des Retours Chantier</h3>
+                      <span class="bg-white/20 px-3 py-1 rounded-lg text-[9px]">EN ATTENTE: ${enAttente.length}</span>
+                    </div>
+                  </div>
                   <div class="space-y-4">
                       ${enAttente.map((r) => `...`).join("")}
                       ${enAttente.length === 0 ? '<p class="text-center opacity-30 py-5 font-black">AUCUN RETOUR À TRAITER</p>' : ""}
@@ -5099,7 +5477,15 @@
         ].sort();
         container.innerHTML = `
               <div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black">
-                  <h3 class="mb-8 uppercase border-b-2 text-indigo-600 italic">Mise en Stock Matériel</h3>
+                  <div class="mb-8 rounded-2xl p-5 bg-gradient-to-r from-indigo-800 via-blue-700 to-cyan-600 text-white">
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p class="text-[8px] tracking-[0.2em] opacity-80">ENTRÉE MAGASIN</p>
+                        <h3 class="mt-1 uppercase text-xl italic"><i class="fas fa-boxes-stacked mr-2"></i>Mise en Stock Matériel</h3>
+                      </div>
+                      <span class="bg-white/20 px-3 py-2 rounded-lg text-[9px]">SUGGESTIONS: ${itcDesignations.length}</span>
+                    </div>
+                  </div>
 
                   <form onsubmit="handleRec(event)" class="space-y-5">
                       <div>
@@ -5154,7 +5540,8 @@
                           <input id="r-qty" type="number" class="w-full border-2 p-3 rounded-xl text-xs bg-slate-50 outline-none focus:border-indigo-500" placeholder="NOMBRE D'UNITÉS" />
                       </div>
 
-                      <button type="submit" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] uppercase font-black transition hover:bg-black shadow-lg">
+                        <button type="submit" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] uppercase font-black transition hover:bg-black shadow-lg inline-flex items-center justify-center gap-2">
+                          <i class="fas fa-circle-check"></i>
                           Confirmer l'Entrée
                       </button>
                   </form>
@@ -5600,26 +5987,46 @@
           }))
           .reverse();
 
+        const totalToday = notifs.filter((n) => {
+          const d = String(n?.date || "");
+          const today = new Date().toLocaleDateString();
+          return d.includes(today);
+        }).length;
+
         container.innerHTML = `
               <div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic uppercase h-full flex flex-col">
-                  <div class="flex justify-between items-center border-b-2 mb-6 pb-4 border-slate-100">
-                      <h3 class="text-blue-600 font-black tracking-tighter italic text-xl">
-                          Journal d'Audit
-                      </h3>
-                      <span id="audit-flow-count" class="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[9px] font-black">
-                          ${notifs.length} ENTRÉES
-                      </span>
+              <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-blue-800 via-cyan-700 to-teal-600 text-white">
+                <div class="flex justify-between items-center gap-4 flex-wrap">
+                  <div>
+                    <p class="text-[8px] tracking-[0.2em] opacity-80">SUPERVISION & TRAÇABILITÉ</p>
+                    <h3 class="font-black tracking-tighter italic text-xl mt-1"><i class="fas fa-shield-halved mr-2"></i>Journal d'Audit</h3>
                   </div>
-                  <div class="mb-4 max-w-sm">
-                      <label class="text-[8px] text-slate-500 uppercase">Filtrer le journal d'audit</label>
-                      <select id="audit-flow-select" onchange="applyAuditFlowFilter()" class="w-full border-2 p-2 rounded-xl text-[9px] font-black uppercase bg-white">
-                          <option value="ITC">Audit flux ITC</option>
-                          <option value="CIC">Audit flux CIC</option>
-                          <option value="OCI">Audit flux OCI</option>
-                          <option value="MOOV">Audit flux MOOV</option>
-                          <option value="MTN">Audit flux MTN</option>
-                      </select>
+                  <div class="flex gap-3">
+                    <span class="bg-white/20 px-3 py-2 rounded-lg text-[9px] font-black">${notifs.length} ENTRÉES</span>
+                    <span class="bg-white/20 px-3 py-2 rounded-lg text-[9px] font-black">${totalToday} AUJOURD'HUI</span>
                   </div>
+                </div>
+                  </div>
+
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+                <div class="lg:col-span-1">
+                <label class="text-[8px] text-slate-500 uppercase">Filtrer le journal d'audit</label>
+                <select id="audit-flow-select" onchange="applyAuditFlowFilter()" class="w-full border-2 p-2 rounded-xl text-[9px] font-black uppercase bg-white">
+                  <option value="ITC">Audit flux ITC</option>
+                  <option value="CIC">Audit flux CIC</option>
+                  <option value="OCI">Audit flux OCI</option>
+                  <option value="MOOV">Audit flux MOOV</option>
+                  <option value="MTN">Audit flux MTN</option>
+                </select>
+                <div class="mt-2">
+                  <span id="audit-flow-count" class="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[9px] font-black inline-flex items-center gap-2"><i class="fas fa-filter"></i>${notifs.length} ENTRÉES</span>
+                </div>
+                </div>
+                <div class="lg:col-span-2 bg-slate-50 rounded-2xl border p-3">
+                  <p class="text-[8px] text-slate-500 mb-2"><i class="fas fa-chart-pie mr-1 text-cyan-600"></i> Répartition des flux audités</p>
+                  <div class="h-[160px]"><canvas id="audit-flow-chart"></canvas></div>
+                </div>
+              </div>
 
                   <div class="space-y-3 overflow-y-auto custom-scrollbar pr-2 max-h-[500px]">
                       ${
@@ -5660,10 +6067,12 @@
             auditSelect.value = currentAuditFlow;
           }
         }
+        renderAuditFlowChart(notifs);
         applyAuditFlowFilter();
       }
 
       let currentAuditFlow = "ITC";
+      let auditFlowChart = null;
 
       function normalizeAuditFlux(fluxValue) {
         const allowedFlows = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
@@ -5671,6 +6080,52 @@
           .trim()
           .toUpperCase();
         return allowedFlows.includes(normalized) ? normalized : "ITC";
+      }
+
+      function renderAuditFlowChart(notifs) {
+        if (typeof Chart === "undefined") return;
+        const canvas = document.getElementById("audit-flow-chart");
+        if (!canvas) return;
+
+        const flows = ["ITC", "CIC", "OCI", "MOOV", "MTN"];
+        const colors = ["#4338ca", "#fb7185", "#f97316", "#0284c7", "#eab308"];
+        const counts = flows.map(
+          (f) =>
+            notifs.filter((n) => normalizeAuditFlux(n.auditFlux) === f).length,
+        );
+
+        try {
+          if (auditFlowChart) auditFlowChart.destroy();
+        } catch (_) {}
+
+        auditFlowChart = new Chart(canvas.getContext("2d"), {
+          type: "doughnut",
+          data: {
+            labels: flows,
+            datasets: [
+              {
+                data: counts,
+                backgroundColor: colors,
+                borderWidth: 0,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: {
+                  boxWidth: 10,
+                  usePointStyle: true,
+                  font: { size: 10 },
+                },
+              },
+            },
+            cutout: "58%",
+          },
+        });
       }
 
       function applyAuditFlowFilter() {
