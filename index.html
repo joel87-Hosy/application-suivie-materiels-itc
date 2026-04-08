@@ -6,6 +6,7 @@
     <title>ITC Telecom ERP | Automation & Stock Expert</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-auth-compat.js"></script>
@@ -149,7 +150,7 @@
         <div class="flex flex-col md:flex-row items-center gap-6">
           <div class="flex-shrink-0 flex items-center justify-center p-2">
             <img
-              src="logo-ITC-NW-01-fond-blanc-01.jpg"
+              src="assets/nouveau-logo-itc.png"
               alt="Logo ITC"
               class="h-28 md:h-36 object-contain"
             />
@@ -379,7 +380,7 @@
             class="p-4 bg-white border-b border-slate-800 flex flex-col items-center shrink-0"
           >
             <img
-              src="logo-ITC-NW-01-fond-blanc-01.jpg"
+              src="assets/nouveau-logo-itc.png"
               alt="Logo ITC"
               class="h-16 lg:h-20 object-contain"
             />
@@ -2161,13 +2162,96 @@
         return archives.find((archive) => archive?.key === key) || null;
       }
 
-      function exportArchiveConsommationPDF(keyEncoded) {
+      const APP_LOGO_PATH = "assets/nouveau-logo-itc.png";
+      let _logoDataUrlPromise = null;
+      let _logoArrayBufferPromise = null;
+
+      async function getLogoDataUrl() {
+        if (_logoDataUrlPromise) return _logoDataUrlPromise;
+        _logoDataUrlPromise = fetch(APP_LOGO_PATH)
+          .then((r) => {
+            if (!r.ok) throw new Error("Logo introuvable");
+            return r.blob();
+          })
+          .then(
+            (blob) =>
+              new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              }),
+          )
+          .catch((e) => {
+            _logoDataUrlPromise = null;
+            throw e;
+          });
+        return _logoDataUrlPromise;
+      }
+
+      async function getLogoArrayBuffer() {
+        if (_logoArrayBufferPromise) return _logoArrayBufferPromise;
+        _logoArrayBufferPromise = fetch(APP_LOGO_PATH)
+          .then((r) => {
+            if (!r.ok) throw new Error("Logo introuvable");
+            return r.arrayBuffer();
+          })
+          .catch((e) => {
+            _logoArrayBufferPromise = null;
+            throw e;
+          });
+        return _logoArrayBufferPromise;
+      }
+
+      async function addLogoToPdf(doc, x = 14, y = 10, w = 40, h = 18) {
+        try {
+          const logoDataUrl = await getLogoDataUrl();
+          doc.addImage(logoDataUrl, "PNG", x, y, w, h);
+        } catch (e) {
+          console.warn("Logo PDF non chargé", e);
+        }
+      }
+
+      async function addLogoToWorksheet(workbook, worksheet) {
+        try {
+          const logoBuffer = await getLogoArrayBuffer();
+          const imageId = workbook.addImage({
+            buffer: logoBuffer,
+            extension: "png",
+          });
+          worksheet.addImage(imageId, {
+            tl: { col: 0, row: 0 },
+            ext: { width: 220, height: 66 },
+          });
+        } catch (e) {
+          console.warn("Logo Excel non chargé", e);
+        }
+      }
+
+      async function saveExcelJsWorkbook(workbook, filename) {
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      async function exportArchiveConsommationPDF(keyEncoded) {
         const archive = getConsumptionArchiveByKey(keyEncoded);
         if (!archive) return alert("Archive introuvable.");
 
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
+
+        await addLogoToPdf(doc, 14, 8, 34, 14);
 
         doc.setFontSize(13);
         doc.text(
@@ -2193,6 +2277,7 @@
           ).reduce((sum, qty) => sum + qty, 0);
 
           if (index > 0) doc.addPage();
+          if (index > 0) await addLogoToPdf(doc, 14, 8, 34, 14);
 
           doc.setFontSize(12);
           doc.text(`Opérateur: ${op}`, 14, 20);
@@ -2226,7 +2311,7 @@
         doc.save(`Archive_Consommation_${archive.key || Date.now()}.pdf`);
       }
 
-      function exportArchiveConsommationExcel(keyEncoded) {
+      async function exportArchiveConsommationExcel(keyEncoded) {
         const archive = getConsumptionArchiveByKey(keyEncoded);
         if (!archive) return alert("Archive introuvable.");
 
@@ -2289,13 +2374,38 @@
           );
         });
 
-        const worksheet = XLSX.utils.json_to_sheet(rows);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Archives");
-        XLSX.writeFile(
-          workbook,
-          `Archive_Consommation_${archive.key || Date.now()}.xlsx`,
-        );
+        try {
+          const workbook = new ExcelJS.Workbook();
+          const worksheet = workbook.addWorksheet("Archives");
+
+          await addLogoToWorksheet(workbook, worksheet);
+          worksheet.getCell("D1").value = "ARCHIVE CONSOMMATION";
+          worksheet.getCell("D2").value = archive.label || archive.key || "";
+          worksheet.getCell("D3").value = `Archivé le: ${archive.archivedAt || "-"}`;
+
+          worksheet.columns = [
+            { header: "Mois", key: "Mois", width: 20 },
+            { header: "Operateur", key: "Operateur", width: 16 },
+            { header: "Disponible", key: "Disponible", width: 12 },
+            { header: "EntrantsTotal", key: "EntrantsTotal", width: 14 },
+            { header: "SortantsTotal", key: "SortantsTotal", width: 14 },
+            { header: "Type", key: "Type", width: 12 },
+            { header: "Designation", key: "Designation", width: 42 },
+            { header: "Quantite", key: "Quantite", width: 12 },
+          ];
+
+          rows.forEach((r) => worksheet.addRow(r));
+          worksheet.spliceRows(4, 0, []);
+          worksheet.getRow(5).font = { bold: true };
+
+          await saveExcelJsWorkbook(
+            workbook,
+            `Archive_Consommation_${archive.key || Date.now()}.xlsx`,
+          );
+        } catch (e) {
+          console.error("Erreur export Excel archive", e);
+          alert("Erreur lors de la génération du fichier Excel (archive).");
+        }
       }
 
       function renderSortiePhysiqueForm() {
@@ -3288,11 +3398,12 @@
         alert("Référence du bloc mise à jour avec succès.");
       }
 
-      function exportSortiePDF(id) {
+      async function exportSortiePDF(id) {
         const s = (appData.sorties || []).find((x) => x.id === id);
         if (!s) return alert("Rapport introuvable");
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
+        await addLogoToPdf(doc, 14, 8, 34, 14);
         doc.setFontSize(12);
         doc.text(`Rapport de Sortie - ${s.ref}`, 14, 20);
         doc.setFontSize(10);
@@ -3313,7 +3424,7 @@
         doc.save(`${s.id}.pdf`);
       }
 
-      function exportSortieRefPDF(refKeyEncoded) {
+      async function exportSortieRefPDF(refKeyEncoded) {
         const refKey = decodeURIComponent(String(refKeyEncoded || ""));
         const sorties = (appData.sorties || [])
           .filter(
@@ -3334,6 +3445,8 @@
         const doc = new jsPDF();
         const pageHeight = doc.internal.pageSize.getHeight();
 
+        await addLogoToPdf(doc, 14, 8, 34, 14);
+
         doc.setFontSize(12);
         doc.text(
           `Rapport de Sortie - Référence ${sorties[0]?.ref || refKey}`,
@@ -3348,6 +3461,7 @@
         sorties.forEach((s, idx) => {
           if (cursorY > pageHeight - 45) {
             doc.addPage();
+            await addLogoToPdf(doc, 14, 8, 34, 14);
             cursorY = 20;
           }
 
@@ -3378,15 +3492,17 @@
         doc.save(`Rapports_Sorties_${refKey}_${Date.now()}.pdf`);
       }
 
-      function exportAllSortiesPDF() {
+      async function exportAllSortiesPDF() {
         const sorties = appData.sorties || [];
         if (sorties.length === 0) return alert("Aucun rapport à exporter");
         // Prépare une concaténation simple : un PDF par sortie fusionné basiquement en séquence
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        let y = 20;
-        sorties.forEach((s, idx) => {
-          if (idx > 0) doc.addPage();
+        for (let i = 0; i < sorties.length; i++) {
+          const s = sorties[i];
+          if (i > 0) doc.addPage();
+          doc.setPage(i + 1);
+          await addLogoToPdf(doc, 14, 8, 34, 14);
           doc.setFontSize(12);
           doc.text(`Rapport de Sortie - ${s.ref}`, 14, 20);
           doc.setFontSize(10);
@@ -3407,7 +3523,7 @@
                 ? body
                 : [["Détail des articles indisponible", "-"]],
           });
-        });
+        }
         doc.save(`Rapports_Sorties_${Date.now()}.pdf`);
       }
       // --- APERÇU ET VALIDATION ---
@@ -4118,7 +4234,7 @@
           },
         });
       }
-      function exportHebdoExcel() {
+      async function exportHebdoExcel() {
         // 1. On récupère le conteneur du rapport
         const content = document.getElementById("hebdo-content");
         const table = content ? content.querySelector("table") : null;
@@ -4136,13 +4252,27 @@
         const monthName = monthSelect.options[monthSelect.selectedIndex].text;
 
         try {
-          // 4. Conversion du tableau HTML en classeur Excel
-          const wb = XLSX.utils.table_to_book(table, {
-            sheet: "Flux Magasin ITC",
-          });
+          const workbook = new ExcelJS.Workbook();
+          const ws = workbook.addWorksheet("Flux Magasin ITC");
 
-          // 5. Génération et téléchargement du fichier
-          XLSX.writeFile(wb, `RAPPORT_FLUX_ITC_${monthName}_2026.xlsx`);
+          await addLogoToWorksheet(workbook, ws);
+          ws.getCell("D1").value = "RAPPORT MENSUEL DES FLUX MAGASIN";
+          ws.getCell("D2").value = `${monthName.toUpperCase()} 2026`;
+
+          const rows = Array.from(table.querySelectorAll("tr")).map((tr) =>
+            Array.from(tr.querySelectorAll("th,td")).map((c) =>
+              String(c.innerText || "").trim(),
+            ),
+          );
+
+          rows.forEach((r) => ws.addRow(r));
+          ws.spliceRows(4, 0, []);
+          if (ws.getRow(5)) ws.getRow(5).font = { bold: true };
+
+          await saveExcelJsWorkbook(
+            workbook,
+            `RAPPORT_FLUX_ITC_${monthName}_2026.xlsx`,
+          );
 
           console.log("✅ Export Excel réussi !");
         } catch (err) {
@@ -4150,7 +4280,7 @@
           alert("Erreur lors de la génération du fichier Excel.");
         }
       }
-      function exportHebdoPDF() {
+      async function exportHebdoPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF("l", "mm", "a4"); // Mode paysage pour plus de colonnes
         const monthName =
@@ -4158,6 +4288,7 @@
             document.getElementById("filter-month").selectedIndex
           ].text;
 
+        await addLogoToPdf(doc, 14, 8, 34, 14);
         doc.setFontSize(14);
         doc.text(
           `RAPPORT MENSUEL DES FLUX MAGASIN - ${monthName.toUpperCase()} 2026`,
@@ -4254,7 +4385,7 @@
         showSection("cockpit");
       }
 
-      function exportStatsToExcel() {
+      async function exportStatsToExcel() {
         const moisNom = new Date().toLocaleString("fr-FR", {
           month: "long",
           year: "numeric",
@@ -4285,16 +4416,35 @@
           dataTechs.push([d.demandeurName, d.motif, d.dateLivraison, qty]);
         });
 
-        // 3. Création du classeur Excel
-        const wb = XLSX.utils.book_new();
-        const ws1 = XLSX.utils.aoa_to_sheet(dataEquipes);
-        const ws2 = XLSX.utils.aoa_to_sheet(dataTechs);
+        try {
+          const wb = new ExcelJS.Workbook();
+          const ws1 = wb.addWorksheet("Résumé Équipes");
+          const ws2 = wb.addWorksheet("Détails Techniciens");
 
-        XLSX.utils.book_append_sheet(wb, ws1, "Résumé Équipes");
-        XLSX.utils.book_append_sheet(wb, ws2, "Détails Techniciens");
+          await addLogoToWorksheet(wb, ws1);
+          await addLogoToWorksheet(wb, ws2);
 
-        // 4. Téléchargement du fichier
-        XLSX.writeFile(wb, `RAPPORT_CONSO_ITC_${moisNom.toUpperCase()}.xlsx`);
+          ws1.getCell("D1").value = "RAPPORT CONSOMMATION ITC";
+          ws1.getCell("D2").value = moisNom.toUpperCase();
+          ws2.getCell("D1").value = "RAPPORT CONSOMMATION ITC";
+          ws2.getCell("D2").value = moisNom.toUpperCase();
+
+          dataEquipes.forEach((r) => ws1.addRow(r));
+          dataTechs.forEach((r) => ws2.addRow(r));
+
+          ws1.spliceRows(4, 0, []);
+          ws2.spliceRows(4, 0, []);
+          ws1.getRow(5).font = { bold: true };
+          ws2.getRow(5).font = { bold: true };
+
+          await saveExcelJsWorkbook(
+            wb,
+            `RAPPORT_CONSO_ITC_${moisNom.toUpperCase()}.xlsx`,
+          );
+        } catch (e) {
+          console.error("Erreur export stats Excel", e);
+          alert("Erreur lors de la génération du fichier Excel.");
+        }
       }
 
       // Sauvegarde locale des champs de réception
@@ -6218,20 +6368,13 @@
         new QRCode(qrContainer, { text: d.id, width: 100, height: 100 });
 
         // Laisser 500ms au navigateur pour dessiner le QR Code
-        setTimeout(() => {
+        setTimeout(async () => {
           try {
             const qrCanvas = qrContainer.querySelector("canvas");
             const qrImage = qrCanvas.toDataURL("image/jpeg");
 
             // Design du PDF
-            doc.addImage(
-              "logo-ITC-NW-01-fond-blanc-01.jpg",
-              "JPEG",
-              15,
-              10,
-              40,
-              20,
-            );
+            await addLogoToPdf(doc, 15, 10, 40, 20);
             doc.addImage(qrImage, "JPEG", 165, 10, 25, 25);
 
             doc.setFontSize(16);
