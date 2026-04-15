@@ -1223,6 +1223,40 @@
         });
       }
 
+      const DEFAULT_MATERIAL_TYPES = [
+        "MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES",
+        "CÂBLES FIBRES OPTIQUES SOUTERRAINS",
+        "CÂBLES FIBRES OPTIQUES AÉRIENS",
+        "MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS",
+        "MATÉRIELS DE PROTECTION ET DE RACCORDEMENT",
+        "MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO",
+        "CONNECTIQUES FO",
+        "MATÉRIELS D'ÉTIQUETAGE",
+        "MATÉRIELS GÉNIE CIVIL (GC)",
+      ];
+
+      function getAvailableMaterialTypes() {
+        const merged = [
+          ...DEFAULT_MATERIAL_TYPES,
+          ...(appData && Array.isArray(appData.materialTypes)
+            ? appData.materialTypes
+            : []),
+          ...((appData && appData.stock) || []).map((s) => s?.type),
+        ];
+
+        return [
+          ...new Set(
+            merged
+              .map((t) =>
+                String(t || "")
+                  .trim()
+                  .toUpperCase(),
+              )
+              .filter((t) => t && t !== "__ADD_NEW__"),
+          ),
+        ].sort();
+      }
+
       // Small transient toast for visual confirmations
       function showTempToast(msg, duration = 2500) {
         try {
@@ -6034,6 +6068,7 @@
               .filter(Boolean),
           ),
         ].sort();
+        const availableMaterialTypes = getAvailableMaterialTypes();
         container.innerHTML = `
               <div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black">
                   <div class="mb-8 rounded-2xl p-5 bg-gradient-to-r from-indigo-800 via-blue-700 to-cyan-600 text-white">
@@ -6061,21 +6096,7 @@
                           <label class="text-[8px] text-slate-400 uppercase ml-1">Type de Matériel</label>
                           <select id="r-type" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50 outline-none focus:border-indigo-500" required>
                               <option value="" disabled selected>-- CHOISIR UN TYPE --</option>
-                              ${(
-                                (appData &&
-                                  Array.isArray(appData.materialTypes) &&
-                                  appData.materialTypes) || [
-                                  "MATÉRIELS POUR CONSTRUCTION D'ARTÈRES AÉRIENNES",
-                                  "CÂBLES FIBRES OPTIQUES SOUTERRAINS",
-                                  "CÂBLES FIBRES OPTIQUES AÉRIENS",
-                                  "MATÉRIELS POUR CONSTRUCTION DE LIGNE D'ABONNÉS",
-                                  "MATÉRIELS DE PROTECTION ET DE RACCORDEMENT",
-                                  "MATÉRIELS DE PROTECTION ET DE RACCORDEMENT FO",
-                                  "CONNECTIQUES FO",
-                                  "MATÉRIELS D'ÉTIQUETAGE",
-                                  "MATÉRIELS GÉNIE CIVIL (GC)",
-                                ]
-                              )
+                              ${availableMaterialTypes
                                 .map(
                                   (t) =>
                                     `<option value="${escapeHtml(String(t || ""))}">${escapeHtml(String(t || ""))}</option>`,
@@ -6140,7 +6161,14 @@
                   if (!Array.isArray(appData.materialTypes))
                     appData.materialTypes = [];
 
-                  if (!appData.materialTypes.includes(newType)) {
+                  if (
+                    !appData.materialTypes.some(
+                      (t) =>
+                        String(t || "")
+                          .trim()
+                          .toUpperCase() === newType,
+                    )
+                  ) {
                     appData.materialTypes.push(newType);
                     // Persist and refresh datalists/DOM
                     save();
@@ -6191,6 +6219,23 @@
           qty: parseInt(document.getElementById("r-qty").value) || 0,
           type: document.getElementById("r-type").value.toUpperCase(),
         };
+        if (!mat.type || mat.type === "__ADD_NEW__") {
+          alert("Veuillez choisir un type de matériel valide.");
+          return;
+        }
+
+        if (!Array.isArray(appData.materialTypes)) appData.materialTypes = [];
+        if (
+          !appData.materialTypes.some(
+            (t) =>
+              String(t || "")
+                .trim()
+                .toUpperCase() === mat.type,
+          )
+        ) {
+          appData.materialTypes.push(mat.type);
+        }
+
         if (!isOperatorAllowedForUser(currentUser, mat.op)) {
           alert("Accès refusé pour cet opérateur.");
           return;
