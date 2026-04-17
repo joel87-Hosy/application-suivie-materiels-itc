@@ -222,6 +222,43 @@
           background: inherit !important;
         }
       }
+
+      @keyframes aiChatFloatIn {
+        from {
+          opacity: 0;
+          transform: translateY(16px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .ai-chatbot-panel {
+        animation: aiChatFloatIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
+        box-shadow:
+          0 28px 80px rgba(15, 23, 42, 0.28),
+          0 0 0 1px rgba(14, 116, 144, 0.12);
+      }
+
+      .ai-chatbot-message {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .ai-chatbot-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .ai-chatbot-scrollbar::-webkit-scrollbar-track {
+        background: rgba(226, 232, 240, 0.65);
+        border-radius: 999px;
+      }
+
+      .ai-chatbot-scrollbar::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, #0f766e 0%, #0ea5e9 100%);
+        border-radius: 999px;
+      }
     </style>
   </head>
   <body
@@ -831,6 +868,130 @@
           </footer>
         </main>
       </div>
+    </div>
+
+    <div
+      id="ai-chatbot-root"
+      class="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[95] flex flex-col items-end gap-3 normal-case not-italic"
+    >
+      <section
+        id="ai-chatbot-panel"
+        class="ai-chatbot-panel hidden w-[calc(100vw-2rem)] max-w-[380px] overflow-hidden rounded-[28px] border border-cyan-950/10 bg-white"
+        aria-label="Assistant IA"
+      >
+        <div class="bg-gradient-to-br from-cyan-950 via-sky-900 to-cyan-700 px-5 py-4 text-white">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100/80">
+                Assistance intelligente
+              </p>
+              <h3 class="mt-1 text-lg font-black tracking-tight">ITC AI Assistant</h3>
+              <p class="mt-1 text-xs text-cyan-50/85">
+                Posez vos questions sur l'application, le stock, les opérations ou le workflow.
+              </p>
+            </div>
+            <button
+              type="button"
+              onclick="toggleChatAssistant(false)"
+              class="rounded-full bg-white/12 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+              aria-label="Fermer l'assistant"
+            >
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="flex flex-wrap gap-2 text-[11px] text-slate-600">
+            <button
+              type="button"
+              onclick="submitChatAssistantPrompt('Comment utiliser ce module ?')"
+              class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold transition hover:border-cyan-500 hover:text-cyan-700"
+            >
+              Utilisation
+            </button>
+            <button
+              type="button"
+              onclick="submitChatAssistantPrompt('Donne-moi un résumé du stock ITC-B01')"
+              class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold transition hover:border-cyan-500 hover:text-cyan-700"
+            >
+              Stock ITC-B01
+            </button>
+            <button
+              type="button"
+              onclick="submitChatAssistantPrompt('Quelles sont mes fonctionnalités selon mon rôle ?')"
+              class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold transition hover:border-cyan-500 hover:text-cyan-700"
+            >
+              Mon rôle
+            </button>
+          </div>
+          <div class="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+            <button
+              type="button"
+              onclick="openChatAssistantAgentContact()"
+              class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-100"
+            >
+              <i class="fas fa-headset mr-1"></i> Parler à un agent
+            </button>
+            <button
+              type="button"
+              onclick="openChatAssistantRequestFlow()"
+              class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 font-semibold text-sky-700 transition hover:bg-sky-100"
+            >
+              <i class="fas fa-file-signature mr-1"></i> Créer une demande
+            </button>
+          </div>
+        </div>
+
+        <div
+          id="ai-chatbot-messages"
+          class="ai-chatbot-scrollbar flex max-h-[55vh] min-h-[280px] flex-col gap-3 overflow-y-auto bg-[linear-gradient(180deg,#f8fafc_0%,#eff6ff_100%)] px-4 py-4"
+        ></div>
+
+        <form
+          id="ai-chatbot-form"
+          onsubmit="handleChatAssistantSubmit(event)"
+          class="border-t border-slate-200 bg-white p-4"
+        >
+          <label for="ai-chatbot-input" class="sr-only">Votre message</label>
+          <div class="flex items-end gap-2">
+            <textarea
+              id="ai-chatbot-input"
+              rows="1"
+              placeholder="Écrivez votre question ici..."
+              class="max-h-32 min-h-[48px] flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
+            ></textarea>
+            <button
+              id="ai-chatbot-send"
+              type="submit"
+              class="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-600 text-white transition hover:bg-cyan-700"
+              aria-label="Envoyer"
+            >
+              <i class="fas fa-paper-plane"></i>
+            </button>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-500">
+            Mode sécurisé disponible via endpoint backend. Gemini direct reste possible en mode fallback.
+          </p>
+        </form>
+      </section>
+
+      <button
+        id="ai-chatbot-toggle"
+        type="button"
+        onclick="toggleChatAssistant()"
+        class="flex items-center gap-3 rounded-full bg-gradient-to-r from-cyan-700 via-sky-600 to-cyan-500 px-5 py-3 text-left text-white shadow-2xl transition hover:-translate-y-0.5 hover:shadow-cyan-900/30"
+        aria-controls="ai-chatbot-panel"
+        aria-expanded="false"
+      >
+        <span class="flex h-11 w-11 items-center justify-center rounded-full bg-white/16 text-lg">
+          <i class="fas fa-robot"></i>
+        </span>
+        <span>
+          <span class="block text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-50/80">AI Help</span>
+          <span class="block text-sm font-black tracking-tight">Assistant IA</span>
+        </span>
+      </button>
     </div>
 
     <script>
@@ -7274,6 +7435,562 @@
           document.getElementById("login-screen").classList.remove("hidden");
           document.getElementById("main-app").classList.add("hidden");
           currentUser = null;
+        }
+      });
+    </script>
+
+    <script>
+      const CHATBOT_STORAGE_KEY = "itc_ai_chat_history_v1";
+      const CHATBOT_REQUEST_MAP = {
+        technicien: "tech-nouvelle-demande",
+        coordinatrice: "coord-creation-directe",
+        gestionnaire: "demandes-coordonnatrice",
+        superviseur: "cockpit",
+      };
+
+      const CHATBOT_INTERNAL_PROCEDURES = [
+        {
+          keywords: ["demande", "commander", "materiel", "matériel", "bon"],
+          title: "Créer une demande de matériel",
+          steps: [
+            "Ouvrez le menu correspondant à votre rôle (Technicien ou Coordinatrice).",
+            "Renseignez l'opérateur, la désignation et la quantité demandée.",
+            "Vérifiez les informations puis validez l'envoi.",
+            "Suivez le statut dans les sections de suivi (Mes Bons, Flux Tech, Commandes).",
+          ],
+        },
+        {
+          keywords: ["retour", "reintegrer", "réintégrer", "stock retour"],
+          title: "Enregistrer un retour de stock",
+          steps: [
+            "Accédez à la section Retour de Stock.",
+            "Sélectionnez la désignation et la quantité retournée.",
+            "Contrôlez l'opérateur concerné avant validation.",
+            "Validez puis vérifiez la mise à jour dans la consultation stock.",
+          ],
+        },
+        {
+          keywords: ["sortie", "livraison", "rapport", "bon physique"],
+          title: "Traiter une sortie et suivre le rapport",
+          steps: [
+            "Créez ou scannez le bon de sortie selon votre processus.",
+            "Confirmez les articles et les quantités réellement sortis.",
+            "Validez la sortie pour mettre à jour le stock.",
+            "Contrôlez ensuite les Rapports Sorties pour audit et suivi.",
+          ],
+        },
+      ];
+
+      const chatAssistantState = {
+        isOpen: false,
+        isThinking: false,
+        messages: [],
+      };
+
+      function getChatAssistantSystemPrompt() {
+        const role = currentUser?.role || "visiteur";
+        const name = currentUser?.name || "utilisateur";
+        return [
+          "Tu es ITC AI Assistant, un assistant IA intégré à une application ERP de gestion de matériels.",
+          "Réponds en français de façon claire, structurée et pragmatique.",
+          "Aide l'utilisateur à comprendre l'application, ses rôles, ses sections, le stock, les commandes, les sorties, les retours et les rapports.",
+          "Si une action exige une opération humaine ou une validation métier, indique-la explicitement.",
+          `Utilisateur connecté: ${name} (${role}).`,
+          `Section active: ${currentSectionId || "cockpit"}.`,
+        ].join("\n");
+      }
+
+      function getChatAssistantBackendConfig() {
+        const endpoint = String(
+          window.ITC_AI_CONFIG?.backendEndpoint ||
+            localStorage.getItem("itc_ai_backend_endpoint") ||
+            "",
+        ).trim();
+        const token = String(
+          window.ITC_AI_CONFIG?.backendToken ||
+            localStorage.getItem("itc_ai_backend_token") ||
+            "",
+        ).trim();
+        return { endpoint, token };
+      }
+
+      function getChatAssistantApiKey() {
+        return String(
+          window.ITC_AI_CONFIG?.apiKey ||
+            localStorage.getItem("itc_ai_gemini_key") ||
+            "",
+        ).trim();
+      }
+
+      function getChatAssistantSupportEmail() {
+        return String(
+          window.ITC_AI_CONFIG?.supportEmail ||
+            localStorage.getItem("itc_ai_support_email") ||
+            "support@itctelecom.local",
+        ).trim();
+      }
+
+      function formatProcedureReply(match) {
+        return [
+          `Procédure interne: ${match.title}`,
+          ...match.steps.map((step, index) => `${index + 1}. ${step}`),
+        ].join("\n");
+      }
+
+      function findInternalProcedure(userText) {
+        const normalized = String(userText || "").toLowerCase();
+        return CHATBOT_INTERNAL_PROCEDURES.find((procedure) =>
+          procedure.keywords.some((keyword) => normalized.includes(keyword)),
+        );
+      }
+
+      function openChatAssistantAgentContact() {
+        const email = getChatAssistantSupportEmail();
+        const subject = encodeURIComponent("Assistance ITC ERP");
+        const lastUserMessage = [...chatAssistantState.messages]
+          .reverse()
+          .find((message) => message.role === "user")?.content;
+        const body = encodeURIComponent(
+          [
+            `Utilisateur: ${currentUser?.name || "N/A"}`,
+            `Rôle: ${currentUser?.role || "N/A"}`,
+            `Section active: ${currentSectionId || "cockpit"}`,
+            "",
+            "Besoin:",
+            lastUserMessage || "Merci de me rappeler pour assistance.",
+          ].join("\n"),
+        );
+
+        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+        appendChatAssistantMessage(
+          "assistant",
+          `J'ouvre le contact agent via ${email}. Décrivez votre besoin puis envoyez le message.`,
+        );
+      }
+
+      function openChatAssistantRequestFlow() {
+        const role = String(currentUser?.role || "").toLowerCase();
+        const targetSection = CHATBOT_REQUEST_MAP[role] || "cockpit";
+
+        try {
+          if (typeof showSection === "function") {
+            showSection(targetSection);
+          }
+          toggleChatAssistant(false);
+          if (typeof showTempToast === "function") {
+            showTempToast("Ouverture du module de demande...");
+          }
+        } catch (e) {
+          console.warn("Impossible d'ouvrir le flux de demande", e);
+        }
+
+        appendChatAssistantMessage(
+          "assistant",
+          `Je vous ai redirigé vers la section ${targetSection.toUpperCase()} pour créer votre demande.`,
+        );
+      }
+
+      function getChatAssistantGreeting() {
+        return {
+          role: "assistant",
+          content:
+            "Bonjour. Je peux vous aider sur l'utilisation de l'ERP, le stock, les menus selon votre rôle, ou répondre à des questions générales sur vos opérations.\n\nExemples :\n- Comment demander du matériel ?\n- Résume le stock ITC-B01\n- Que puis-je faire avec mon rôle ?",
+        };
+      }
+
+      function saveChatAssistantHistory() {
+        try {
+          localStorage.setItem(
+            CHATBOT_STORAGE_KEY,
+            JSON.stringify(chatAssistantState.messages.slice(-12)),
+          );
+        } catch (e) {
+          console.warn("Impossible de sauvegarder l'historique du chatbot", e);
+        }
+      }
+
+      function loadChatAssistantHistory() {
+        try {
+          const raw = localStorage.getItem(CHATBOT_STORAGE_KEY);
+          if (!raw) return [getChatAssistantGreeting()];
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed) || parsed.length === 0) {
+            return [getChatAssistantGreeting()];
+          }
+          return parsed.filter(
+            (entry) => entry && ["assistant", "user"].includes(entry.role),
+          );
+        } catch (e) {
+          console.warn("Impossible de charger l'historique du chatbot", e);
+          return [getChatAssistantGreeting()];
+        }
+      }
+
+      function renderChatAssistantMessages() {
+        const container = document.getElementById("ai-chatbot-messages");
+        if (!container) return;
+
+        container.innerHTML = chatAssistantState.messages
+          .map((message) => {
+            const isUser = message.role === "user";
+            return `
+              <article class="flex ${isUser ? "justify-end" : "justify-start"}">
+                <div class="max-w-[88%] rounded-[22px] px-4 py-3 ${
+                  isUser
+                    ? "bg-cyan-600 text-white shadow-lg"
+                    : "border border-slate-200 bg-white text-slate-700 shadow-sm"
+                }">
+                  <p class="mb-1 text-[10px] font-bold uppercase tracking-[0.22em] ${
+                    isUser ? "text-cyan-100" : "text-slate-400"
+                  }">
+                    ${isUser ? "Vous" : "ITC AI"}
+                  </p>
+                  <div class="ai-chatbot-message text-sm leading-6">${escapeHtml(message.content)}</div>
+                </div>
+              </article>
+            `;
+          })
+          .join("");
+
+        container.scrollTop = container.scrollHeight;
+      }
+
+      function setChatAssistantBusy(isBusy) {
+        chatAssistantState.isThinking = isBusy;
+        const sendBtn = document.getElementById("ai-chatbot-send");
+        const input = document.getElementById("ai-chatbot-input");
+        if (sendBtn) sendBtn.disabled = isBusy;
+        if (input) input.disabled = isBusy;
+      }
+
+      function appendChatAssistantMessage(role, content) {
+        chatAssistantState.messages.push({ role, content: String(content || "") });
+        chatAssistantState.messages = chatAssistantState.messages.slice(-20);
+        renderChatAssistantMessages();
+        saveChatAssistantHistory();
+      }
+
+      function autoResizeChatAssistantInput() {
+        const input = document.getElementById("ai-chatbot-input");
+        if (!input) return;
+        input.style.height = "auto";
+        input.style.height = `${Math.min(input.scrollHeight, 128)}px`;
+      }
+
+      function toggleChatAssistant(forceState) {
+        const panel = document.getElementById("ai-chatbot-panel");
+        const toggle = document.getElementById("ai-chatbot-toggle");
+        const shouldOpen =
+          typeof forceState === "boolean" ? forceState : !chatAssistantState.isOpen;
+
+        chatAssistantState.isOpen = shouldOpen;
+        if (panel) panel.classList.toggle("hidden", !shouldOpen);
+        if (toggle) toggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+
+        if (shouldOpen) {
+          renderChatAssistantMessages();
+          setTimeout(() => {
+            const input = document.getElementById("ai-chatbot-input");
+            if (input) input.focus();
+            autoResizeChatAssistantInput();
+          }, 30);
+        }
+      }
+
+      function getOperatorStockSummary(opKey) {
+        const items = (appData?.stock || []).filter(
+          (entry) => String(entry.op || "").toUpperCase() === opKey,
+        );
+        if (!items.length) return `Aucun stock trouvé pour ${opKey}.`;
+
+        const totalQty = items.reduce((sum, entry) => sum + (Number(entry.qty) || 0), 0);
+        const topItems = items
+          .slice()
+          .sort((a, b) => (Number(b.qty) || 0) - (Number(a.qty) || 0))
+          .slice(0, 5)
+          .map((entry) => `- ${entry.label}: ${entry.qty} U`)
+          .join("\n");
+
+        return `Résumé du stock ${opKey} :\n- ${items.length} désignation(s)\n- ${totalQty} unité(s) au total\nTop articles :\n${topItems}`;
+      }
+
+      function findStockByDesignation(query) {
+        const normalized = String(query || "").trim().toUpperCase();
+        if (!normalized) return "";
+
+        const matches = (appData?.stock || []).filter((entry) =>
+          String(entry.label || "").toUpperCase().includes(normalized),
+        );
+        if (!matches.length) return "";
+
+        return [
+          `J'ai trouvé ${matches.length} ligne(s) de stock pour \"${normalized}\" :`,
+          ...matches.slice(0, 8).map(
+            (entry) => `- ${entry.label} | ${entry.op} | ${Number(entry.qty) || 0} U`,
+          ),
+        ].join("\n");
+      }
+
+      function getRoleCapabilities() {
+        const role = String(currentUser?.role || "").toLowerCase();
+        const capabilities = {
+          superviseur:
+            "Vous pouvez suivre le journal d'audit, les statistiques de consommation, les archives et les rapports de sorties.",
+          technicien:
+            "Vous pouvez demander du matériel, enregistrer un retour de stock et suivre vos bons.",
+          coordinatrice:
+            "Vous pouvez traiter les flux techniciens, créer des commandes directes et importer des commandes Excel.",
+          gestionnaire:
+            "Vous pouvez gérer les commandes, les sorties, les entrées stock, les rapports et les consultations de stock.",
+        };
+
+        return (
+          capabilities[role] ||
+          "Votre profil n'est pas encore associé à un scénario métier détaillé dans l'assistant."
+        );
+      }
+
+      function getCurrentAppInsights() {
+        const notificationCount = Array.isArray(appData?.notifications)
+          ? appData.notifications.filter((n) => !n?.read).length
+          : 0;
+        return [
+          `Section active : ${currentSectionId || "cockpit"}`,
+          `Utilisateur : ${currentUser?.name || "non connecté"}`,
+          `Rôle : ${currentUser?.role || "inconnu"}`,
+          `Notifications non lues : ${notificationCount}`,
+        ].join("\n");
+      }
+
+      function getLocalAssistantReply(userText) {
+        const normalized = String(userText || "").trim().toLowerCase();
+        if (!normalized) {
+          return "Écrivez une question précise et je vous répondrai immédiatement.";
+        }
+
+        if (/(parler a un agent|parler à un agent|agent humain|support humain|contact support)/.test(normalized)) {
+          openChatAssistantAgentContact();
+          return "Je lance le contact avec l'agent support.";
+        }
+
+        if (/(creer une demande|créer une demande|nouvelle demande|faire une demande)/.test(normalized)) {
+          openChatAssistantRequestFlow();
+          return "Je vous redirige vers le module de demande adapté à votre rôle.";
+        }
+
+        if (/(bonjour|salut|bonsoir|hello)/.test(normalized)) {
+          return "Bonjour. Je peux vous aider sur le stock, les rôles, les sections de l'application, les commandes, les retours et les rapports.";
+        }
+
+        if (/(qui suis-je|mon profil|mon role|mon rôle|mes fonctionnalités)/.test(normalized)) {
+          return `${getCurrentAppInsights()}\n\n${getRoleCapabilities()}`;
+        }
+
+        if (/(notification|alerte)/.test(normalized)) {
+          return getCurrentAppInsights();
+        }
+
+        if (/(stock itc-b01|résume le stock itc-b01|resume le stock itc-b01)/.test(normalized)) {
+          return getOperatorStockSummary("ITC-B01");
+        }
+
+        if (/(stock itc-b02|résume le stock itc-b02|resume le stock itc-b02)/.test(normalized)) {
+          return getOperatorStockSummary("ITC-B02");
+        }
+
+        if (/(stock oci)/.test(normalized)) {
+          return getOperatorStockSummary("OCI");
+        }
+
+        if (/(stock cic)/.test(normalized)) {
+          return getOperatorStockSummary("CIC");
+        }
+
+        if (/(stock moov)/.test(normalized)) {
+          return getOperatorStockSummary("MOOV");
+        }
+
+        if (/(stock mtn)/.test(normalized)) {
+          return getOperatorStockSummary("MTN");
+        }
+
+        if (/(comment|aide|utiliser|workflow|faire)/.test(normalized)) {
+          if (/(demande|commander|matériel|materiel)/.test(normalized)) {
+            return "Pour demander du matériel, ouvrez la section correspondant à votre rôle puis utilisez le formulaire de demande ou de commande. Le technicien passe par Demander Matériel, la coordinatrice peut créer une Commande Directe, et le gestionnaire traite ensuite les flux magasin.";
+          }
+          if (/(retour)/.test(normalized)) {
+            return "Pour un retour de stock, utilisez la section Retour de Stock côté technicien. Vérifiez la désignation, la quantité et l'opérateur concerné avant validation.";
+          }
+          if (/(rapport|sortie)/.test(normalized)) {
+            return "Les rapports de sorties se trouvent dans les menus magasin ou superviseur selon votre profil. Ils servent à consulter l'historique, contrôler les écarts et suivre les mouvements de stock.";
+          }
+          if (/(scanner|caméra|camera|bon)/.test(normalized)) {
+            return "Le module Scanner Bon permet de lire un bon physique via caméra. Utilisez-le surtout sur mobile ou sur un poste disposant d'une webcam autorisée par le navigateur.";
+          }
+          return "Je peux vous guider sur les menus, les rôles, le stock, les commandes, les retours, les rapports ou l'utilisation générale de l'application.";
+        }
+
+        if (/(procedure|procédure|process|processus|mode operatoire|mode opératoire|etapes|étapes)/.test(normalized)) {
+          const procedure = findInternalProcedure(userText);
+          if (procedure) return formatProcedureReply(procedure);
+          return "Je n'ai pas trouvé de procédure interne correspondante. Essayez: demande, retour, sortie ou rapport.";
+        }
+
+        const matchedProcedure = findInternalProcedure(userText);
+        if (matchedProcedure) {
+          return formatProcedureReply(matchedProcedure);
+        }
+
+        const stockReply = findStockByDesignation(userText);
+        if (stockReply) return stockReply;
+
+        return [
+          "Je peux répondre immédiatement sur l'application et ses données visibles, mais je n'ai pas encore reçu de consigne plus précise pour cette question.",
+          "Essayez par exemple :",
+          "- Résume le stock MOOV",
+          "- Quelles sont mes fonctionnalités selon mon rôle ?",
+          "- Comment enregistrer une sortie de stock ?",
+        ].join("\n");
+      }
+
+      async function callGeminiAssistant(userText) {
+        const apiKey = getChatAssistantApiKey();
+        if (!apiKey) return null;
+
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const history = chatAssistantState.messages.slice(-8).map((message) => ({
+          role: message.role === "assistant" ? "model" : "user",
+          parts: [{ text: message.content }],
+        }));
+
+        const payload = {
+          systemInstruction: {
+            parts: [{ text: getChatAssistantSystemPrompt() }],
+          },
+          contents: [...history, { role: "user", parts: [{ text: userText }] }],
+          generationConfig: {
+            temperature: 0.7,
+            topP: 0.9,
+            maxOutputTokens: 700,
+          },
+        };
+
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Gemini API ${response.status}`);
+        }
+
+        const data = await response.json();
+        return (
+          data?.candidates?.[0]?.content?.parts
+            ?.map((part) => part.text || "")
+            .join("\n")
+            .trim() || null
+        );
+      }
+
+      async function callChatAssistantBackend(userText) {
+        const { endpoint, token } = getChatAssistantBackendConfig();
+        if (!endpoint) return null;
+
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            userText,
+            systemPrompt: getChatAssistantSystemPrompt(),
+            messages: chatAssistantState.messages.slice(-10),
+            context: {
+              section: currentSectionId || "cockpit",
+              userName: currentUser?.name || "inconnu",
+              userRole: currentUser?.role || "inconnu",
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Chat backend ${response.status}`);
+        }
+
+        const data = await response.json();
+        return String(data?.reply || data?.message || "").trim() || null;
+      }
+
+      async function generateChatAssistantReply(userText) {
+        try {
+          const backendReply = await callChatAssistantBackend(userText);
+          if (backendReply) return backendReply;
+        } catch (e) {
+          console.warn("Backend IA indisponible, fallback Gemini/local", e);
+        }
+
+        try {
+          const geminiReply = await callGeminiAssistant(userText);
+          if (geminiReply) return geminiReply;
+        } catch (e) {
+          console.warn("Gemini indisponible, bascule sur l'assistant local", e);
+        }
+
+        return getLocalAssistantReply(userText);
+      }
+
+      async function handleChatAssistantSubmit(event) {
+        if (event) event.preventDefault();
+        const input = document.getElementById("ai-chatbot-input");
+        if (!input || chatAssistantState.isThinking) return;
+
+        const userText = String(input.value || "").trim();
+        if (!userText) return;
+
+        appendChatAssistantMessage("user", userText);
+        input.value = "";
+        autoResizeChatAssistantInput();
+        setChatAssistantBusy(true);
+
+        try {
+          const reply = await generateChatAssistantReply(userText);
+          appendChatAssistantMessage("assistant", reply);
+        } catch (e) {
+          console.error("Erreur assistant IA", e);
+          appendChatAssistantMessage(
+            "assistant",
+            "Je n'ai pas pu générer une réponse pour le moment. Réessayez dans quelques secondes.",
+          );
+        } finally {
+          setChatAssistantBusy(false);
+        }
+      }
+
+      function submitChatAssistantPrompt(promptText) {
+        const input = document.getElementById("ai-chatbot-input");
+        if (!input) return;
+        toggleChatAssistant(true);
+        input.value = promptText;
+        autoResizeChatAssistantInput();
+        handleChatAssistantSubmit();
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        chatAssistantState.messages = loadChatAssistantHistory();
+        renderChatAssistantMessages();
+
+        const input = document.getElementById("ai-chatbot-input");
+        if (input) {
+          input.addEventListener("input", autoResizeChatAssistantInput);
+          input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              handleChatAssistantSubmit();
+            }
+          });
         }
       });
     </script>

@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "create-user": "node scripts/create_firebase_user.js",
-    "migrate-itc-b01": "node scripts/migrate_itc_to_b01.js"
+    "migrate-itc-b01": "node scripts/migrate_itc_to_b01.js",
+    "ai-backend": "node server/ai-chat-backend.js",
+    "ai-backend:dev": "set PORT=8787&& node server/ai-chat-backend.js"
   },
   "dependencies": {
     "firebase-admin": "^11.0.0",
