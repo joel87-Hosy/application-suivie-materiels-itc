@@ -20,7 +20,28 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
       rel="stylesheet"
     />
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Space+Grotesk:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      :root {
+        --login-brand: #0369a1;
+        --login-accent: #ea580c;
+        --login-ink: #0b1221;
+        --login-muted: #3a4a64;
+        --login-surface: rgba(252, 254, 255, 0.88);
+      }
+
       .sidebar-transition {
         transition: transform 0.3s ease-in-out;
       }
@@ -259,6 +280,191 @@
         background: linear-gradient(180deg, #0f766e 0%, #0ea5e9 100%);
         border-radius: 999px;
       }
+
+      .login-2026-screen {
+        position: relative;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 14% 20%, rgba(2, 132, 199, 0.2), transparent 38%),
+          radial-gradient(circle at 88% 18%, rgba(234, 88, 12, 0.18), transparent 34%),
+          linear-gradient(135deg, #e6f0ff 0%, #f6fbff 42%, #fdf5eb 100%);
+      }
+
+      .login-2026-screen::before,
+      .login-2026-screen::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .login-2026-screen::before {
+        background-image:
+          linear-gradient(rgba(37, 99, 235, 0.07) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(37, 99, 235, 0.07) 1px, transparent 1px);
+        background-size: 36px 36px;
+        mask-image: radial-gradient(circle at 55% 45%, black 25%, transparent 80%);
+      }
+
+      .login-2026-screen::after {
+        background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.12), transparent 56%);
+        animation: loginAmbientPulse 9s ease-in-out infinite;
+      }
+
+      .login-2026-shell {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.86);
+        background: var(--login-surface);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        box-shadow:
+          0 28px 100px rgba(11, 18, 33, 0.2),
+          0 0 0 1px rgba(56, 189, 248, 0.14);
+        animation: loginEntry 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+
+      .login-2026-shell::before,
+      .login-2026-shell::after {
+        content: "";
+        position: absolute;
+        pointer-events: none;
+        border-radius: 999px;
+      }
+
+      .login-2026-shell::before {
+        width: 340px;
+        height: 340px;
+        right: -160px;
+        top: -170px;
+        background: radial-gradient(circle, rgba(15, 118, 110, 0.22) 0%, transparent 72%);
+      }
+
+      .login-2026-shell::after {
+        width: 280px;
+        height: 280px;
+        left: -140px;
+        bottom: -140px;
+        background: radial-gradient(circle, rgba(249, 115, 22, 0.2) 0%, transparent 72%);
+      }
+
+      .login-2026-brand,
+      .login-2026-form {
+        position: relative;
+        z-index: 1;
+      }
+
+      .login-2026-form {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(241, 245, 249, 0.82) 100%);
+      }
+
+      .login-2026-brand {
+        font-family: "Space Grotesk", sans-serif;
+      }
+
+      .login-2026-form {
+        font-family: "Manrope", sans-serif;
+      }
+
+      .login-2026-input {
+        border: 1px solid rgba(15, 23, 42, 0.14);
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--login-ink);
+        transition:
+          border-color 170ms ease,
+          box-shadow 170ms ease,
+          background-color 170ms ease;
+      }
+
+      .login-2026-input::placeholder {
+        color: rgba(51, 65, 85, 0.82);
+        font-weight: 600;
+        letter-spacing: 0.05em;
+      }
+
+      .login-2026-input:focus {
+        outline: none;
+        border-color: rgba(15, 118, 110, 0.62);
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.14);
+      }
+
+      .login-2026-btn {
+        background: linear-gradient(92deg, #0f172a 0%, #0369a1 52%, #ea580c 100%);
+        background-size: 180% 100%;
+        transition:
+          transform 170ms ease,
+          box-shadow 170ms ease,
+          background-position 260ms ease;
+      }
+
+      .login-2026-btn:hover {
+        transform: translateY(-1px);
+        background-position: 100% 0;
+        box-shadow: 0 18px 30px rgba(15, 23, 42, 0.32);
+      }
+
+      .login-2026-btn:active {
+        transform: translateY(0);
+      }
+
+      .login-2026-chip {
+        border: 1px solid rgba(15, 23, 42, 0.14);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      @keyframes loginEntry {
+        from {
+          opacity: 0;
+          transform: translateY(12px) scale(0.985);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      @keyframes loginAmbientPulse {
+        0% {
+          opacity: 0.45;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.82;
+          transform: scale(1.06);
+        }
+        100% {
+          opacity: 0.45;
+          transform: scale(1);
+        }
+      }
+
+      @media (max-width: 768px) {
+        .login-2026-shell {
+          border-radius: 1.5rem;
+        }
+
+        .login-2026-brand {
+          text-align: center;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .login-2026-shell,
+        .login-2026-btn {
+          animation: none !important;
+          transition: none !important;
+        }
+
+        .login-2026-screen::after {
+          animation: none !important;
+        }
+
+        .login-2026-btn:hover {
+          transform: none !important;
+          box-shadow: none !important;
+        }
+      }
     </style>
   </head>
   <body
@@ -272,25 +478,47 @@
     <div id="qrcode-temp" style="display: none"></div>
     <div
       id="login-screen"
-      class="fixed inset-0 bg-pink-50 flex items-center justify-center z-[100]"
+      class="login-2026-screen fixed inset-0 flex items-center justify-center z-[100] p-4 md:p-8"
     >
       <div
-        class="bg-white p-6 md:p-10 rounded-3xl shadow-2xl max-w-3xl w-full mx-4 text-center border-t-4 border-pink-500"
+        class="login-2026-shell rounded-[2rem] max-w-5xl w-full mx-auto"
       >
-        <div class="flex flex-col md:flex-row items-center gap-6">
-          <div class="flex-shrink-0 flex items-center justify-center p-2">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-0">
+          <div class="login-2026-brand p-6 md:p-10 lg:p-12 border-b md:border-b-0 md:border-r border-sky-100/70">
+            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full login-2026-chip text-[10px] tracking-[0.2em] text-slate-700 mb-5">
+              <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+              ITC COMMAND HUB 2026
+            </div>
+            <div class="flex-shrink-0 flex items-center justify-start md:justify-start p-0 mb-5">
             <img
               src="assets/nouveau-logo-itc.png"
               alt="Logo ITC"
-              class="h-28 md:h-36 object-contain"
+              class="h-24 md:h-28 object-contain"
             />
+            </div>
+            <h2 class="text-2xl md:text-[2rem] leading-tight font-bold text-slate-900 normal-case tracking-tight">
+              Operations command center
+            </h2>
+            <p class="mt-4 text-[12px] md:text-[13px] text-slate-600 normal-case font-semibold leading-relaxed">
+              Pilotage unifie des stocks, interventions terrain, audit logs et analyses en temps reel sur une interface unique.
+            </p>
+            <div class="mt-6 grid grid-cols-2 gap-3">
+              <div class="login-2026-chip rounded-xl px-3 py-2 text-left">
+                <p class="text-[9px] text-slate-500 tracking-[0.12em]">UPTIME</p>
+                <p class="text-[12px] text-slate-800 normal-case font-extrabold">24h/24</p>
+              </div>
+              <div class="login-2026-chip rounded-xl px-3 py-2 text-left">
+                <p class="text-[9px] text-slate-500 tracking-[0.12em]">SECURITY</p>
+                <p class="text-[12px] text-slate-800 normal-case font-extrabold">Zero-trust access</p>
+              </div>
+            </div>
           </div>
 
-          <div class="flex-1 text-left">
-            <div class="flex items-center justify-between mb-4">
+          <div class="login-2026-form p-6 md:p-10 lg:p-12 text-left">
+            <div class="flex items-center justify-between mb-6 gap-3">
               <h2
                 id="login-title"
-                class="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter italic"
+                class="text-xl md:text-[1.65rem] font-extrabold text-slate-900 tracking-tight normal-case"
               >
                 GESTION MATERIEL
               </h2>
@@ -298,7 +526,7 @@
                 <label for="lang-select-login" class="sr-only">Lang</label>
                 <select
                   id="lang-select-login"
-                  class="border rounded px-2 py-1 text-sm"
+                  class="login-2026-chip rounded-xl px-3 py-2 text-[11px] font-bold text-slate-700 uppercase outline-none"
                   onchange="setLanguage(this.value)"
                 >
                   <option value="fr">Français</option>
@@ -307,12 +535,12 @@
               </div>
             </div>
 
-            <form onsubmit="handleLogin(event)" class="space-y-4">
+            <form onsubmit="handleLogin(event)" class="space-y-4 md:space-y-5">
               <input
                 id="login-email"
                 type="email"
                 placeholder="EMAIL PROFESSIONNEL"
-                class="w-full border-2 p-3 rounded-xl text-xs uppercase outline-none"
+                class="login-2026-input w-full p-3.5 md:p-4 rounded-2xl text-[11px] uppercase font-bold"
                 required
               />
 
@@ -321,38 +549,41 @@
                   id="login-password"
                   type="password"
                   placeholder="MOT DE PASSE"
-                  class="w-full border-2 p-3 rounded-xl text-xs outline-none pr-10"
+                  class="login-2026-input w-full p-3.5 md:p-4 rounded-2xl text-[11px] uppercase font-bold pr-11"
                   required
                 />
                 <button
                   type="button"
                   onclick="togglePassword()"
                   aria-label="Afficher le mot de passe"
-                  class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 border border-slate-200 text-slate-600 hover:text-slate-900 transition"
                 >
                   <i id="pw-toggle-icon" class="fas fa-eye"></i>
                 </button>
               </div>
 
               <button
+                id="login-submit"
                 type="submit"
-                class="w-full bg-pink-600 text-white font-black py-3 md:py-4 rounded-2xl tracking-widest text-[10px] hover:bg-pink-700 transition shadow-lg"
+                class="login-2026-btn w-full text-white font-black py-3.5 md:py-4 rounded-2xl tracking-[0.18em] text-[10px] shadow-lg"
               >
                 AUTHENTIFICATION
               </button>
 
               <p
+                id="forgot-link"
                 onclick="resetPassword()"
-                class="text-[9px] text-left text-pink-600 cursor-pointer mt-4 hover:underline italic"
+                class="text-[10px] text-left text-teal-700 cursor-pointer mt-4 hover:underline normal-case font-bold"
               >
                 Mot de passe oublié ?
               </p>
 
-              <p class="text-[9px] text-left text-slate-600 mt-2 italic">
+              <p class="text-[10px] text-left text-slate-600 mt-2 normal-case font-semibold">
                 <a
+                  id="privacy-link-login"
                   href="privacy.html"
                   target="_blank"
-                  class="text-pink-600 hover:underline"
+                  class="text-orange-600 hover:underline"
                   >Politique de confidentialité</a
                 >
               </p>
