@@ -2821,6 +2821,95 @@
           : [];
         const operators = getArchiveOperatorsForCurrentUser();
 
+        const getArchivePeriod = (archive) => {
+          if (
+            Number.isInteger(archive?.monthIndex) &&
+            Number.isInteger(archive?.year)
+          ) {
+            return { monthIndex: archive.monthIndex, year: archive.year };
+          }
+
+          const keyMatch = String(archive?.key || "").match(/^(\d{4})-(\d{2})$/);
+          if (keyMatch) {
+            return {
+              year: Number(keyMatch[1]),
+              monthIndex: Math.max(0, Number(keyMatch[2]) - 1),
+            };
+          }
+
+          return null;
+        };
+
+        const buildSortantsDetailsFromSorties = (archive, operator) => {
+          const period = getArchivePeriod(archive);
+          if (!period) return [];
+
+          const rows = new Map();
+          const sortiesSource = Array.isArray(appData?.sorties) ? appData.sorties : [];
+
+          sortiesSource
+            .filter(
+              (s) =>
+                normalizeOperatorKey(s?.op) === operator &&
+                isDateInTargetMonth(s?.date, period.monthIndex, period.year),
+            )
+            .forEach((sortie) => {
+              const reference = String(
+                sortie?.ref || sortie?.reference || sortie?.motif || "NON RENSEIGNEE",
+              )
+                .trim()
+                .toUpperCase();
+
+              getSortieItems(sortie).forEach((item) => {
+                const designation = String(item?.label || "NON DÉFINI")
+                  .trim()
+                  .toUpperCase();
+                const qty = Number(item?.qty) || 0;
+                if (!designation || qty <= 0) return;
+
+                const key = `${designation}||${reference}`;
+                if (!rows.has(key)) {
+                  rows.set(key, { designation, reference, qty: 0 });
+                }
+                rows.get(key).qty += qty;
+              });
+            });
+
+          return [...rows.values()].sort((a, b) => b.qty - a.qty);
+        };
+
+        const getArchiveSortantsDetails = (archive, operator, stats) => {
+          const fromSorties = buildSortantsDetailsFromSorties(archive, operator);
+          if (fromSorties.length > 0) return fromSorties;
+
+          const fromArchive = Array.isArray(stats?.sortantsDetails)
+            ? stats.sortantsDetails
+                .map((detail) => ({
+                  designation: String(detail?.designation || "NON DÉFINI")
+                    .trim()
+                    .toUpperCase(),
+                  reference: String(
+                    detail?.reference || detail?.destination || "NON RENSEIGNEE",
+                  )
+                    .trim()
+                    .toUpperCase(),
+                  qty: Number(detail?.qty) || 0,
+                }))
+                .filter((detail) => detail.designation && detail.qty > 0)
+            : [];
+          if (fromArchive.length > 0) return fromArchive;
+
+          return Object.entries(stats?.sortantsByDesignation || {}).map(
+            ([designation, qty]) => ({
+              designation: String(designation || "NON DÉFINI")
+                .trim()
+                .toUpperCase(),
+              reference: "NON RENSEIGNEE",
+              qty: Number(qty) || 0,
+            }),
+          );
+        };
+
         const renderByDesignation = (totals, colorClass) => {
           const entries = Object.entries(totals || {}).sort(
             (a, b) => b[1] - a[1],
@@ -2835,6 +2924,26 @@
                       <div class="flex justify-between items-center bg-slate-50 border-l-4 ${colorClass} rounded-lg p-2">
                         <span class="text-[8px] uppercase text-slate-700">${escapeHtml(label)}</span>
                         <span class="text-[8px] font-black">${qty} U</span>
+                      </div>
+                    `,
+            )
+            .join("")}</div>`;
+        };
+
+        const renderSortantsWithReference = (details, colorClass) => {
+          if (!Array.isArray(details) || details.length === 0) {
+            return '<p class="text-[8px] text-slate-400 italic">Aucune donnée</p>';
+          }
+
+          return `<div class="space-y-1">${details
+            .map(
+              (detail) => `
+                      <div class="flex justify-between items-center bg-slate-50 border-l-4 ${colorClass} rounded-lg p-2 gap-2">
+                        <div class="min-w-0">
+                          <p class="text-[8px] uppercase text-slate-700 truncate">${escapeHtml(detail.designation || "NON DÉFINI")}</p>
+                          <p class="text-[7px] uppercase text-slate-400 truncate">Réf/Motif: ${escapeHtml(detail.reference || "NON RENSEIGNEE")}</p>
+                        </div>
+                        <span class="text-[8px] font-black whitespace-nowrap">${Number(detail.qty) || 0} U</span>
                       </div>
                     `,
             )
@@ -2856,12 +2965,24 @@
                                   sortantsByDesignation: {},
                                   sortantsDetails: [],
                                 };
+                                const sortantsDetails = getArchiveSortantsDetails(
+                                  archive,
+                                  op,
+                                  stats,
+                                );
                                 const totalEntrants = Object.values(
                                   stats.entrantsByDesignation || {},
                                 ).reduce((sum, qty) => sum + qty, 0);
-                                const totalSortants = Object.values(
-                                  stats.sortantsByDesignation || {},
-                                ).reduce((sum, qty) => sum + qty, 0);
+                                const totalSortants =
+                                  sortantsDetails.length > 0
+                                    ? sortantsDetails.reduce(
+                                        (sum, detail) =>
+                                          sum + (Number(detail.qty) || 0),
+                                        0,
+                                      )
+                                    : Object.values(
+                                        stats.sortantsByDesignation || {},
+                                      ).reduce((sum, qty) => sum + qty, 0);
 
                                 return `
                                   <div class="bg-slate-50 border rounded-2xl p-4">
@@ -2887,7 +3008,7 @@
                                       </div>
                                       <div>
                                         <p class="text-[8px] uppercase font-black text-red-600 mb-1">Sortants par désignation</p>
-                                        ${renderByDesignation(stats.sortantsByDesignation, "border-red-400")}
+                                        ${renderSortantsWithReference(sortantsDetails, "border-red-400")}
                                       </div>
                                     </div>
                                   </div>
@@ -3015,6 +3136,88 @@
         const doc = new jsPDF();
         const operators = getArchiveOperatorsForCurrentUser();
 
+        const getArchivePeriod = () => {
+          if (
+            Number.isInteger(archive?.monthIndex) &&
+            Number.isInteger(archive?.year)
+          ) {
+            return { monthIndex: archive.monthIndex, year: archive.year };
+          }
+          const keyMatch = String(archive?.key || "").match(/^(\d{4})-(\d{2})$/);
+          if (keyMatch) {
+            return {
+              year: Number(keyMatch[1]),
+              monthIndex: Math.max(0, Number(keyMatch[2]) - 1),
+            };
+          }
+          return null;
+        };
+
+        const getSortantsDetailsForOperator = (op, stats) => {
+          const period = getArchivePeriod();
+          if (period) {
+            const rows = new Map();
+            const sortiesSource = Array.isArray(appData?.sorties) ? appData.sorties : [];
+            sortiesSource
+              .filter(
+                (s) =>
+                  normalizeOperatorKey(s?.op) === op &&
+                  isDateInTargetMonth(s?.date, period.monthIndex, period.year),
+              )
+              .forEach((sortie) => {
+                const reference = String(
+                  sortie?.ref || sortie?.reference || sortie?.motif || "NON RENSEIGNEE",
+                )
+                  .trim()
+                  .toUpperCase();
+
+                getSortieItems(sortie).forEach((item) => {
+                  const designation = String(item?.label || "NON DÉFINI")
+                    .trim()
+                    .toUpperCase();
+                  const qty = Number(item?.qty) || 0;
+                  if (!designation || qty <= 0) return;
+                  const key = `${designation}||${reference}`;
+                  if (!rows.has(key)) {
+                    rows.set(key, { designation, reference, qty: 0 });
+                  }
+                  rows.get(key).qty += qty;
+                });
+              });
+
+            if (rows.size > 0) {
+              return [...rows.values()].sort((a, b) => b.qty - a.qty);
+            }
+          }
+
+          const archiveDetails = Array.isArray(stats?.sortantsDetails)
+            ? stats.sortantsDetails
+                .map((detail) => ({
+                  designation: String(detail?.designation || "NON DÉFINI")
+                    .trim()
+                    .toUpperCase(),
+                  reference: String(
+                    detail?.reference || detail?.destination || "NON RENSEIGNEE",
+                  )
+                    .trim()
+                    .toUpperCase(),
+                  qty: Number(detail?.qty) || 0,
+                }))
+                .filter((detail) => detail.designation && detail.qty > 0)
+            : [];
+          if (archiveDetails.length > 0) return archiveDetails;
+
+          return Object.entries(stats?.sortantsByDesignation || {}).map(
+            ([designation, qty]) => ({
+              designation: String(designation || "NON DÉFINI")
+                .trim()
+                .toUpperCase(),
+              reference: "NON RENSEIGNEE",
+              qty: Number(qty) || 0,
+            }),
+          );
+        };
+
         getLogoDataUrl()
           .catch(() => "")
           .then((logoDataUrl) => {
@@ -3087,25 +3290,13 @@
               });
 
               const detailsStartY = (doc.lastAutoTable?.finalY || nextStartY) + 8;
-              const sortantsDetailsSource = Array.isArray(stats.sortantsDetails)
-                ? stats.sortantsDetails
-                : [];
-              const sortantsDetailsRows =
-                sortantsDetailsSource.length > 0
-                  ? sortantsDetailsSource.map((detail) => [
-                      String(detail?.designation || "NON DÉFINI"),
-                      String(
-                        detail?.reference ||
-                          detail?.destination ||
-                          "NON RENSEIGNEE",
-                      ),
-                      String(detail?.qty || 0),
-                    ])
-                  : sortantRows.map(([designation, qty]) => [
-                      String(designation || "NON DÉFINI"),
-                      "NON RENSEIGNEE",
-                      String(qty || 0),
-                    ]);
+              const sortantsDetailsRows = getSortantsDetailsForOperator(op, stats).map(
+                (detail) => [
+                  String(detail?.designation || "NON DÉFINI"),
+                  String(detail?.reference || "NON RENSEIGNEE"),
+                  String(detail?.qty || 0),
+                ],
+              );
               doc.autoTable({
                 startY: detailsStartY,
                 head: [["Matériel sortant", "Référence bon/motif", "Qté"]],
@@ -3126,6 +3317,87 @@
 
         const operators = getArchiveOperatorsForCurrentUser();
         const rows = [];
+
+        const getArchivePeriod = () => {
+          if (
+            Number.isInteger(archive?.monthIndex) &&
+            Number.isInteger(archive?.year)
+          ) {
+            return { monthIndex: archive.monthIndex, year: archive.year };
+          }
+          const keyMatch = String(archive?.key || "").match(/^(\d{4})-(\d{2})$/);
+          if (keyMatch) {
+            return {
+              year: Number(keyMatch[1]),
+              monthIndex: Math.max(0, Number(keyMatch[2]) - 1),
+            };
+          }
+          return null;
+        };
+
+        const getSortantsDetailsForOperator = (op, stats) => {
+          const period = getArchivePeriod();
+          if (period) {
+            const detailsMap = new Map();
+            const sortiesSource = Array.isArray(appData?.sorties) ? appData.sorties : [];
+            sortiesSource
+              .filter(
+                (s) =>
+                  normalizeOperatorKey(s?.op) === op &&
+                  isDateInTargetMonth(s?.date, period.monthIndex, period.year),
+              )
+              .forEach((sortie) => {
+                const reference = String(
+                  sortie?.ref || sortie?.reference || sortie?.motif || "NON RENSEIGNEE",
+                )
+                  .trim()
+                  .toUpperCase();
+                getSortieItems(sortie).forEach((item) => {
+                  const designation = String(item?.label || "NON DÉFINI")
+                    .trim()
+                    .toUpperCase();
+                  const qty = Number(item?.qty) || 0;
+                  if (!designation || qty <= 0) return;
+                  const key = `${designation}||${reference}`;
+                  if (!detailsMap.has(key)) {
+                    detailsMap.set(key, { designation, reference, qty: 0 });
+                  }
+                  detailsMap.get(key).qty += qty;
+                });
+              });
+
+            if (detailsMap.size > 0) {
+              return [...detailsMap.values()].sort((a, b) => b.qty - a.qty);
+            }
+          }
+
+          const archiveDetails = Array.isArray(stats?.sortantsDetails)
+            ? stats.sortantsDetails
+                .map((detail) => ({
+                  designation: String(detail?.designation || "NON DÉFINI")
+                    .trim()
+                    .toUpperCase(),
+                  reference: String(
+                    detail?.reference || detail?.destination || "NON RENSEIGNEE",
+                  )
+                    .trim()
+                    .toUpperCase(),
+                  qty: Number(detail?.qty) || 0,
+                }))
+                .filter((detail) => detail.designation && detail.qty > 0)
+            : [];
+          if (archiveDetails.length > 0) return archiveDetails;
+
+          return Object.entries(stats?.sortantsByDesignation || {}).map(
+            ([designation, qty]) => ({
+              designation: String(designation || "NON DÉFINI")
+                .trim()
+                .toUpperCase(),
+              reference: "NON RENSEIGNEE",
+              qty: Number(qty) || 0,
+            }),
+          );
+        };
 
         operators.forEach((op) => {
           const stats = archive.operatorStats?.[op] || {
@@ -3186,11 +3458,9 @@
             },
           );
 
-          const sortantsDetailsSource = Array.isArray(stats.sortantsDetails)
-            ? stats.sortantsDetails
-            : [];
-          if (sortantsDetailsSource.length > 0) {
-            sortantsDetailsSource.forEach((detail) => {
+          const sortantsDetailsRows = getSortantsDetailsForOperator(op, stats);
+          if (sortantsDetailsRows.length > 0) {
+            sortantsDetailsRows.forEach((detail) => {
               rows.push({
                 Mois: archive.label || archive.key || "",
                 Operateur: op,
@@ -3199,9 +3469,7 @@
                 SortantsTotal: "",
                 Type: "SORTANT_REF",
                 Designation: String(detail?.designation || "NON DÉFINI"),
-                Reference: String(
-                  detail?.reference || detail?.destination || "NON RENSEIGNEE",
-                ),
+                Reference: String(detail?.reference || "NON RENSEIGNEE"),
                 Quantite: Number(detail?.qty) || 0,
               });
             });
