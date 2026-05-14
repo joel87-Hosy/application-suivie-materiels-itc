@@ -262,9 +262,219 @@
           0 0 0 1px rgba(14, 116, 144, 0.12);
       }
 
+      /* ── Bouton flottant IA ── */
+      @keyframes aiGradientShift {
+        0%   { background-position: 0% 50%; }
+        50%  { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      @keyframes aiPulseRing {
+        0%   { transform: scale(1);   opacity: 0.7; }
+        70%  { transform: scale(1.55); opacity: 0;   }
+        100% { transform: scale(1.55); opacity: 0;   }
+      }
+      @keyframes aiOrbit {
+        from { transform: rotate(0deg)   translateX(22px) rotate(0deg); }
+        to   { transform: rotate(360deg) translateX(22px) rotate(-360deg); }
+      }
+      @keyframes aiSparkle {
+        0%, 100% { opacity: 1;   transform: scale(1); }
+        50%       { opacity: 0.4; transform: scale(0.7); }
+      }
+      @keyframes aiLiveDot {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.2; }
+      }
+      @keyframes aiToggleBounceIn {
+        0%   { transform: scale(0.7) translateY(12px); opacity: 0; }
+        60%  { transform: scale(1.06) translateY(-3px); opacity: 1; }
+        100% { transform: scale(1) translateY(0); opacity: 1; }
+      }
+
+      #ai-chatbot-toggle {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 0;
+        width: 52px;
+        height: 52px;
+        padding: 0;
+        overflow: hidden;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #0c4a6e, #0369a1, #0ea5e9, #06b6d4, #0891b2);
+        background-size: 300% 300%;
+        animation: aiGradientShift 5s ease infinite, aiToggleBounceIn 0.45s cubic-bezier(0.16,1,0.3,1) both;
+        border: none;
+        cursor: pointer;
+        color: white;
+        box-shadow:
+          0 6px 24px rgba(3, 105, 161, 0.55),
+          0 2px 6px rgba(0,0,0,0.18),
+          inset 0 1px 0 rgba(255,255,255,0.18);
+        transition:
+          width 0.35s cubic-bezier(0.34,1.2,0.64,1),
+          transform 0.22s cubic-bezier(0.34,1.56,0.64,1),
+          box-shadow 0.22s ease,
+          gap 0.35s ease;
+        backdrop-filter: blur(8px);
+        white-space: nowrap;
+      }
+      #ai-chatbot-toggle:hover {
+        width: 170px;
+        gap: 10px;
+        transform: translateY(-3px);
+        box-shadow:
+          0 14px 40px rgba(3, 105, 161, 0.65),
+          0 4px 12px rgba(0,0,0,0.2),
+          inset 0 1px 0 rgba(255,255,255,0.22);
+      }
+      #ai-chatbot-toggle:active {
+        transform: translateY(0) scale(0.96);
+      }
+      /* Halo pulsant */
+      .ai-toggle-ring {
+        pointer-events: none;
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        border: 2px solid rgba(14, 165, 233, 0.7);
+        animation: aiPulseRing 2.2s cubic-bezier(0.215,0.61,0.355,1) infinite;
+      }
+      .ai-toggle-ring-2 {
+        pointer-events: none;
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        border: 2px solid rgba(6, 182, 212, 0.5);
+        animation: aiPulseRing 2.2s cubic-bezier(0.215,0.61,0.355,1) 0.7s infinite;
+      }
+      /* Icône robot */
+      .ai-toggle-icon-wrap {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 52px;
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        font-size: 20px;
+        transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+      }
+      #ai-chatbot-toggle:hover .ai-toggle-icon-wrap {
+        transform: rotate(-10deg) scale(1.12);
+      }
+      /* Point orbite */
+      .ai-orbit-dot {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 6px;
+        height: 6px;
+        margin: -3px;
+        border-radius: 50%;
+        background: #67e8f9;
+        box-shadow: 0 0 5px #67e8f9, 0 0 10px rgba(103,232,249,0.6);
+        animation: aiOrbit 3s linear infinite;
+        transform-origin: 0 0;
+      }
+      /* Badge LIVE */
+      .ai-live-badge {
+        position: absolute;
+        top: -3px;
+        right: -3px;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        background: linear-gradient(135deg, #10b981, #059669);
+        border: 1.5px solid white;
+        border-radius: 999px;
+        padding: 1px 5px;
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: white;
+        box-shadow: 0 2px 6px rgba(16,185,129,0.5);
+        z-index: 10;
+      }
+      .ai-live-dot {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: white;
+        animation: aiLiveDot 1.2s ease-in-out infinite;
+      }
+      /* Étincelle */
+      .ai-sparkle {
+        position: absolute;
+        font-size: 8px;
+        animation: aiSparkle 1.8s ease-in-out infinite;
+        pointer-events: none;
+      }
+      .ai-sparkle-1 { top: 3px; left: 32px; animation-delay: 0s; }
+      .ai-sparkle-2 { bottom: 5px; left: 28px; animation-delay: 0.6s; }
+      /* Texte labels — masqué par défaut, visible au hover */
+      .ai-toggle-text {
+        position: relative;
+        z-index: 1;
+        text-align: left;
+        line-height: 1.15;
+        opacity: 0;
+        transform: translateX(-6px);
+        transition: opacity 0.22s 0.1s ease, transform 0.28s 0.1s cubic-bezier(0.34,1.2,0.64,1);
+        pointer-events: none;
+        padding-right: 14px;
+      }
+      #ai-chatbot-toggle:hover .ai-toggle-text {
+        opacity: 1;
+        transform: translateX(0);
+        pointer-events: auto;
+      }
+      .ai-toggle-label-top {
+        display: block;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: rgba(224, 242, 254, 0.72);
+      }
+      .ai-toggle-label-main {
+        display: block;
+        font-size: 13px;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+        color: white;
+        text-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      }
+
       .ai-chatbot-message {
         white-space: pre-wrap;
         word-break: break-word;
+      }
+
+      /* Bouton microphone vocal */
+      @keyframes aiMicPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+        50%       { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+      }
+      #ai-voice-btn.recording {
+        background: #ef4444 !important;
+        animation: aiMicPulse 1s ease-in-out infinite;
+      }
+      #ai-voice-btn.recording i::before {
+        content: "\f04d"; /* fa-stop */
+      }
+      #ai-voice-status {
+        display: none;
+        font-size: 11px;
+        color: #ef4444;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      #ai-voice-status.visible {
+        display: block;
       }
 
       .ai-chatbot-scrollbar::-webkit-scrollbar {
@@ -945,6 +1155,17 @@
 
               <div
                 onclick="
+                  showSection('archives-consommations');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-amber-300"
+              >
+                <i class="fas fa-archive w-5 text-amber-400"></i>
+                Archives Consommations
+              </div>
+
+              <div
+                onclick="
                   showSection('reception');
                   toggleSidebarMobile();
                 "
@@ -1142,46 +1363,8 @@
           </div>
         </div>
 
-        <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="flex flex-wrap gap-2 text-[11px] text-slate-600">
-            <button
-              type="button"
-              onclick="submitChatAssistantPrompt('Comment utiliser ce module ?')"
-              class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold transition hover:border-cyan-500 hover:text-cyan-700"
-            >
-              Utilisation
-            </button>
-            <button
-              type="button"
-              onclick="submitChatAssistantPrompt('Donne-moi un résumé du stock ITC-B01')"
-              class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold transition hover:border-cyan-500 hover:text-cyan-700"
-            >
-              Stock ITC-B01
-            </button>
-            <button
-              type="button"
-              onclick="submitChatAssistantPrompt('Quelles sont mes fonctionnalités selon mon rôle ?')"
-              class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold transition hover:border-cyan-500 hover:text-cyan-700"
-            >
-              Mon rôle
-            </button>
-          </div>
-          <div class="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-            <button
-              type="button"
-              onclick="openChatAssistantAgentContact()"
-              class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-100"
-            >
-              <i class="fas fa-headset mr-1"></i> Parler à un agent
-            </button>
-            <button
-              type="button"
-              onclick="openChatAssistantRequestFlow()"
-              class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 font-semibold text-sky-700 transition hover:bg-sky-100"
-            >
-              <i class="fas fa-file-signature mr-1"></i> Créer une demande
-            </button>
-          </div>
+        <div id="ai-chatbot-quick-actions" class="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <!-- Rempli dynamiquement par renderChatQuickActions() selon le rôle -->
         </div>
 
         <div
@@ -1199,9 +1382,19 @@
             <textarea
               id="ai-chatbot-input"
               rows="1"
-              placeholder="Écrivez votre question ici..."
+              placeholder="Écrivez ou parlez..."
               class="max-h-32 min-h-[48px] flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
             ></textarea>
+            <button
+              id="ai-voice-btn"
+              type="button"
+              onclick="toggleVoiceInput()"
+              title="Note vocale"
+              class="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 transition hover:bg-red-50 hover:text-red-500"
+              aria-label="Note vocale"
+            >
+              <i class="fas fa-microphone"></i>
+            </button>
             <button
               id="ai-chatbot-send"
               type="submit"
@@ -1211,8 +1404,8 @@
               <i class="fas fa-paper-plane"></i>
             </button>
           </div>
-          <p class="mt-2 text-[11px] text-slate-500">
-            Mode sécurisé disponible via endpoint backend. Gemini direct reste possible en mode fallback.
+          <p id="ai-voice-status" class="mt-2">
+            <i class="fas fa-circle text-[8px] align-middle mr-1"></i> Écoute en cours… Parlez maintenant
           </p>
         </form>
       </section>
@@ -1221,16 +1414,22 @@
         id="ai-chatbot-toggle"
         type="button"
         onclick="toggleChatAssistant()"
-        class="flex items-center gap-3 rounded-full bg-gradient-to-r from-cyan-700 via-sky-600 to-cyan-500 px-5 py-3 text-left text-white shadow-2xl transition hover:-translate-y-0.5 hover:shadow-cyan-900/30"
         aria-controls="ai-chatbot-panel"
         aria-expanded="false"
+        title="Assistant IA"
       >
-        <span class="flex h-11 w-11 items-center justify-center rounded-full bg-white/16 text-lg">
+        <span class="ai-toggle-ring"></span>
+        <span class="ai-toggle-ring-2"></span>
+        <span class="ai-live-badge"><span class="ai-live-dot"></span>LIVE</span>
+        <span class="ai-toggle-icon-wrap">
           <i class="fas fa-robot"></i>
+          <span class="ai-orbit-dot"></span>
         </span>
-        <span>
-          <span class="block text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-50/80">AI Help</span>
-          <span class="block text-sm font-black tracking-tight">Assistant IA</span>
+        <span class="ai-sparkle ai-sparkle-1">✦</span>
+        <span class="ai-sparkle ai-sparkle-2">✦</span>
+        <span class="ai-toggle-text">
+          <span class="ai-toggle-label-top">AI Help</span>
+          <span class="ai-toggle-label-main">Assistant IA</span>
         </span>
       </button>
     </div>
@@ -1440,6 +1639,9 @@
                   "Utilisateur ITC connecté : " +
                     (currentUser.name || currentUser.nom || currentUser.email),
                 );
+                if (!hadUser) {
+                  onUserLogin();
+                }
               }
             }
           } catch (e) {
@@ -1842,6 +2044,7 @@
                 ? "tech-nouvelle-demande"
                 : "cockpit",
             );
+            onUserLogin();
           } else {
             console.warn(
               "Profil introuvable dans appData après refresh pour :",
@@ -2216,6 +2419,21 @@
         return date.getMonth() === month && date.getFullYear() === year;
       }
 
+      function getArchiveOperatorsForCurrentUser() {
+        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
+        const role = String(currentUser?.role || "")
+          .trim()
+          .toUpperCase();
+
+        if (role === "GESTIONNAIRE") {
+          const managed = new Set(getManagedOpsNormalized(currentUser));
+          const filtered = operators.filter((op) => managed.has(op));
+          return filtered.length > 0 ? filtered : operators;
+        }
+
+        return operators;
+      }
+
       function buildConsumptionSnapshot(monthIndex, year) {
         const sourceDemandes = (appData && appData.demandes) || [];
         const livraisonsMois = sourceDemandes.filter(
@@ -2246,6 +2464,7 @@
             availableTotal: 0,
             entrantsByDesignation: {},
             sortantsByDesignation: {},
+            sortantsDetails: [],
           };
           return acc;
         }, {});
@@ -2271,6 +2490,12 @@
             const op = normalizeOperatorKey(sortie.op);
             if (!operatorStats[op]) return;
 
+            const reference = String(
+              sortie?.ref || sortie?.reference || sortie?.motif || "NON RENSEIGNEE",
+            )
+              .trim()
+              .toUpperCase();
+
             getSortieItems(sortie).forEach((item) => {
               const label = String(item.label || "NON DÉFINI")
                 .trim()
@@ -2281,6 +2506,22 @@
 
               operatorStats[op].sortantsByDesignation[labelKey] =
                 (operatorStats[op].sortantsByDesignation[labelKey] || 0) + qty;
+
+              const existingDetail = (operatorStats[op].sortantsDetails || []).find(
+                (entry) =>
+                  String(entry?.designation || "") === label &&
+                  String(entry?.reference || "") === reference,
+              );
+
+              if (existingDetail) {
+                existingDetail.qty = (Number(existingDetail.qty) || 0) + qty;
+              } else {
+                operatorStats[op].sortantsDetails.push({
+                  designation: label,
+                  reference,
+                  qty,
+                });
+              }
             });
           });
 
@@ -2578,6 +2819,7 @@
         const archives = Array.isArray(appData?.consumptionArchives)
           ? appData.consumptionArchives
           : [];
+        const operators = getArchiveOperatorsForCurrentUser();
 
         const renderByDesignation = (totals, colorClass) => {
           const entries = Object.entries(totals || {}).sort(
@@ -2606,20 +2848,13 @@
                     archives.length > 0
                       ? archives
                           .map((archive) => {
-                            const operators = [
-                              "ITC-B01",
-                              "ITC-B02",
-                              "CIC",
-                              "OCI",
-                              "MOOV",
-                              "MTN",
-                            ];
                             const blocks = operators
                               .map((op) => {
                                 const stats = archive.operatorStats?.[op] || {
                                   availableTotal: 0,
                                   entrantsByDesignation: {},
                                   sortantsByDesignation: {},
+                                  sortantsDetails: [],
                                 };
                                 const totalEntrants = Object.values(
                                   stats.entrantsByDesignation || {},
@@ -2778,7 +3013,7 @@
 
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
+        const operators = getArchiveOperatorsForCurrentUser();
 
         getLogoDataUrl()
           .catch(() => "")
@@ -2802,6 +3037,7 @@
                 availableTotal: 0,
                 entrantsByDesignation: {},
                 sortantsByDesignation: {},
+                sortantsDetails: [],
               };
 
               const entrantTotal = Object.values(
@@ -2849,6 +3085,35 @@
                     ? sortantRows
                     : [["Aucune donnée", "0"]],
               });
+
+              const detailsStartY = (doc.lastAutoTable?.finalY || nextStartY) + 8;
+              const sortantsDetailsSource = Array.isArray(stats.sortantsDetails)
+                ? stats.sortantsDetails
+                : [];
+              const sortantsDetailsRows =
+                sortantsDetailsSource.length > 0
+                  ? sortantsDetailsSource.map((detail) => [
+                      String(detail?.designation || "NON DÉFINI"),
+                      String(
+                        detail?.reference ||
+                          detail?.destination ||
+                          "NON RENSEIGNEE",
+                      ),
+                      String(detail?.qty || 0),
+                    ])
+                  : sortantRows.map(([designation, qty]) => [
+                      String(designation || "NON DÉFINI"),
+                      "NON RENSEIGNEE",
+                      String(qty || 0),
+                    ]);
+              doc.autoTable({
+                startY: detailsStartY,
+                head: [["Matériel sortant", "Référence bon/motif", "Qté"]],
+                body:
+                  sortantsDetailsRows.length > 0
+                    ? sortantsDetailsRows
+                    : [["Aucune donnée", "-", "0"]],
+              });
             }
 
             doc.save(`Archive_Consommation_${archive.key || Date.now()}.pdf`);
@@ -2859,7 +3124,7 @@
         const archive = getConsumptionArchiveByKey(keyEncoded);
         if (!archive) return alert("Archive introuvable.");
 
-        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
+        const operators = getArchiveOperatorsForCurrentUser();
         const rows = [];
 
         operators.forEach((op) => {
@@ -2867,6 +3132,7 @@
             availableTotal: 0,
             entrantsByDesignation: {},
             sortantsByDesignation: {},
+            sortantsDetails: [],
           };
 
           const entrantTotal = Object.values(
@@ -2884,6 +3150,7 @@
             SortantsTotal: sortantTotal,
             Type: "",
             Designation: "",
+            Reference: "",
             Quantite: "",
           });
 
@@ -2897,6 +3164,7 @@
                 SortantsTotal: "",
                 Type: "ENTRANT",
                 Designation: label,
+                Reference: "",
                 Quantite: qty,
               });
             },
@@ -2912,10 +3180,48 @@
                 SortantsTotal: "",
                 Type: "SORTANT",
                 Designation: label,
+                Reference: "",
                 Quantite: qty,
               });
             },
           );
+
+          const sortantsDetailsSource = Array.isArray(stats.sortantsDetails)
+            ? stats.sortantsDetails
+            : [];
+          if (sortantsDetailsSource.length > 0) {
+            sortantsDetailsSource.forEach((detail) => {
+              rows.push({
+                Mois: archive.label || archive.key || "",
+                Operateur: op,
+                Disponible: "",
+                EntrantsTotal: "",
+                SortantsTotal: "",
+                Type: "SORTANT_REF",
+                Designation: String(detail?.designation || "NON DÉFINI"),
+                Reference: String(
+                  detail?.reference || detail?.destination || "NON RENSEIGNEE",
+                ),
+                Quantite: Number(detail?.qty) || 0,
+              });
+            });
+          } else {
+            Object.entries(stats.sortantsByDesignation || {}).forEach(
+              ([label, qty]) => {
+                rows.push({
+                  Mois: archive.label || archive.key || "",
+                  Operateur: op,
+                  Disponible: "",
+                  EntrantsTotal: "",
+                  SortantsTotal: "",
+                  Type: "SORTANT_REF",
+                  Designation: label,
+                  Reference: "NON RENSEIGNEE",
+                  Quantite: qty,
+                });
+              },
+            );
+          }
         });
 
         try {
@@ -2936,6 +3242,7 @@
             { header: "SortantsTotal", key: "SortantsTotal", width: 14 },
             { header: "Type", key: "Type", width: 12 },
             { header: "Designation", key: "Designation", width: 42 },
+            { header: "Reference", key: "Reference", width: 30 },
             { header: "Quantite", key: "Quantite", width: 12 },
           ];
 
@@ -7732,13 +8039,64 @@
       function getChatAssistantSystemPrompt() {
         const role = currentUser?.role || "visiteur";
         const name = currentUser?.name || "utilisateur";
+        const managedOps = Array.isArray(currentUser?.managedOps)
+          ? currentUser.managedOps.join(", ")
+          : "N/A";
         return [
-          "Tu es ITC AI Assistant, un assistant IA intégré à une application ERP de gestion de matériels.",
-          "Réponds en français de façon claire, structurée et pragmatique.",
-          "Aide l'utilisateur à comprendre l'application, ses rôles, ses sections, le stock, les commandes, les sorties, les retours et les rapports.",
-          "Si une action exige une opération humaine ou une validation métier, indique-la explicitement.",
-          `Utilisateur connecté: ${name} (${role}).`,
-          `Section active: ${currentSectionId || "cockpit"}.`,
+          "Tu es ITC AI Assistant, assistant IA embarqué dans l'ERP ITC Telecom de gestion de matériels.",
+          "Réponds TOUJOURS en français, de façon claire, bienveillante et orientée action. Utilise des listes et étapes numérotées.",
+          "Ton rôle principal : aider l'utilisateur à utiliser l'application, naviguer vers la bonne section, et réaliser ses tâches selon son rôle.",
+          "Si l'utilisateur ne sait pas où aller, guide-le pas à pas. Ne dis jamais 'je ne sais pas' sans proposer une alternative.",
+          "",
+          "=== UTILISATEUR CONNECTÉ ===",
+          `Nom : ${name}`,
+          `Rôle : ${role}`,
+          `Section active : ${currentSectionId || "cockpit"}`,
+          `Opérateurs gérés : ${managedOps}`,
+          "",
+          "=== SECTIONS PAR RÔLE ===",
+          "",
+          "TECHNICIEN — sections accessibles :",
+          "- Demander Matériel (tech-nouvelle-demande) : formulaire pour soumettre une demande",
+          "- Mes Bons (tech-mes-demandes) : historique des bons de sortie personnels",
+          "- Retour Matériel (tech-retour-materiel) : signaler un retour de matériel non utilisé",
+          "",
+          "COORDINATRICE — sections accessibles :",
+          "- Demandes Tech (coord-demandes-tech) : traiter et valider les demandes techniciens",
+          "- Création Directe (coord-creation-directe) : créer une commande directe sans demande préalable",
+          "- Rapport Hebdo (rapport-hebdo) : générer et exporter le rapport hebdomadaire",
+          "- Demandes Coordinatrice (demandes-coordonnatrice) : vue globale des flux",
+          "",
+          "GESTIONNAIRE — sections accessibles :",
+          "- Sortie Physique (sortie-physique) : enregistrer une sortie de stock magasin",
+          "- Réception (reception) : réceptionner du matériel entrant",
+          "- Livraison (livraison) : enregistrer une livraison",
+          "- Scanner Bon (scanner-physique) : scanner un bon physique via caméra",
+          "- Rapports Sorties (rapports-sorties) : historique et export des sorties",
+          "- Stock par opérateur : ITC-B01, ITC-B02, OCI, CIC, MTN, MOOV",
+          "",
+          "SUPERVISEUR — sections accessibles :",
+          "- Trafic Audit (trafic-audit) : journal complet des opérations",
+          "- Stats Consommation (stats-consommation) : graphiques et indicateurs",
+          "- Archives Consommations (archives-consommations) : archives mensuelles",
+          "- Rapports Sorties Superviseur (superviseur-rapports-sorties) : rapports globaux",
+          "",
+          "=== PROCÉDURES CLÉS ===",
+          "Demande matériel (Technicien) : Section 'Demander Matériel' → choisir désignation → quantité → opérateur → valider",
+          "Sortie stock (Gestionnaire) : Section 'Sortie Physique' → remplir bon → items + quantités → valider → PDF",
+          "Retour matériel (Technicien) : Section 'Retour Matériel' → désignation → quantité → opérateur → confirmer",
+          "Commande directe (Coordinatrice) : Section 'Création Directe' → saisir items → envoyer au magasin",
+          "Rapport hebdo : Section 'Rapport Hebdo' → sélectionner période → générer → exporter Excel",
+          "",
+          "=== CAPACITÉS D'ACTION IA ===",
+          "Tu peux ouvrir des onglets et pré-remplir des formulaires directement dans l'application.",
+          "Si l'utilisateur demande d'ouvrir une section ou de remplir un formulaire, indique-lui que tu vas le faire et donne des instructions sur quoi vérifier/compléter.",
+          "Sections disponibles : cockpit (tableau de bord), tech-nouvelle-demande (demande matériel), tech-mes-demandes (mes bons), tech-retour-materiel (retour matériel), coord-demandes-tech (demandes techniciens), coord-creation-directe (commande directe), demandes-coordonnatrice (préparation commandes), sortie-physique (sortie physique), reception (réception matériel), livraison, scanner-physique, rapport-hebdo, trafic-audit, stats-consommation, archives-consommations, stock-itc-b01/b02/oci/cic/mtn/moov.",
+          "Formulaires pré-remplissables : Demande technicien (équipe, site, matériel), Retour matériel (désignation, quantité, état, motif), Réception (opérateur, désignation, quantité), Sortie physique (destinataire, référence, opérateur, articles×quantités), Commande directe (opérateur, projet/motif).",
+          "Quand l'utilisateur fournit toutes les informations d'un formulaire, confirme que tu vas l'ouvrir et le pré-remplir, puis demande-lui de vérifier et valider.",
+          "",
+          "=== DONNÉES EN TEMPS RÉEL ===",
+          buildFullAppContext(),
         ].join("\n");
       }
 
@@ -7833,11 +8191,75 @@
       }
 
       function getChatAssistantGreeting() {
-        return {
-          role: "assistant",
-          content:
-            "Bonjour. Je peux vous aider sur l'utilisation de l'ERP, le stock, les menus selon votre rôle, ou répondre à des questions générales sur vos opérations.\n\nExemples :\n- Comment demander du matériel ?\n- Résume le stock ITC-B01\n- Que puis-je faire avec mon rôle ?",
+        const role = String(currentUser?.role || "").toLowerCase();
+        const firstName = currentUser?.name
+          ? currentUser.name.split(" ")[0]
+          : null;
+        const prenom = firstName || "";
+        const managedOps = Array.isArray(currentUser?.managedOps)
+          ? currentUser.managedOps.join(", ")
+          : "";
+
+        const greetings = {
+          technicien: [
+            `Bonjour${prenom ? " " + prenom : ""} ! Je suis votre Assistant IA ITC.`,
+            `En tant que **Technicien**, voici vos actions disponibles :`,
+            ``,
+            `1. **Demander du matériel** → Cliquez sur « Demander Matériel » dans le menu`,
+            `2. **Consulter vos bons** → Section « Mes Bons »`,
+            `3. **Retourner du matériel** → Section « Retour Matériel »`,
+            ``,
+            `Dites-moi ce que vous souhaitez faire, ou cliquez sur un bouton rapide ci-dessus.`,
+          ].join("\n"),
+
+          gestionnaire: [
+            `Bonjour${prenom ? " " + prenom : ""} ! Je suis votre Assistant IA ITC.`,
+            `En tant que **Gestionnaire**${managedOps ? " (opérateurs : " + managedOps + ")" : ""}, voici vos modules :`,
+            ``,
+            `1. **Sortie de stock** → Section « Sortie Physique »`,
+            `2. **Réception matériel** → Section « Réception »`,
+            `3. **Livraison** → Section « Livraison »`,
+            `4. **Rapports sorties** → Section « Rapports Sorties »`,
+            `5. **Scanner un bon** → Section « Scanner Bon »`,
+            `6. **Consulter le stock** → Menus Stock par opérateur`,
+            ``,
+            `Besoin d'aide sur l'un de ces modules ? Demandez-moi.`,
+          ].join("\n"),
+
+          coordinatrice: [
+            `Bonjour${prenom ? " " + prenom : ""} ! Je suis votre Assistant IA ITC.`,
+            `En tant que **Coordinatrice**, vous coordonnez les flux entre techniciens et magasin :`,
+            ``,
+            `1. **Traiter les demandes techniciens** → Section « Demandes Tech »`,
+            `2. **Créer une commande directe** → Section « Création Directe »`,
+            `3. **Rapport hebdomadaire** → Section « Rapport Hebdo »`,
+            `4. **Vue globale** → Section « Demandes Coordinatrice »`,
+            ``,
+            `Je peux vous guider sur chaque étape. Que souhaitez-vous faire ?`,
+          ].join("\n"),
+
+          superviseur: [
+            `Bonjour${prenom ? " " + prenom : ""} ! Je suis votre Assistant IA ITC.`,
+            `En tant que **Superviseur**, vous avez accès à la vision globale des opérations :`,
+            ``,
+            `1. **Journal d'audit** → Section « Trafic Audit »`,
+            `2. **Statistiques** → Section « Stats Consommation »`,
+            `3. **Archives** → Section « Archives Consommations »`,
+            `4. **Rapports sorties** → Section « Rapports Sorties »`,
+            ``,
+            `Je peux aussi vous résumer le stock de n'importe quel opérateur. Que cherchez-vous ?`,
+          ].join("\n"),
         };
+
+        const content = greetings[role] || [
+          `Bonjour ! Je suis l'Assistant IA ITC Telecom.`,
+          `Je suis là pour vous aider à naviguer dans cette application de gestion de matériels.`,
+          ``,
+          `Connectez-vous avec votre compte pour accéder à votre espace personnalisé.`,
+          `Ou posez-moi directement une question.`,
+        ].join("\n");
+
+        return { role: "assistant", content };
       }
 
       function saveChatAssistantHistory() {
@@ -7964,6 +8386,7 @@
         if (toggle) toggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
 
         if (shouldOpen) {
+          renderChatQuickActions();
           renderChatAssistantMessages();
           setTimeout(() => {
             const input = document.getElementById("ai-chatbot-input");
@@ -8009,22 +8432,185 @@
 
       function getRoleCapabilities() {
         const role = String(currentUser?.role || "").toLowerCase();
-        const capabilities = {
-          superviseur:
-            "Vous pouvez suivre le journal d'audit, les statistiques de consommation, les archives et les rapports de sorties.",
-          technicien:
-            "Vous pouvez demander du matériel, enregistrer un retour de stock et suivre vos bons.",
-          coordinatrice:
-            "Vous pouvez traiter les flux techniciens, créer des commandes directes et importer des commandes Excel.",
-          gestionnaire:
-            "Vous pouvez gérer les commandes, les sorties, les entrées stock, les rapports et les consultations de stock.",
+        const ops = Array.isArray(currentUser?.managedOps)
+          ? currentUser.managedOps.join(", ")
+          : null;
+
+        const details = {
+          technicien: [
+            "En tant que Technicien, vos 3 actions disponibles :",
+            "1. Demander du matériel → Section « Demander Matériel »",
+            "   → Choisissez la désignation, quantité et opérateur, puis validez.",
+            "   → Un bon de sortie est généré automatiquement.",
+            "2. Consulter vos bons → Section « Mes Bons »",
+            "   → Retrouvez tous vos bons avec statut et détails.",
+            "3. Retourner du matériel → Section « Retour Matériel »",
+            "   → Saisissez la désignation et la quantité à retourner.",
+          ].join("\n"),
+
+          gestionnaire: [
+            `En tant que Gestionnaire${ops ? " (opérateurs : " + ops + ")" : ""}, vos actions :`  ,
+            "1. Sortie physique → Section « Sortie Physique »",
+            "   → Remplissez le bon de sortie, ajoutez les items et validez.",
+            "   → Imprimez le PDF ou envoyez par email.",
+            "2. Réceptionner du matériel → Section « Réception »",
+            "3. Enregistrer une livraison → Section « Livraison »",
+            "4. Scanner un bon physique → Section « Scanner Bon »",
+            "5. Consulter les rapports → Section « Rapports Sorties »",
+            "6. Voir le stock → Menus Stock (ITC-B01, OCI, CIC, MTN…)",
+          ].join("\n"),
+
+          coordinatrice: [
+            "En tant que Coordinatrice, vos actions :",
+            "1. Traiter les demandes techniciens → Section « Demandes Tech »",
+            "   → Sélectionnez une demande → validez ou refusez avec commentaire.",
+            "2. Créer une commande directe → Section « Création Directe »",
+            "   → Saisissez les items directement sans demande préalable.",
+            "3. Rapport hebdomadaire → Section « Rapport Hebdo »",
+            "   → Sélectionnez la période → générez → exportez Excel.",
+            "4. Vue globale des flux → Section « Demandes Coordinatrice »",
+          ].join("\n"),
+
+          superviseur: [
+            "En tant que Superviseur, votre accès est en lecture et analyse :",
+            "1. Journal d'audit complet → Section « Trafic Audit »",
+            "   → Toutes les opérations horodatées par utilisateur.",
+            "2. Statistiques de consommation → Section « Stats Consommation »",
+            "   → Graphiques par opérateur, période et type de matériel.",
+            "3. Archives mensuelles → Section « Archives Consommations »",
+            "4. Rapports sorties → Section « Rapports Sorties Superviseur »",
+            "",
+            "Je peux aussi vous résumer le stock d'un opérateur (ex: 'résume le stock OCI').",
+          ].join("\n"),
         };
 
         return (
-          capabilities[role] ||
-          "Votre profil n'est pas encore associé à un scénario métier détaillé dans l'assistant."
+          details[role] ||
+          "Votre profil n'est pas encore associé à un scénario métier. Contactez votre administrateur."
         );
       }
+
+      // ── CONTEXTE COMPLET DE L'APPLICATION (injecté dans le prompt IA) ─────────
+      function buildFullAppContext() {
+        const lines = [];
+
+        // ── TABLEAU DE BORD ───────────────────────────────────────────────
+        const stock = Array.isArray(appData?.stock) ? appData.stock : [];
+        const totalItems = stock.length;
+        const totalQty = stock.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+        const lowStock = stock.filter((e) => (Number(e.qty) || 0) === 0);
+        const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
+        const techDemandes = Array.isArray(appData?.techDemandes) ? appData.techDemandes : [];
+        const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
+        const retours = Array.isArray(appData?.retours) ? appData.retours : [];
+        const notifs = Array.isArray(appData?.notifications) ? appData.notifications : [];
+        const users = Array.isArray(appData?.users) ? appData.users : [];
+        const archives = Array.isArray(appData?.consumptionArchives) ? appData.consumptionArchives : [];
+
+        lines.push("=== TABLEAU DE BORD ===");
+        lines.push(`Désignations en stock : ${totalItems}`);
+        lines.push(`Quantité totale toutes opérateurs : ${totalQty} unités`);
+        lines.push(`Articles à stock zéro : ${lowStock.length}`);
+        lines.push(`Demandes coordonnatrice en attente : ${demandes.length}`);
+        lines.push(`Demandes techniciens en attente : ${techDemandes.length}`);
+        lines.push(`Sorties enregistrées (total) : ${sorties.length}`);
+        lines.push(`Retours enregistrés (total) : ${retours.length}`);
+        lines.push(`Notifications non lues : ${notifs.filter((n) => !n?.read).length}`);
+        lines.push(`Archives mensuelles disponibles : ${archives.length}`);
+
+        // ── STOCK PAR OPÉRATEUR ───────────────────────────────────────────
+        const operators = [...new Set(stock.map((e) => String(e.op || "").toUpperCase()).filter(Boolean))];
+        lines.push("");
+        lines.push("=== STOCK PAR OPÉRATEUR ===");
+        for (const op of operators) {
+          const items = stock.filter((e) => String(e.op || "").toUpperCase() === op);
+          const qtyTotal = items.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+          lines.push(`\n[${op}] — ${items.length} désignation(s), ${qtyTotal} unités au total`);
+          for (const item of items) {
+            lines.push(`  • ${item.label || "Sans nom"} | Qté: ${Number(item.qty) || 0} | Type: ${item.type || "-"}`);
+          }
+        }
+
+        // ── ARTICLES À STOCK ZÉRO ─────────────────────────────────────────
+        if (lowStock.length > 0) {
+          lines.push("");
+          lines.push("=== ARTICLES EN RUPTURE DE STOCK (Qté = 0) ===");
+          for (const item of lowStock) {
+            lines.push(`  • [${item.op}] ${item.label}`);
+          }
+        }
+
+        // ── DEMANDES COORDONNATRICE ───────────────────────────────────────
+        if (demandes.length > 0) {
+          lines.push("");
+          lines.push("=== DEMANDES COORDONNATRICE EN COURS ===");
+          for (const d of demandes.slice(0, 15)) {
+            lines.push(`  • ${d.label || d.designation || "?"} | Op: ${d.op || "?"} | Qté: ${d.qty || d.quantite || "?"} | Statut: ${d.status || d.statut || "En attente"} | Demandeur: ${d.demandeur || d.user || "?"}`);
+          }
+        }
+
+        // ── DEMANDES TECHNICIENS ──────────────────────────────────────────
+        if (techDemandes.length > 0) {
+          lines.push("");
+          lines.push("=== DEMANDES TECHNICIENS EN COURS ===");
+          for (const d of techDemandes.slice(0, 15)) {
+            const items = Array.isArray(d.items) ? d.items.map((i) => `${i.label}×${i.qty}`).join(", ") : (d.label || d.designation || "?");
+            lines.push(`  • ${items} | Op: ${d.op || "?"} | Statut: ${d.status || d.statut || "En attente"} | Technicien: ${d.technicien || d.user || d.demandeur || "?"} | Date: ${d.date || d.createdAt || "?"}`);
+          }
+        }
+
+        // ── SORTIES RÉCENTES ─────────────────────────────────────────────
+        if (sorties.length > 0) {
+          lines.push("");
+          lines.push("=== SORTIES RÉCENTES (10 dernières) ===");
+          for (const s of sorties.slice(-10).reverse()) {
+            const items = Array.isArray(s.items)
+              ? s.items.map((i) => `${i.label || i.designation}×${i.qty || i.quantite}`).join(", ")
+              : (s.designation || s.label || "?");
+            lines.push(`  • Bon: ${s.numBon || s.id || "?"} | ${items} | Op: ${s.op || "?"} | Date: ${s.date || s.dateCreation || "?"} | Agent: ${s.agent || s.gestionnaire || "?"}`);
+          }
+        }
+
+        // ── RETOURS ──────────────────────────────────────────────────────
+        if (retours.length > 0) {
+          lines.push("");
+          lines.push("=== RETOURS DE STOCK ===");
+          for (const r of retours.slice(-10).reverse()) {
+            lines.push(`  • ${r.label || r.designation || "?"} | Op: ${r.op || "?"} | Qté: ${r.qty || r.quantite || "?"} | Date: ${r.date || "?"} | Tech: ${r.technicien || r.user || "?"}`);
+          }
+        }
+
+        // ── NOTIFICATIONS ────────────────────────────────────────────────
+        if (notifs.length > 0) {
+          lines.push("");
+          lines.push("=== NOTIFICATIONS ===");
+          for (const n of notifs.slice(-10).reverse()) {
+            lines.push(`  • [${n.read ? "Lu" : "NON LU"}] ${n.message || n.text || n.title || "?"} (${n.date || n.createdAt || "?"})`);
+          }
+        }
+
+        // ── UTILISATEURS & RÔLES ─────────────────────────────────────────
+        if (users.length > 0) {
+          lines.push("");
+          lines.push("=== UTILISATEURS DE L'APPLICATION ===");
+          for (const u of users) {
+            const ops = Array.isArray(u.managedOps) ? ` | Opérateurs: ${u.managedOps.join(", ")}` : "";
+            lines.push(`  • ${u.name || u.nom || "?"} | Rôle: ${u.role || "?"} | Email: ${u.email || "?"}${ops}`);
+          }
+        }
+
+        // ── ARCHIVES ─────────────────────────────────────────────────────
+        if (archives.length > 0) {
+          lines.push("");
+          lines.push("=== ARCHIVES CONSOMMATIONS ===");
+          for (const a of archives.slice(0, 6)) {
+            lines.push(`  • Période: ${a.month || a.periode || a.key || "?"} | Total sorties: ${a.totalSorties || a.total || "?"}`);
+          }
+        }
+
+        return lines.join("\n");
+      }
+      // ── FIN CONTEXTE ──────────────────────────────────────────────────────────
 
       function getCurrentAppInsights() {
         const notificationCount = Array.isArray(appData?.notifications)
@@ -8038,94 +8624,606 @@
         ].join("\n");
       }
 
+      // Génère les boutons d'action rapide selon le rôle de l'utilisateur connecté
+      function renderChatQuickActions() {
+        const container = document.getElementById("ai-chatbot-quick-actions");
+        if (!container) return;
+
+        const role = String(currentUser?.role || "").toLowerCase();
+
+        const actionsByRole = {
+          technicien: [
+            { label: "📋 Faire une demande", prompt: "Comment faire une demande de matériel ?" },
+            { label: "📄 Mes bons", prompt: "Comment consulter mes bons de sortie ?" },
+            { label: "↩️ Retourner du matériel", prompt: "Comment retourner du matériel ?" },
+          ],
+          gestionnaire: [
+            { label: "📦 Enregistrer une sortie", prompt: "Comment enregistrer une sortie de stock ?" },
+            { label: "📊 Consulter le stock", prompt: "Résume le stock ITC-B01" },
+            { label: "📥 Réceptionner", prompt: "Comment réceptionner du matériel ?" },
+          ],
+          coordinatrice: [
+            { label: "📋 Demandes techniciens", prompt: "Comment traiter les demandes des techniciens ?" },
+            { label: "✍️ Commande directe", prompt: "Comment créer une commande directe ?" },
+            { label: "📅 Rapport hebdo", prompt: "Comment générer le rapport hebdomadaire ?" },
+          ],
+          superviseur: [
+            { label: "📊 Statistiques", prompt: "Comment consulter les statistiques de consommation ?" },
+            { label: "🔍 Journal d'audit", prompt: "Comment accéder au journal d'audit ?" },
+            { label: "🗂️ Archives", prompt: "Comment consulter les archives ?" },
+          ],
+        };
+
+        const actions = actionsByRole[role] || [
+          { label: "❓ Utilisation", prompt: "Comment utiliser ce module ?" },
+          { label: "👤 Mon rôle", prompt: "Quelles sont mes fonctionnalités selon mon rôle ?" },
+        ];
+
+        container.innerHTML = `
+          <div class="flex flex-wrap gap-2 text-[11px] text-slate-600">
+            ${actions.map((a) => `
+              <button type="button"
+                onclick="submitChatAssistantPrompt(${JSON.stringify(a.prompt)})"
+                class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold transition hover:border-cyan-500 hover:text-cyan-700"
+              >${a.label}</button>
+            `).join("")}
+          </div>
+          <div class="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+            <button type="button" onclick="openChatAssistantAgentContact()"
+              class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-100">
+              <i class="fas fa-headset mr-1"></i> Parler à un agent
+            </button>
+            <button type="button" onclick="openChatAssistantRequestFlow()"
+              class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 font-semibold text-sky-700 transition hover:bg-sky-100">
+              <i class="fas fa-file-signature mr-1"></i> Créer une demande
+            </button>
+          </div>
+        `;
+      }
+
+      // Appelé après chaque connexion réussie — réinitialise et ouvre l'assistant
+      function onUserLogin() {
+        // Réinitialiser l'historique avec le message d'accueil personnalisé
+        chatAssistantState.messages = [getChatAssistantGreeting()];
+        chatAssistantState.isOpen = false;
+        try { localStorage.removeItem(CHATBOT_STORAGE_KEY); } catch (e) { /* ignore */ }
+
+        // Mettre à jour les boutons d'action rapide selon le rôle
+        renderChatQuickActions();
+
+        // Ouvrir l'assistant après 2.5 s pour laisser l'interface se charger
+        setTimeout(() => {
+          toggleChatAssistant(true);
+        }, 2500);
+      }
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // ── IA ACTIONS : NAVIGATION & REMPLISSAGE FORMULAIRES ───────────────────
+      // ═══════════════════════════════════════════════════════════════════════════
+
+      /**
+       * Navigue vers une section puis exécute une fonction de remplissage
+       * après le rendu DOM (avec léger délai pour laisser le temps au render).
+       */
+      function aiNavigateToSection(sectionId, fillFn) {
+        // Étape 1 — laisser 1.4s pour que l'utilisateur lise le message de confirmation dans le chatbot
+        // Étape 2 — fermer le chatbot
+        // Étape 3 — naviguer dans l'application principale (300ms après la fermeture)
+        // Étape 4 — remplir le formulaire si nécessaire (350ms après le rendu)
+        setTimeout(() => {
+          toggleChatAssistant(false);                   // ferme le panneau IA
+          setTimeout(() => {
+            showSection(sectionId);                     // rend la section dans #app-container
+            if (typeof fillFn === "function") {
+              setTimeout(fillFn, 350);                  // pré-remplit les champs après le rendu
+            }
+          }, 300);
+        }, 1400);
+      }
+
+      /**
+       * Met en surbrillance (flash bleu → reset) les champs remplis par l'IA.
+       */
+      function aiHighlightFilledFields(ids) {
+        for (const id of ids) {
+          const el = document.getElementById(id);
+          if (!el || !el.value) continue;
+          el.style.transition = "border-color 0.3s, background-color 0.3s";
+          el.style.borderColor = "#6366f1";
+          el.style.backgroundColor = "#eef2ff";
+          el.style.boxShadow = "0 0 0 3px rgba(99,102,241,0.25)";
+          setTimeout(() => {
+            el.style.borderColor = "";
+            el.style.backgroundColor = "";
+            el.style.boxShadow = "";
+          }, 3500);
+        }
+      }
+
+      /**
+       * Extrait le premier groupe capturé d'un regex dans une chaîne.
+       */
+      function aiExtractParam(str, pattern) {
+        const m = String(str || "").match(pattern);
+        return m ? m[1].trim() : null;
+      }
+
+      /**
+       * Détecte l'intention de navigation ou remplissage de formulaire dans
+       * le texte de l'utilisateur et exécute l'action correspondante.
+       * Retourne un message de confirmation (string) si action exécutée, sinon null.
+       */
+      function aiParseAndExecuteAction(userText) {
+        const q = String(userText || "").trim().toLowerCase();
+        if (!q) return null;
+
+        // ── Mots-clés déclencheurs ─────────────────────────────────────────
+        const CLOSE_TRIGGER = /(ferme|fermer|ferm[eè]s|quitte|quitter|retour.*accueil|revenir.*accueil|retourner.*accueil|retour.*dashboard|revenir.*dashboard|revenir.*tableau|retour.*tableau|close|sortir de|sortir d'ici|annuler.*onglet|go back|revenir en arri[eè]re)/;
+        if (CLOSE_TRIGGER.test(q)) {
+          toggleChatAssistant(false);
+          setTimeout(() => showSection("cockpit"), 300);
+          return "✅ J'ai fermé l'onglet et je vous ramène au **Tableau de Bord**.";
+        }
+
+        const NAV_TRIGGER  = /(ouvre|ouvrir|aller|va |affiche|montre|acc[eè]de|navigue|lance|am[eè]ne|go to|montrer|ouvrez|voir la section|aller sur|afficher|montre-moi|am[eè]ne-moi)/;
+        const FILL_TRIGGER = /(remplis|compl[eè]te|pr[eé]pare|fais|cr[eé]+e|saisir|enregistre|soumets|valide|d[eé]clare|pr[eé]fills?|mets|mettez|ins[eè]re|préparer|créer|enregistrer|déclarer)/;
+
+        const isNav  = NAV_TRIGGER.test(q);
+        const isFill = FILL_TRIGGER.test(q);
+
+        if (!isNav && !isFill) return null;
+
+        // ── Carte de toutes les sections ──────────────────────────────────
+        const SECTIONS = [
+          { id: "cockpit",                        label: "Tableau de Bord",          patterns: /tableau de bord|dashboard|cockpit|accueil|home/ },
+          { id: "tech-nouvelle-demande",           label: "Demander Matériel",        patterns: /demande.*mat[eé]riel|nouvelle demande|formulaire.*demande|faire.*demande|besoin.*mat[eé]riel|demander du mat[eé]riel/ },
+          { id: "tech-mes-demandes",               label: "Mes Bons",                 patterns: /mes bons|mes demandes|bons? technicien|historique.*demande/ },
+          { id: "tech-retour-materiel",            label: "Retour Matériel",          patterns: /retour.*mat[eé]riel|d[eé]clarer.*retour|formulaire.*retour|retourner.*mat[eé]riel/ },
+          { id: "coord-demandes-tech",             label: "Demandes Techniciens",     patterns: /demandes?.*tech|flux.*tech|besoins.*tech/ },
+          { id: "coord-creation-directe",          label: "Commande Directe",         patterns: /commande directe|cr[eé]ation directe/ },
+          { id: "rapport-hebdo",                   label: "Rapport Hebdo",            patterns: /rapport.*hebdo|rapport.*semaine|rapport hebdomadaire/ },
+          { id: "demandes-coordonnatrice",         label: "Préparation Commandes",    patterns: /demandes?.*coord|pr[eé]paration.*commande|flux.*coord/ },
+          { id: "sortie-physique",                 label: "Sortie Physique",          patterns: /sortie.*physique|sortie.*stock|bon.*sortie|enregistrer.*sortie|faire.*sortie|cr[eé]er.*sortie/ },
+          { id: "rapports-sorties",                label: "Rapports Sorties",         patterns: /rapport.*sortie|historique.*sortie/ },
+          { id: "reception",                       label: "Réception Matériel",       patterns: /r[eé]ception|entr[eé]e.*mat[eé]riel|mise en stock|r[eé]ceptionner|enregistrer.*entr[eé]e|rentrer.*stock/ },
+          { id: "livraison",                       label: "Livraison",                patterns: /livraison|livrer/ },
+          { id: "scanner-physique",                label: "Scanner Bon",              patterns: /scanner|scan.*bon|scanner.*bon/ },
+          { id: "trafic-audit",                    label: "Journal Audit",            patterns: /audit|journal|trafic.*audit/ },
+          { id: "stats-consommation",              label: "Statistiques",             patterns: /statistique|stats.*consommation|graphique.*cons/ },
+          { id: "archives-consommations",          label: "Archives",                 patterns: /archive|historique mensuel/ },
+          { id: "superviseur-rapports-sorties",    label: "Rapports Global",          patterns: /rapport.*global|toutes.*sorties.*global/ },
+          { id: "stock-itc-b01",                   label: "Stock ITC Bureau 01",      patterns: /stock.*itc.*(b01|bureau 01|bureau01)|itc-?b01/ },
+          { id: "stock-itc-b02",                   label: "Stock ITC Bureau 02",      patterns: /stock.*itc.*(b02|bureau 02|bureau02)|itc-?b02/ },
+          { id: "stock-oci",                       label: "Stock OCI",                patterns: /\bstock.*oci\b/ },
+          { id: "stock-cic",                       label: "Stock CIC",                patterns: /\bstock.*cic\b/ },
+          { id: "stock-mtn",                       label: "Stock MTN",                patterns: /\bstock.*mtn\b/ },
+          { id: "stock-moov",                      label: "Stock MOOV",               patterns: /\bstock.*moov\b/ },
+        ];
+
+        let matchedSection = null;
+        for (const sec of SECTIONS) {
+          if (sec.patterns.test(q)) { matchedSection = sec; break; }
+        }
+        if (!matchedSection) return null;
+
+        // ═══════════════════════════════════════════════════════════════
+        // ── REMPLISSAGE FORMULAIRE si intention de saisir ──────────────
+        // ═══════════════════════════════════════════════════════════════
+
+        if (isFill) {
+
+          // ── 1. Formulaire Demande Technicien ─────────────────────────
+          if (matchedSection.id === "tech-nouvelle-demande") {
+            const equipe = aiExtractParam(q, /[eé]quipe[:\s]+([a-zàâçéèêëîïôûùüÿ0-9 _-]+?)(?:\s+(?:au|site|pour|avec|,|$))/i)
+                        || aiExtractParam(q, /\bteam[:\s]+([^\s,]+)/i);
+            const site   = aiExtractParam(q, /(?:site|lieu|chantier|mission|localité)[:\s]+([a-zàâçéèêëîïôûùüÿ0-9 _-]+?)(?:\s+(?:avec|pour|,|$))/i);
+            const besoin = aiExtractParam(q, /(?:avec|mat[eé]riel|besoin|articles?|fournitures?)[:\s]+(.+)$/i);
+
+            aiNavigateToSection("tech-nouvelle-demande", () => {
+              const fields = {};
+              if (equipe) { fields["t-equipe"]  = equipe.toUpperCase(); }
+              if (site)   { fields["t-objectif"] = site.toUpperCase();  }
+              if (besoin) { fields["t-besoin"]   = besoin.toUpperCase();}
+              Object.entries(fields).forEach(([id, val]) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val;
+              });
+              aiHighlightFilledFields(["t-equipe","t-objectif","t-besoin"]);
+            });
+
+            const filled = [
+              equipe && `Équipe: ${equipe}`,
+              site   && `Site: ${site}`,
+              besoin && `Matériel: ${besoin}`,
+            ].filter(Boolean).join(" | ");
+
+            return `✅ J'ouvre le formulaire **Demander Matériel** et je pré-remplis les champs${filled ? " :\n\n📝 " + filled : ""}.\n\nVérifiez les informations et cliquez sur **Envoyer à la coordination**.`;
+          }
+
+          // ── 2. Formulaire Retour Matériel ─────────────────────────────
+          if (matchedSection.id === "tech-retour-materiel") {
+            const label = aiExtractParam(q,
+              /(?:retour(?:ner)?|d[eé]clarer|retour de|rendre)\s+(?:les?\s+|du\s+|de\s+)?(?:\d+\s+)?([a-zàâçéèêëîïôûùüÿ][a-zàâçéèêëîïôûùüÿ0-9 _-]+?)(?:\s+(?:\d|en [eé]tat|neuf|d[eé]fectueux|motif|,|$))/i
+            );
+            const qty   = aiExtractParam(q, /\b(\d+)\s*(?:unit[eé]|pi[eè]ce|exemplaire|m[eè]tre|u\b)?/i);
+            const etat  = /d[eé]fectueux|d[eé]faillant|cass[eé]|hs|abîm[eé]|endommag[eé]/.test(q) ? "DÉFECTUEUX" : "NEUF";
+            const motif = aiExtractParam(q, /(?:motif|raison|car|parce que|suite)[:\s]+(.+)$/i);
+
+            aiNavigateToSection("tech-retour-materiel", () => {
+              if (label) { const el = document.getElementById("ret-label"); if (el) el.value = label.toUpperCase(); }
+              if (qty)   { const el = document.getElementById("ret-qty");   if (el) el.value = qty; }
+              const etatEl = document.getElementById("ret-etat");
+              if (etatEl) etatEl.value = etat;
+              if (motif) { const el = document.getElementById("ret-motif"); if (el) el.value = motif.toUpperCase(); }
+              aiHighlightFilledFields(["ret-label","ret-qty","ret-etat","ret-motif"]);
+            });
+
+            return `✅ J'ouvre le formulaire **Retour Matériel** et je pré-remplis les champs${label ? " :\n\n📝 " + label + (qty ? " × " + qty : "") + " — État: " + etat : ""}.\n\nVérifiez et cliquez sur **Valider Retour**.`;
+          }
+
+          // ── 3. Formulaire Réception (Entrée stock) ────────────────────
+          if (matchedSection.id === "reception") {
+            const opMatch = q.match(/\b(itc|oci|cic|mtn|moov|oci-cic)\b/i);
+            const op  = opMatch ? opMatch[1].toUpperCase() : null;
+            const qty = aiExtractParam(q, /\b(\d+)\b/);
+            const mat = aiExtractParam(q, /(?:de |du |un |les |des )?([a-zàâçéèêëîïôûùüÿ][a-zàâçéèêëîïôûùüÿ0-9 _-]{3,}?)(?:\s+(?:pour|op[eé]rateur|de type|type|,|en|avec|$))/i);
+
+            aiNavigateToSection("reception", () => {
+              if (op) {
+                const el = document.getElementById("r-op");
+                if (el) el.value = (op === "OCI" || op === "CIC") ? "OCI-CIC" : op;
+              }
+              if (mat) { const el = document.getElementById("r-mat"); if (el) el.value = mat.toUpperCase(); }
+              if (qty) { const el = document.getElementById("r-qty"); if (el) el.value = qty; }
+              aiHighlightFilledFields(["r-op","r-mat","r-qty"]);
+            });
+
+            return `✅ J'ouvre le formulaire **Réception Matériel**${mat || qty ? " et pré-remplis :\n\n📝 " + [mat && "Désignation: " + mat, qty && "Qté: " + qty, op && "Opérateur: " + op].filter(Boolean).join(" | ") : ""}.\n\nChoisissez le **type de matériel** et confirmez l'entrée.`;
+          }
+
+          // ── 4. Formulaire Sortie Physique ──────────────────────────────
+          if (matchedSection.id === "sortie-physique") {
+            const tech = aiExtractParam(q,
+              /(?:pour|destinataire|technicien|r[eé]ceptionnaire|chef d'[eé]quipe)[:\s]+([a-zàâçéèêëîïôûùüÿ][a-zàâçéèêëîïôûùüÿ0-9 _-]+?)(?:\s+(?:r[eé]f|bon|motif|avec|op[eé]rateur|,|$))/i
+            );
+            const ref = aiExtractParam(q,
+              /(?:r[eé]f[eé]rence|bon|motif|chantier)[:\s]+([a-zàâçéèêëîïôûùüÿ0-9 _-]+?)(?:\s+(?:avec|pour|op[eé]rateur|,|$))/i
+            );
+            const opM = q.match(/\b(itc|orange|moov|mtn)\b/i);
+            const op  = opM ? opM[1].toUpperCase() : null;
+
+            // Extraction des articles et quantités (ex: "5 connecteurs, 2 routeurs")
+            const itemsRaw = [];
+            const itemRe = /(\d+)\s+([a-zàâçéèêëîïôûùüÿ][a-zàâçéèêëîïôûùüÿ0-9 _-]+?)(?:,|et|$)/gi;
+            let m;
+            while ((m = itemRe.exec(q)) !== null) {
+              itemsRaw.push({ qty: m[1], label: m[2].trim().toUpperCase() });
+            }
+
+            aiNavigateToSection("sortie-physique", () => {
+              if (op)   { const el = document.getElementById("s-op");   if (el) el.value = op; }
+              if (tech) { const el = document.getElementById("s-tech"); if (el) el.value = tech.toUpperCase(); }
+              if (ref)  { const el = document.getElementById("s-ref");  if (el) el.value = ref.toUpperCase(); }
+              aiHighlightFilledFields(["s-op","s-tech","s-ref"]);
+
+              // Remplissage des lignes d'articles si détectés
+              if (itemsRaw.length > 0) {
+                setTimeout(() => {
+                  // Vider les lignes existantes (en garder 1 vide)
+                  const list = document.getElementById("sortie-items-list");
+                  if (!list) return;
+                  const existingRows = list.querySelectorAll(".art-row-sortie");
+                  // Remplir / créer des lignes pour chaque article
+                  itemsRaw.forEach((item, idx) => {
+                    let row;
+                    if (idx < existingRows.length) {
+                      row = existingRows[idx];
+                    } else {
+                      addArticleRowSortie();
+                      const allRows = list.querySelectorAll(".art-row-sortie");
+                      row = allRows[allRows.length - 1];
+                    }
+                    if (!row) return;
+                    const labelEl = row.querySelector(".art-l");
+                    const qtyEl   = row.querySelector(".art-q");
+                    if (labelEl) { labelEl.value = item.label; labelEl.style.borderColor = "#6366f1"; labelEl.style.backgroundColor = "#eef2ff"; setTimeout(() => { labelEl.style.borderColor = ""; labelEl.style.backgroundColor = ""; }, 3500); }
+                    if (qtyEl)   { qtyEl.value = item.qty;     qtyEl.style.borderColor   = "#6366f1"; qtyEl.style.backgroundColor   = "#eef2ff"; setTimeout(() => { qtyEl.style.borderColor   = ""; qtyEl.style.backgroundColor   = ""; }, 3500); }
+                  });
+                }, 200);
+              }
+            });
+
+            const articlesSummary = itemsRaw.length > 0
+              ? "\n📦 Articles : " + itemsRaw.map((i) => `${i.qty}× ${i.label}`).join(", ")
+              : "";
+            return `✅ J'ouvre le formulaire **Sortie Physique** et je pré-remplis${tech || ref || op ? " :\n\n📝 " + [tech && "Destinataire: " + tech, ref && "Réf: " + ref, op && "Op: " + op].filter(Boolean).join(" | ") : " les champs disponibles"}${articlesSummary}.\n\nVérifiez et cliquez sur **Confirmer la Sortie de Stock**.`;
+          }
+
+          // ── 5. Commande Directe (Coordinatrice) ───────────────────────
+          if (matchedSection.id === "coord-creation-directe") {
+            const opMatch = q.match(/\b(itc|oci|cic|mtn|moov|oci-cic)\b/i);
+            const op    = opMatch ? opMatch[1].toUpperCase() : null;
+            const motif = aiExtractParam(q, /(?:motif|projet|chantier|pour)[:\s]+([a-zàâçéèêëîïôûùüÿ][a-zàâçéèêëîïôûùüÿ0-9 _-]+?)(?:\s+(?:avec|,|$))/i);
+
+            aiNavigateToSection("coord-creation-directe", () => {
+              if (op) {
+                const el = document.getElementById("d-op");
+                if (el) { el.value = (op === "OCI" || op === "CIC") ? "OCI-CIC" : op; el.dispatchEvent(new Event("change")); }
+              }
+              if (motif) { const el = document.getElementById("d-motif"); if (el) el.value = motif.toUpperCase(); }
+              aiHighlightFilledFields(["d-op","d-motif"]);
+            });
+
+            return `✅ J'ouvre le formulaire **Commande Directe**${motif || op ? " et pré-remplis :\n\n📝 " + [motif && "Projet: " + motif, op && "Op: " + op].filter(Boolean).join(" | ") : ""}.\n\nAjoutez les articles et confirmez la commande.`;
+          }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // ── NAVIGATION SEULE ───────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        const SECTION_LABELS = {
+          "cockpit":                      "Tableau de Bord",
+          "tech-nouvelle-demande":        "Demander Matériel",
+          "tech-mes-demandes":            "Mes Bons",
+          "tech-retour-materiel":         "Retour Matériel",
+          "coord-demandes-tech":          "Demandes Techniciens",
+          "coord-creation-directe":       "Commande Directe",
+          "rapport-hebdo":                "Rapport Hebdo",
+          "demandes-coordonnatrice":      "Préparation Commandes",
+          "sortie-physique":              "Sortie Physique",
+          "rapports-sorties":             "Rapports Sorties",
+          "reception":                    "Réception Matériel",
+          "livraison":                    "Livraison",
+          "scanner-physique":             "Scanner Bon",
+          "trafic-audit":                 "Journal Audit",
+          "stats-consommation":           "Statistiques Consommation",
+          "archives-consommations":       "Archives",
+          "superviseur-rapports-sorties": "Rapports Global",
+          "stock-itc-b01":                "Stock ITC Bureau 01",
+          "stock-itc-b02":                "Stock ITC Bureau 02",
+          "stock-oci":                    "Stock OCI",
+          "stock-cic":                    "Stock CIC",
+          "stock-mtn":                    "Stock MTN",
+          "stock-moov":                   "Stock MOOV",
+        };
+
+        aiNavigateToSection(matchedSection.id, null);
+        return `✅ J'ouvre la section **${SECTION_LABELS[matchedSection.id] || matchedSection.id}** pour vous.`;
+      }
+
+      // ═══════════════════════════════════════════════════════════════════════════
+
       function getLocalAssistantReply(userText) {
-        const normalized = String(userText || "").trim().toLowerCase();
-        if (!normalized) {
-          return "Écrivez une question précise et je vous répondrai immédiatement.";
-        }
+        const q = String(userText || "").trim().toLowerCase();
+        if (!q) return "Écrivez une question et je vous répondrai.";
 
-        if (/(parler a un agent|parler à un agent|agent humain|support humain|contact support)/.test(normalized)) {
+        const stock     = Array.isArray(appData?.stock)        ? appData.stock        : [];
+        const demandes  = Array.isArray(appData?.demandes)     ? appData.demandes     : [];
+        const techDem   = Array.isArray(appData?.techDemandes) ? appData.techDemandes : [];
+        const sorties   = Array.isArray(appData?.sorties)      ? appData.sorties      : [];
+        const retours   = Array.isArray(appData?.retours)      ? appData.retours      : [];
+        const notifs    = Array.isArray(appData?.notifications) ? appData.notifications: [];
+        const users     = Array.isArray(appData?.users)        ? appData.users        : [];
+        const archives  = Array.isArray(appData?.consumptionArchives) ? appData.consumptionArchives : [];
+
+        // ── Actions spéciales ──────────────────────────────────────────────
+        if (/(parler.*(agent|support)|contact support|agent humain)/.test(q)) {
           openChatAssistantAgentContact();
-          return "Je lance le contact avec l'agent support.";
+          return "Je contacte l'agent support pour vous.";
         }
-
-        if (/(creer une demande|créer une demande|nouvelle demande|faire une demande)/.test(normalized)) {
+        if (/(cr[ée]+r une demande|nouvelle demande|faire une demande)/.test(q)) {
           openChatAssistantRequestFlow();
           return "Je vous redirige vers le module de demande adapté à votre rôle.";
         }
 
-        if (/(bonjour|salut|bonsoir|hello)/.test(normalized)) {
-          return "Bonjour. Je peux vous aider sur le stock, les rôles, les sections de l'application, les commandes, les retours et les rapports.";
+        // ── Salutations ───────────────────────────────────────────────────
+        if (/^(bonjour|salut|bonsoir|hello|bonne nuit|coucou)[!? ]*$/.test(q)) {
+          const role = currentUser?.role || "";
+          return `Bonjour${currentUser?.name ? " " + currentUser.name.split(" ")[0] : ""} ! Je suis votre Assistant IA ITC.\nJe peux répondre à toutes vos questions sur l'application, le stock, les demandes, les sorties, le tableau de bord et bien plus.\n\nQue souhaitez-vous savoir ?`;
         }
 
-        if (/(qui suis-je|mon profil|mon role|mon rôle|mes fonctionnalités)/.test(normalized)) {
+        // ── Profil & rôle ──────────────────────────────────────────────────
+        if (/(qui suis-je|mon profil|mon r[ôo]le|mes fonctionnalit[ée]s|que puis-je faire|mes droits|mes modules)/.test(q)) {
           return `${getCurrentAppInsights()}\n\n${getRoleCapabilities()}`;
         }
 
-        if (/(notification|alerte)/.test(normalized)) {
-          return getCurrentAppInsights();
+        // ── Tableau de bord global ─────────────────────────────────────────
+        if (/(tableau de bord|dashboard|cockpit|r[ée]sum[ée] global|vue d.ensemble|kpi|indicateur)/.test(q)) {
+          const totalQty = stock.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+          const lowStock = stock.filter((e) => (Number(e.qty) || 0) === 0);
+          const ops = [...new Set(stock.map((e) => String(e.op || "").toUpperCase()).filter(Boolean))];
+          return [
+            "📊 TABLEAU DE BORD — État actuel",
+            "",
+            `📦 Stock total : ${stock.length} désignation(s) | ${totalQty} unités`,
+            `⚠️  Articles à stock zéro : ${lowStock.length}`,
+            `🏷️  Opérateurs actifs : ${ops.join(", ") || "aucun"}`,
+            `📋 Demandes coordonnatrice : ${demandes.length}`,
+            `🔧 Demandes techniciens : ${techDem.length}`,
+            `📤 Sorties enregistrées : ${sorties.length}`,
+            `↩️  Retours enregistrés : ${retours.length}`,
+            `🔔 Notifications non lues : ${notifs.filter((n) => !n?.read).length}`,
+            `🗂️  Archives disponibles : ${archives.length}`,
+            `👤 Utilisateurs : ${users.length}`,
+          ].join("\n");
         }
 
-        if (/(stock itc-b01|résume le stock itc-b01|resume le stock itc-b01)/.test(normalized)) {
-          return getOperatorStockSummary("ITC-B01");
+        // ── Stock par opérateur ────────────────────────────────────────────
+        const opMatch = q.match(/stock\s+(itc-?b0?[12]|oci|cic|mtn|moov|itc)/i);
+        if (opMatch) {
+          const opKey = opMatch[1].toUpperCase().replace("ITCB01","ITC-B01").replace("ITCB02","ITC-B02");
+          return getOperatorStockSummary(opKey);
+        }
+        if (/(tout.*stock|stock.*complet|liste.*stock|stock.*total|tout le stock)/.test(q)) {
+          const ops = [...new Set(stock.map((e) => String(e.op || "").toUpperCase()).filter(Boolean))];
+          if (!ops.length) return "Aucun stock disponible pour le moment.";
+          return ops.map((op) => getOperatorStockSummary(op)).join("\n\n");
+        }
+        if (/(rupture|stock z[ée]ro|stock vide|manquant|plus de stock)/.test(q)) {
+          const low = stock.filter((e) => (Number(e.qty) || 0) === 0);
+          if (!low.length) return "✅ Aucune rupture de stock détectée. Tous les articles ont des quantités disponibles.";
+          const lines = ["⚠️ Articles en rupture de stock (quantité = 0) :",""];
+          for (const item of low) lines.push(`• [${item.op}] ${item.label}`);
+          return lines.join("\n");
         }
 
-        if (/(stock itc-b02|résume le stock itc-b02|resume le stock itc-b02)/.test(normalized)) {
-          return getOperatorStockSummary("ITC-B02");
+        // ── Recherche d'une désignation précise dans le stock ──────────────
+        if (/(combien|quantit[ée]|dispo|disponible|reste|reste-t-il|il y a)/.test(q)) {
+          const reply = findStockByDesignation(userText);
+          if (reply) return reply;
         }
 
-        if (/(stock oci)/.test(normalized)) {
-          return getOperatorStockSummary("OCI");
-        }
-
-        if (/(stock cic)/.test(normalized)) {
-          return getOperatorStockSummary("CIC");
-        }
-
-        if (/(stock moov)/.test(normalized)) {
-          return getOperatorStockSummary("MOOV");
-        }
-
-        if (/(stock mtn)/.test(normalized)) {
-          return getOperatorStockSummary("MTN");
-        }
-
-        if (/(comment|aide|utiliser|workflow|faire)/.test(normalized)) {
-          if (/(demande|commander|matériel|materiel)/.test(normalized)) {
-            return "Pour demander du matériel, ouvrez la section correspondant à votre rôle puis utilisez le formulaire de demande ou de commande. Le technicien passe par Demander Matériel, la coordinatrice peut créer une Commande Directe, et le gestionnaire traite ensuite les flux magasin.";
+        // ── Demandes ──────────────────────────────────────────────────────
+        if (/(demandes? coord|demandes? en attente|demandes? encours|combien de demandes?|liste.*demandes?)/.test(q)) {
+          if (!demandes.length) return "✅ Aucune demande coordonnatrice en attente actuellement.";
+          const lines = [`📋 Demandes coordonnatrice en cours (${demandes.length}) :`, ""];
+          for (const d of demandes.slice(0, 10)) {
+            lines.push(`• ${d.label || d.designation || "?"} | Op: ${d.op || "?"} | Qté: ${d.qty || d.quantite || "?"} | Statut: ${d.status || d.statut || "En attente"} | Demandeur: ${d.demandeur || d.user || "?"}`);
           }
-          if (/(retour)/.test(normalized)) {
-            return "Pour un retour de stock, utilisez la section Retour de Stock côté technicien. Vérifiez la désignation, la quantité et l'opérateur concerné avant validation.";
+          if (demandes.length > 10) lines.push(`... et ${demandes.length - 10} autre(s)`);
+          return lines.join("\n");
+        }
+        if (/(demandes? tech|demandes? technicien|flux technicien|bons? tech)/.test(q)) {
+          if (!techDem.length) return "✅ Aucune demande technicien en attente.";
+          const lines = [`🔧 Demandes techniciens en cours (${techDem.length}) :`, ""];
+          for (const d of techDem.slice(0, 10)) {
+            const items = Array.isArray(d.items) ? d.items.map((i) => `${i.label}×${i.qty}`).join(", ") : (d.label || d.designation || "?");
+            lines.push(`• ${items} | Op: ${d.op || "?"} | Statut: ${d.status || d.statut || "En attente"} | Tech: ${d.technicien || d.user || d.demandeur || "?"}`);
           }
-          if (/(rapport|sortie)/.test(normalized)) {
-            return "Les rapports de sorties se trouvent dans les menus magasin ou superviseur selon votre profil. Ils servent à consulter l'historique, contrôler les écarts et suivre les mouvements de stock.";
-          }
-          if (/(scanner|caméra|camera|bon)/.test(normalized)) {
-            return "Le module Scanner Bon permet de lire un bon physique via caméra. Utilisez-le surtout sur mobile ou sur un poste disposant d'une webcam autorisée par le navigateur.";
-          }
-          return "Je peux vous guider sur les menus, les rôles, le stock, les commandes, les retours, les rapports ou l'utilisation générale de l'application.";
+          if (techDem.length > 10) lines.push(`... et ${techDem.length - 10} autre(s)`);
+          return lines.join("\n");
         }
 
-        if (/(procedure|procédure|process|processus|mode operatoire|mode opératoire|etapes|étapes)/.test(normalized)) {
-          const procedure = findInternalProcedure(userText);
-          if (procedure) return formatProcedureReply(procedure);
-          return "Je n'ai pas trouvé de procédure interne correspondante. Essayez: demande, retour, sortie ou rapport.";
+        // ── Sorties ────────────────────────────────────────────────────────
+        if (/(sorties?|bons? de sortie|historique.*sortie|derni[eè]res? sorties?)/.test(q)) {
+          if (!sorties.length) return "Aucune sortie enregistrée pour le moment.";
+          const recent = sorties.slice(-10).reverse();
+          const lines = [`📤 Sorties récentes (${sorties.length} au total) :`, ""];
+          for (const s of recent) {
+            const items = Array.isArray(s.items)
+              ? s.items.map((i) => `${i.label || i.designation}×${i.qty || i.quantite}`).join(", ")
+              : (s.designation || s.label || "?");
+            lines.push(`• Bon: ${s.numBon || s.id || "?"} | ${items} | Op: ${s.op || "?"} | Date: ${s.date || s.dateCreation || "?"}`);
+          }
+          return lines.join("\n");
         }
 
-        const matchedProcedure = findInternalProcedure(userText);
-        if (matchedProcedure) {
-          return formatProcedureReply(matchedProcedure);
+        // ── Retours ────────────────────────────────────────────────────────
+        if (/(retours?|mat[ée]riel retourn[ée]|retourn[ée])/.test(q)) {
+          if (!retours.length) return "Aucun retour enregistré pour le moment.";
+          const recent = retours.slice(-10).reverse();
+          const lines = [`↩️ Retours de stock (${retours.length} au total) :`, ""];
+          for (const r of recent) {
+            lines.push(`• ${r.label || r.designation || "?"} | Op: ${r.op || "?"} | Qté: ${r.qty || r.quantite || "?"} | Date: ${r.date || "?"} | Tech: ${r.technicien || r.user || "?"}`);
+          }
+          return lines.join("\n");
         }
 
+        // ── Notifications ──────────────────────────────────────────────────
+        if (/(notification|alerte|message|non lu)/.test(q)) {
+          const unread = notifs.filter((n) => !n?.read);
+          if (!notifs.length) return "✅ Aucune notification pour le moment.";
+          const lines = [`🔔 Notifications (${unread.length} non lues sur ${notifs.length}) :`, ""];
+          for (const n of notifs.slice(-10).reverse()) {
+            lines.push(`• [${n.read ? "Lu" : "NON LU"}] ${n.message || n.text || n.title || "?"} — ${n.date || n.createdAt || "?"}`);
+          }
+          return lines.join("\n");
+        }
+
+        // ── Utilisateurs & rôles ───────────────────────────────────────────
+        if (/(utilisateurs?|liste.*users?|agents?|membres?|qui travaille|qui a acc[eè]s|comptes?)/.test(q)) {
+          if (!users.length) return "Aucun utilisateur trouvé dans les données.";
+          const lines = [`👤 Utilisateurs de l'application (${users.length}) :`, ""];
+          for (const u of users) {
+            const ops = Array.isArray(u.managedOps) ? ` | Opérateurs: ${u.managedOps.join(", ")}` : "";
+            lines.push(`• ${u.name || u.nom || "?"} | Rôle: ${u.role || "?"} | Email: ${u.email || "?"}${ops}`);
+          }
+          return lines.join("\n");
+        }
+
+        // ── Archives ───────────────────────────────────────────────────────
+        if (/(archive|consommation mensuel|historique mensuel|mois pass[ée])/.test(q)) {
+          if (!archives.length) return "Aucune archive de consommation disponible.";
+          const lines = [`🗂️ Archives de consommation disponibles (${archives.length}) :`, ""];
+          for (const a of archives.slice(0, 12)) {
+            lines.push(`• Période: ${a.month || a.periode || a.key || "?"} | Total sorties: ${a.totalSorties || a.total || "?"}`);
+          }
+          return lines.join("\n");
+        }
+
+        // ── Navigation / comment faire ─────────────────────────────────────
+        if (/(comment|o[ùu] trouver|o[ùu] aller|acc[ée]der|ouvrir|aller [àa])/.test(q)) {
+          if (/(demande|commander|mat[ée]riel)/.test(q))
+            return "Pour créer une demande :\n1. Menu gauche selon votre rôle\n   • Technicien → « Demander Matériel »\n   • Coordinatrice → « Création Directe »\n2. Remplissez désignation, quantité, opérateur\n3. Validez — un bon est généré automatiquement";
+          if (/(retour)/.test(q))
+            return "Pour un retour de stock :\n1. Menu gauche → « Retour Matériel » (Technicien)\n2. Choisissez désignation et quantité retournée\n3. Sélectionnez l'opérateur concerné\n4. Confirmez — le stock est mis à jour";
+          if (/(sortie physique|sortie magasin|sortie de stock)/.test(q))
+            return "Pour enregistrer une sortie :\n1. Menu → « Sortie Physique » (Gestionnaire)\n2. Créez un bon de sortie : remplissez les articles\n3. Ajoutez les items et quantités\n4. Validez → PDF généré automatiquement";
+          if (/(rapport hebdo|rapport semaine)/.test(q))
+            return "Pour le rapport hebdomadaire :\n1. Menu → « Rapport Hebdo » (Coordinatrice)\n2. Sélectionnez la période\n3. Cliquez « Générer »\n4. Exportez en Excel";
+          if (/(scanner|scan|cam[ée]ra)/.test(q))
+            return "Pour scanner un bon :\n1. Menu → « Scanner Bon » (Gestionnaire)\n2. Autorisez l'accès caméra dans le navigateur\n3. Présentez le code QR/barcode du bon\n4. Les données se remplissent automatiquement";
+          if (/(r[ée]ception|r[ée]ceptionner)/.test(q))
+            return "Pour réceptionner du matériel :\n1. Menu → « Réception » (Gestionnaire)\n2. Renseignez fournisseur, articles et quantités\n3. Validez — le stock est incrémenté";
+          if (/(livraison)/.test(q))
+            return "Pour une livraison :\n1. Menu → « Livraison » (Gestionnaire)\n2. Sélectionnez le bon de commande concerné\n3. Confirmez les articles livrés\n4. Validez la livraison";
+          if (/(audit|journal|trafic)/.test(q))
+            return "Pour l'audit :\n1. Menu → « Trafic Audit » (Superviseur)\n2. Filtrez par date, utilisateur ou type d'opération\n3. Toutes les actions sont horodatées et traçables";
+          if (/(stat|statistique|graphique|consommation)/.test(q))
+            return "Pour les statistiques :\n1. Menu → « Stats Consommation » (Superviseur)\n2. Choisissez l'opérateur et la période\n3. Visualisez les graphiques de consommation par type de matériel";
+          if (/(stock|inventaire)/.test(q))
+            return "Pour consulter le stock :\n1. Menu gauche → section Stock de l'opérateur souhaité (ITC-B01, ITC-B02, OCI, CIC, MTN, MOOV)\n2. Filtrez par désignation ou type\n3. Vous pouvez exporter en Excel";
+          return "Dites-moi précisément ce que vous souhaitez faire et je vous guiderai pas à pas.";
+        }
+
+        // ── Procédures internes ────────────────────────────────────────────
+        const procedure = findInternalProcedure(userText);
+        if (procedure) return formatProcedureReply(procedure);
+
+        // ── Recherche libre dans le stock ──────────────────────────────────
         const stockReply = findStockByDesignation(userText);
         if (stockReply) return stockReply;
 
+        // ── Sections & menus ───────────────────────────────────────────────
+        const sectionMap = {
+          "tech-nouvelle-demande": "Demander Matériel (Technicien)",
+          "tech-mes-demandes": "Mes Bons (Technicien)",
+          "tech-retour-materiel": "Retour Matériel (Technicien)",
+          "coord-demandes-tech": "Demandes Tech (Coordinatrice)",
+          "coord-creation-directe": "Création Directe (Coordinatrice)",
+          "rapport-hebdo": "Rapport Hebdomadaire (Coordinatrice)",
+          "demandes-coordonnatrice": "Flux Global Demandes (Coordinatrice)",
+          "sortie-physique": "Sortie Physique (Gestionnaire)",
+          "reception": "Réception Matériel (Gestionnaire)",
+          "livraison": "Livraison (Gestionnaire)",
+          "scanner-physique": "Scanner Bon (Gestionnaire)",
+          "rapports-sorties": "Rapports Sorties (Gestionnaire)",
+          "trafic-audit": "Journal Audit (Superviseur)",
+          "stats-consommation": "Statistiques Consommation (Superviseur)",
+          "archives-consommations": "Archives Mensuelles (Superviseur)",
+          "superviseur-rapports-sorties": "Rapports Sorties Global (Superviseur)",
+        };
+        const sectionFound = Object.entries(sectionMap).find(([key, label]) =>
+          q.includes(key.replace(/-/g, " ")) || q.includes(label.toLowerCase())
+        );
+        if (sectionFound) {
+          return `La section « ${sectionFound[1]} » est accessible via le menu de gauche. Cliquez sur le menu correspondant à votre rôle pour y accéder.`;
+        }
+
+        // ── Fallback intelligent avec contexte complet ─────────────────────
         return [
-          "Je peux répondre immédiatement sur l'application et ses données visibles, mais je n'ai pas encore reçu de consigne plus précise pour cette question.",
-          "Essayez par exemple :",
-          "- Résume le stock MOOV",
-          "- Quelles sont mes fonctionnalités selon mon rôle ?",
-          "- Comment enregistrer une sortie de stock ?",
+          "Je n'ai pas trouvé de réponse directe à votre question dans les données de l'application.",
+          "",
+          "Voici ce que je peux faire pour vous :",
+          "• 📊 Résumer le tableau de bord (tapez : « tableau de bord »)",
+          "• 📦 Afficher tout le stock (tapez : « tout le stock »)",
+          "• 📋 Lister les demandes en cours (tapez : « demandes en attente »)",
+          "• 📤 Voir les dernières sorties (tapez : « dernières sorties »)",
+          "• 👤 Lister les utilisateurs (tapez : « liste des utilisateurs »)",
+          "• 🔔 Voir les notifications (tapez : « notifications »)",
+          "• ❓ Obtenir de l'aide sur un module (tapez : « comment faire une sortie »)",
+          "",
+          "Reformulez votre question et je ferai de mon mieux.",
         ].join("\n");
       }
 
@@ -8145,9 +9243,9 @@
           },
           contents: [...history, { role: "user", parts: [{ text: userText }] }],
           generationConfig: {
-            temperature: 0.7,
+            temperature: 0.5,
             topP: 0.9,
-            maxOutputTokens: 700,
+            maxOutputTokens: 2048,
           },
         };
 
@@ -8218,6 +9316,97 @@
         return getLocalAssistantReply(userText);
       }
 
+      // ── SAISIE VOCALE ─────────────────────────────────────────────────────────
+      let _voiceRecognition = null;
+      let _voiceRecording = false;
+
+      function toggleVoiceInput() {
+        const SpeechRecognition =
+          window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+          appendChatAssistantMessage(
+            "assistant",
+            "⚠️ La reconnaissance vocale n'est pas supportée par votre navigateur. Utilisez Chrome ou Edge pour cette fonctionnalité.",
+          );
+          return;
+        }
+
+        if (_voiceRecording) {
+          _stopVoiceInput();
+          return;
+        }
+
+        const btn = document.getElementById("ai-voice-btn");
+        const status = document.getElementById("ai-voice-status");
+        const input = document.getElementById("ai-chatbot-input");
+
+        _voiceRecognition = new SpeechRecognition();
+        _voiceRecognition.lang = "fr-FR";
+        _voiceRecognition.interimResults = true;
+        _voiceRecognition.maxAlternatives = 1;
+        _voiceRecognition.continuous = false;
+
+        _voiceRecognition.onstart = () => {
+          _voiceRecording = true;
+          if (btn) btn.classList.add("recording");
+          if (status) status.classList.add("visible");
+          if (input) input.placeholder = "Parlez maintenant…";
+        };
+
+        _voiceRecognition.onresult = (event) => {
+          const transcript = Array.from(event.results)
+            .map((r) => r[0].transcript)
+            .join("");
+          if (input) {
+            input.value = transcript;
+            autoResizeChatAssistantInput();
+          }
+        };
+
+        _voiceRecognition.onend = () => {
+          _stopVoiceInput();
+          // Envoyer automatiquement si quelque chose a été capturé
+          const text = String(input?.value || "").trim();
+          if (text) {
+            setTimeout(() => handleChatAssistantSubmit(), 300);
+          }
+        };
+
+        _voiceRecognition.onerror = (event) => {
+          _stopVoiceInput();
+          const msgs = {
+            "not-allowed": "⚠️ Accès au microphone refusé. Autorisez-le dans les paramètres du navigateur.",
+            "no-speech": "Aucune voix détectée. Réessayez en parlant plus clairement.",
+            "network": "Erreur réseau lors de la reconnaissance vocale.",
+          };
+          appendChatAssistantMessage(
+            "assistant",
+            msgs[event.error] || `Erreur vocale : ${event.error}`,
+          );
+        };
+
+        try {
+          _voiceRecognition.start();
+        } catch (e) {
+          _stopVoiceInput();
+          console.warn("Impossible de démarrer la reconnaissance vocale", e);
+        }
+      }
+
+      function _stopVoiceInput() {
+        _voiceRecording = false;
+        const btn = document.getElementById("ai-voice-btn");
+        const status = document.getElementById("ai-voice-status");
+        const input = document.getElementById("ai-chatbot-input");
+        if (btn) btn.classList.remove("recording");
+        if (status) status.classList.remove("visible");
+        if (input) input.placeholder = "Écrivez ou parlez…";
+        try { if (_voiceRecognition) _voiceRecognition.stop(); } catch (e) { /* ignore */ }
+        _voiceRecognition = null;
+      }
+      // ── FIN SAISIE VOCALE ──────────────────────────────────────────────────────
+
       async function handleChatAssistantSubmit(event) {
         if (event) event.preventDefault();
         const input = document.getElementById("ai-chatbot-input");
@@ -8229,6 +9418,14 @@
         appendChatAssistantMessage("user", userText);
         input.value = "";
         autoResizeChatAssistantInput();
+
+        // ── Vérifier d'abord si c'est une action IA (navigation / formulaire) ──
+        const actionReply = aiParseAndExecuteAction(userText);
+        if (actionReply) {
+          appendChatAssistantMessage("assistant", actionReply);
+          return;
+        }
+
         setChatAssistantBusy(true);
 
         try {
