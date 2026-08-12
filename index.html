@@ -1155,6 +1155,17 @@
 
               <div
                 onclick="
+                  showSection('flux-materiels');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-cyan-400"
+              >
+                <i class="fas fa-water w-5 text-cyan-400"></i>
+                Flux Matériels
+              </div>
+
+              <div
+                onclick="
                   showSection('archives-consommations');
                   toggleSidebarMobile();
                 "
@@ -1705,6 +1716,8 @@
             renderSortiePhysiqueForm(container);
           } else if (currentSectionId === "rapports-sorties") {
             renderRapportsSorties(container);
+          } else if (currentSectionId === "flux-materiels") {
+            renderFluxMateriels(container);
           } else if (currentSectionId === "superviseur-rapports-sorties") {
             renderRapportsSorties(container, { readOnly: true });
           } else if (currentSectionId.startsWith("stock-")) {
@@ -5106,6 +5119,9 @@
           renderRapportHebdo(container);
         } else if (id === "rapports-sorties") {
           renderRapportsSorties(container);
+        } else if (id === "flux-materiels") {
+          viewTitle.innerText = "FLUX MATÉRIELS";
+          renderFluxMateriels(container);
         } else if (id === "superviseur-rapports-sorties") {
           viewTitle.innerText = "RAPPORTS SORTIES - SUPERVISION";
           renderRapportsSorties(container, { readOnly: true });
@@ -5183,8 +5199,8 @@
               // IMPORTANT : On prépare les données avec les noms EXACTS
               // que votre fonction renderExcelOrderForm utilise
               const formattedItems = result.items.map((it) => ({
-                Désignation: it.label,
-                Quantité: it.qty,
+                "Désignation": it.label,
+                "Quantité": it.qty,
               }));
 
               renderExcelOrderForm(formattedItems);
@@ -9734,6 +9750,1070 @@
           });
         }
       });
+
+      // ===== FLUX MATÉRIELS =====
+      function renderFluxArchivesHtml(archives) {
+        const visibleArchives = Array.isArray(archives) ? archives : [];
+        if (visibleArchives.length === 0) return "";
+
+        const cards = visibleArchives
+          .map((archive) => {
+            const operatorsHtml = Object.entries(archive?.operatorStats || {})
+              .map(([op, stats]) => {
+                const totalEntrees = Object.values(
+                  stats?.entrantsByDesignation || {},
+                ).reduce((sum, qty) => sum + (Number(qty) || 0), 0);
+                const totalSorties = Object.values(
+                  stats?.sortantsByDesignation || {},
+                ).reduce((sum, qty) => sum + (Number(qty) || 0), 0);
+
+                return `
+                  <div class="bg-white border border-amber-100 rounded-xl p-3">
+                    <p class="text-[8px] font-black uppercase text-slate-700">${escapeHtml(op)}</p>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                      <div class="bg-green-50 rounded-lg p-2">
+                        <p class="text-[7px] uppercase text-green-600">Entrées</p>
+                        <p class="text-[10px] font-black text-green-700">${totalEntrees} U</p>
+                      </div>
+                      <div class="bg-red-50 rounded-lg p-2">
+                        <p class="text-[7px] uppercase text-red-600">Sorties</p>
+                        <p class="text-[10px] font-black text-red-700">${totalSorties} U</p>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              })
+              .join("");
+
+            return `
+              <div class="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
+                  <div>
+                    <p class="text-[10px] font-black uppercase text-amber-800">${escapeHtml(archive?.label || archive?.key || "Mois archivé")}</p>
+                    <p class="text-[8px] uppercase text-slate-500">Archivé le ${escapeHtml(archive?.archivedAt || "-")}</p>
+                  </div>
+                  <div class="flex gap-2">
+                    <button onclick="exportArchiveConsommationPDF('${encodeURIComponent(archive?.key || "")}')" class="bg-pink-600 text-white px-3 py-2 rounded-xl text-[8px] font-black uppercase">PDF</button>
+                    <button onclick="exportArchiveConsommationExcel('${encodeURIComponent(archive?.key || "")}')" class="bg-green-600 text-white px-3 py-2 rounded-xl text-[8px] font-black uppercase">Excel</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  ${operatorsHtml || '<p class="text-[8px] text-slate-400">Aucun flux archivé.</p>'}
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+
+        return `
+          <div class="bg-white rounded-3xl shadow-xl border-b-4 border-amber-500 p-6">
+            <h4 class="text-[11px] font-black uppercase text-slate-800 mb-4">
+              <i class="fas fa-archive mr-2 text-amber-500"></i> Rapports des mois passés
+            </h4>
+            <div class="space-y-4">${cards}</div>
+          </div>
+        `;
+      }
+
+      function renderFluxMateriels(container) {
+        if (!container) return;
+        
+        const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
+        const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
+        const archives = Array.isArray(appData?.consumptionArchives)
+          ? appData.consumptionArchives
+          : [];
+        
+        // Filtre pour le gestionnaire : ne voir que ses opérateurs gérés
+        let visibleSorties = sorties;
+        let visibleDemandes = demandes;
+        let visibleArchives = archives;
+        try {
+          if (
+            currentUser &&
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
+          ) {
+            const allowed = new Set(getManagedOpsNormalized(currentUser));
+            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
+            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+            visibleArchives = archives
+              .map((archive) => {
+                const operatorStats = {};
+                Object.entries(archive?.operatorStats || {}).forEach(
+                  ([op, stats]) => {
+                    const opNorm = normalizeOperatorKey(op);
+                    if (allowed.has(opNorm)) operatorStats[opNorm] = stats;
+                  },
+                );
+                return { ...archive, operatorStats };
+              })
+              .filter((archive) => Object.keys(archive.operatorStats || {}).length > 0);
+          }
+        } catch (e) {
+          console.error("Erreur filtrage flux matériels", e);
+          visibleSorties = [];
+          visibleDemandes = [];
+          visibleArchives = [];
+        }
+
+        // Récupère tous les matériels uniques
+        const allMateriels = new Map();
+        
+        // Depuis les sorties (bons physiques)
+        visibleSorties.forEach((sortie) => {
+          const items = getSortieItems(sortie) || [];
+          items.forEach((item) => {
+            const label = String(item.label || "").trim().toUpperCase();
+            if (!label) return;
+            
+            if (!allMateriels.has(label)) {
+              allMateriels.set(label, {
+                designation: label,
+                entrees: [],
+                sorties: []
+              });
+            }
+            
+            allMateriels.get(label).sorties.push({
+              date: sortie.date,
+              qty: Number(item.qty) || 0,
+              op: sortie.op,
+              ref: sortie.ref
+            });
+          });
+        });
+        
+        // Depuis les demandes livrées (entrées dans le magasin)
+        visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
+          const items = demande.items || [];
+          items.forEach((item) => {
+            const label = String(item.label || "").trim().toUpperCase();
+            if (!label) return;
+            
+            if (!allMateriels.has(label)) {
+              allMateriels.set(label, {
+                designation: label,
+                entrees: [],
+                sorties: []
+              });
+            }
+            
+            allMateriels.get(label).entrees.push({
+              date: demande.dateLivraison || demande.date,
+              qty: Number(item.qty) || 0,
+              op: demande.op,
+              ref: demande.id
+            });
+          });
+        });
+
+        visibleArchives.forEach((archive) => {
+          const archiveLabel = archive?.label || archive?.key || "Mois archive";
+          const archiveKeyMatch = String(archive?.key || "").match(/^(\d{4})-(\d{2})$/);
+          const archiveDate = archiveKeyMatch
+            ? `01/${archiveKeyMatch[2]}/${archiveKeyMatch[1]}`
+            : archiveLabel;
+          Object.entries(archive?.operatorStats || {}).forEach(([op, stats]) => {
+            Object.entries(stats?.entrantsByDesignation || {}).forEach(([label, qty]) => {
+              const cleanLabel = String(label || "").trim().toUpperCase();
+              const quantity = Number(qty) || 0;
+              if (!cleanLabel || quantity <= 0) return;
+              if (!allMateriels.has(cleanLabel)) {
+                allMateriels.set(cleanLabel, {
+                  designation: cleanLabel,
+                  entrees: [],
+                  sorties: [],
+                });
+              }
+              allMateriels.get(cleanLabel).entrees.push({
+                date: archiveDate,
+                qty: quantity,
+                op,
+                ref: archive?.key || "ARCHIVE",
+                archived: true,
+              });
+            });
+
+            const sortantsDetails = Array.isArray(stats?.sortantsDetails)
+              ? stats.sortantsDetails
+              : [];
+            if (sortantsDetails.length > 0) {
+              sortantsDetails.forEach((detail) => {
+                const cleanLabel = String(detail?.designation || "").trim().toUpperCase();
+                const quantity = Number(detail?.qty) || 0;
+                if (!cleanLabel || quantity <= 0) return;
+                if (!allMateriels.has(cleanLabel)) {
+                  allMateriels.set(cleanLabel, {
+                    designation: cleanLabel,
+                    entrees: [],
+                    sorties: [],
+                  });
+                }
+                allMateriels.get(cleanLabel).sorties.push({
+                  date: archiveDate,
+                  qty: quantity,
+                  op,
+                  ref: detail?.reference || archive?.key || "ARCHIVE",
+                  archived: true,
+                });
+              });
+              return;
+            }
+
+            Object.entries(stats?.sortantsByDesignation || {}).forEach(([label, qty]) => {
+              const cleanLabel = String(label || "").trim().toUpperCase();
+              const quantity = Number(qty) || 0;
+              if (!cleanLabel || quantity <= 0) return;
+              if (!allMateriels.has(cleanLabel)) {
+                allMateriels.set(cleanLabel, {
+                  designation: cleanLabel,
+                  entrees: [],
+                  sorties: [],
+                });
+              }
+              allMateriels.get(cleanLabel).sorties.push({
+                date: archiveDate,
+                qty: quantity,
+                op,
+                ref: archive?.key || "ARCHIVE",
+                archived: true,
+              });
+            });
+          });
+        });
+
+        if (allMateriels.size === 0) {
+          container.innerHTML = `
+            <div class="space-y-4 p-4">
+              ${renderFluxArchivesHtml(visibleArchives)}
+              <div class="p-6 text-center text-slate-500 bg-white rounded-2xl border">Aucun matériel enregistré.</div>
+            </div>`;
+          return;
+        }
+
+        const materiels = Array.from(allMateriels.values()).sort((a, b) => 
+          b.sorties.length + b.entrees.length - (a.sorties.length + a.entrees.length)
+        );
+
+        let html = `
+          <div class="space-y-6 p-4">
+            <div class="bg-white rounded-3xl shadow-xl border-b-4 border-cyan-600 p-6">
+              <div class="flex justify-between items-center mb-2">
+                <h3 class="text-xl font-black uppercase text-slate-800 italic">
+                  <i class="fas fa-water mr-2 text-cyan-600"></i> Flux Matériels
+                </h3>
+                <div class="flex gap-2">
+                  <button onclick="exportFluxMaterielsPDF()" class="bg-red-600 text-white px-4 py-2 rounded-xl text-[8px] font-black uppercase shadow-sm hover:bg-red-700">
+                    <i class="fas fa-file-pdf mr-1"></i> PDF
+                  </button>
+                  <button onclick="exportFluxMaterielsExcel()" class="bg-green-600 text-white px-4 py-2 rounded-xl text-[8px] font-black uppercase shadow-sm hover:bg-green-700">
+                    <i class="fas fa-file-excel mr-1"></i> Excel
+                  </button>
+                </div>
+              </div>
+              <p class="text-[9px] text-slate-500">Cliquez sur un matériel pour voir le détail du flux par semaine/mois</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        `;
+
+        materiels.forEach((mat) => {
+          const totalEntrees = mat.entrees.reduce((sum, e) => sum + e.qty, 0);
+          const totalSorties = mat.sorties.reduce((sum, s) => sum + s.qty, 0);
+          const solde = totalEntrees - totalSorties;
+
+          html += `
+            <div class="bg-gradient-to-br from-slate-50 to-white border-2 border-cyan-200 rounded-2xl p-4 cursor-pointer hover:shadow-lg transition hover:border-cyan-400 hover-lift" 
+                 onclick="renderFluxMaterielDetail(document.getElementById('app-container'), '${escapeHtml(mat.designation)}')">
+              <p class="text-[10px] font-black text-slate-800 uppercase mb-3 truncate">${escapeHtml(mat.designation)}</p>
+              <div class="grid grid-cols-3 gap-2 mb-3">
+                <div class="bg-green-50 border border-green-200 rounded-lg p-2 text-center">
+                  <p class="text-[7px] text-green-600 uppercase">Entrées</p>
+                  <p class="text-[10px] font-black text-green-700">${totalEntrees}</p>
+                </div>
+                <div class="bg-red-50 border border-red-200 rounded-lg p-2 text-center">
+                  <p class="text-[7px] text-red-600 uppercase">Sorties</p>
+                  <p class="text-[10px] font-black text-red-700">${totalSorties}</p>
+                </div>
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-2 text-center">
+                  <p class="text-[7px] text-blue-600 uppercase">Solde</p>
+                  <p class="text-[10px] font-black ${solde >= 0 ? 'text-blue-700' : 'text-red-700'}">${solde}</p>
+                </div>
+              </div>
+              <p class="text-[8px] text-slate-500">Mouvements: ${mat.entrees.length + mat.sorties.length}</p>
+            </div>
+          `;
+        });
+
+        html += `
+            </div>
+            ${renderFluxArchivesHtml(visibleArchives)}
+          </div>
+        `;
+
+        container.innerHTML = html;
+      }
+
+      function renderFluxMaterielDetail(container, designation) {
+        if (!container) return;
+        
+        const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
+        const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
+        const archives = Array.isArray(appData?.consumptionArchives)
+          ? appData.consumptionArchives
+          : [];
+        
+        // Filtre pour le gestionnaire
+        let visibleSorties = sorties;
+        let visibleDemandes = demandes;
+        let visibleArchives = archives;
+        try {
+          if (
+            currentUser &&
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
+          ) {
+            const allowed = new Set(getManagedOpsNormalized(currentUser));
+            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
+            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+            visibleArchives = archives
+              .map((archive) => {
+                const operatorStats = {};
+                Object.entries(archive?.operatorStats || {}).forEach(
+                  ([op, stats]) => {
+                    const opNorm = normalizeOperatorKey(op);
+                    if (allowed.has(opNorm)) operatorStats[opNorm] = stats;
+                  },
+                );
+                return { ...archive, operatorStats };
+              })
+              .filter((archive) => Object.keys(archive.operatorStats || {}).length > 0);
+          }
+        } catch (e) {
+          console.error("Erreur filtrage détail", e);
+          visibleSorties = [];
+          visibleDemandes = [];
+          visibleArchives = [];
+        }
+
+        const cleanDesignation = String(designation || "").trim().toUpperCase();
+        
+        // Récupère les mouvements
+        const mouvements = [];
+        
+        // Entrees depuis les demandes
+        visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
+          const items = demande.items || [];
+          items.forEach((item) => {
+            const label = String(item.label || "").trim().toUpperCase();
+            if (label === cleanDesignation) {
+              mouvements.push({
+                type: "ENTREE",
+                date: demande.dateLivraison || demande.date,
+                qty: Number(item.qty) || 0,
+                op: demande.op,
+                ref: demande.id,
+                details: `Demande ${demande.id}`
+              });
+            }
+          });
+        });
+        
+        // Sorties depuis les bons physiques
+        visibleSorties.forEach((sortie) => {
+          const items = getSortieItems(sortie) || [];
+          items.forEach((item) => {
+            const label = String(item.label || "").trim().toUpperCase();
+            if (label === cleanDesignation) {
+              mouvements.push({
+                type: "SORTIE",
+                date: sortie.date,
+                qty: Number(item.qty) || 0,
+                op: sortie.op,
+                ref: sortie.ref,
+                details: `Bon ${sortie.ref} - ${sortie.tech || sortie.createdBy}`
+              });
+            }
+          });
+        });
+
+        visibleArchives.forEach((archive) => {
+          const archiveLabel = archive?.label || archive?.key || "Mois archive";
+          const archiveKeyMatch = String(archive?.key || "").match(/^(\d{4})-(\d{2})$/);
+          const archiveDate = archiveKeyMatch
+            ? `01/${archiveKeyMatch[2]}/${archiveKeyMatch[1]}`
+            : archiveLabel;
+          Object.entries(archive?.operatorStats || {}).forEach(([op, stats]) => {
+            const entreeQty = Number(
+              stats?.entrantsByDesignation?.[cleanDesignation] || 0,
+            );
+            if (entreeQty > 0) {
+              mouvements.push({
+                type: "ENTREE",
+                date: archiveDate,
+                qty: entreeQty,
+                op,
+                ref: archive?.key || "ARCHIVE",
+                details: `Archive ${archiveLabel}`,
+              });
+            }
+
+            const sortantsDetails = Array.isArray(stats?.sortantsDetails)
+              ? stats.sortantsDetails
+              : [];
+            const matchingDetails = sortantsDetails.filter(
+              (detail) =>
+                String(detail?.designation || "").trim().toUpperCase() ===
+                cleanDesignation,
+            );
+            if (matchingDetails.length > 0) {
+              matchingDetails.forEach((detail) => {
+                mouvements.push({
+                  type: "SORTIE",
+                  date: archiveDate,
+                  qty: Number(detail?.qty) || 0,
+                  op,
+                  ref: detail?.reference || archive?.key || "ARCHIVE",
+                  details: `Archive ${archiveLabel}`,
+                });
+              });
+              return;
+            }
+
+            const sortieQty = Number(
+              stats?.sortantsByDesignation?.[cleanDesignation] || 0,
+            );
+            if (sortieQty > 0) {
+              mouvements.push({
+                type: "SORTIE",
+                date: archiveDate,
+                qty: sortieQty,
+                op,
+                ref: archive?.key || "ARCHIVE",
+                details: `Archive ${archiveLabel}`,
+              });
+            }
+          });
+        });
+
+        mouvements.sort((a, b) => getSortieTimestamp(b.date) - getSortieTimestamp(a.date));
+
+        if (mouvements.length === 0) {
+          container.innerHTML = `
+            <div class="space-y-4 p-4">
+              <button onclick="renderFluxMateriels(document.getElementById('app-container'))" class="text-blue-600 text-[9px] font-black mb-4">
+                <i class="fas fa-arrow-left mr-2"></i> Retour à la liste
+              </button>
+              <p class="text-center text-slate-500">Aucun mouvement pour ce matériel.</p>
+            </div>
+          `;
+          return;
+        }
+
+        // Groupe par semaine et par mois
+        const groupedByWeek = new Map();
+        const groupedByMonth = new Map();
+        
+        mouvements.forEach((mv) => {
+          const ts = getSortieTimestamp(mv.date);
+          if (!ts) return;
+          
+          const date = new Date(ts);
+          const weekStart = new Date(date);
+          weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+          const weekKey = weekStart.toISOString().split('T')[0];
+          
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          
+          if (!groupedByWeek.has(weekKey)) {
+            groupedByWeek.set(weekKey, { week: weekKey, mouvements: [] });
+          }
+          if (!groupedByMonth.has(monthKey)) {
+            groupedByMonth.set(monthKey, { month: monthKey, mouvements: [] });
+          }
+          
+          groupedByWeek.get(weekKey).mouvements.push(mv);
+          groupedByMonth.get(monthKey).mouvements.push(mv);
+        });
+
+        // Calcule les totaux
+        const totalEntrees = mouvements.filter(m => m.type === "ENTREE").reduce((sum, m) => sum + m.qty, 0);
+        const totalSorties = mouvements.filter(m => m.type === "SORTIE").reduce((sum, m) => sum + m.qty, 0);
+        const solde = totalEntrees - totalSorties;
+
+        let html = `
+          <div class="space-y-6 p-4">
+            <div class="flex items-center gap-4 mb-4">
+              <button onclick="renderFluxMateriels(document.getElementById('app-container'))" class="text-blue-600 text-[9px] font-black hover:text-blue-800">
+                <i class="fas fa-arrow-left mr-2"></i> Retour à la liste
+              </button>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-xl border-2 border-cyan-600 p-6">
+              <h3 class="text-lg font-black uppercase text-slate-800 mb-4">${escapeHtml(cleanDesignation)}</h3>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-center">
+                  <p class="text-[8px] text-green-600 uppercase font-black">Total Entrées</p>
+                  <p class="text-2xl font-black text-green-700">${totalEntrees}</p>
+                </div>
+                <div class="bg-red-50 border-2 border-red-200 rounded-xl p-4 text-center">
+                  <p class="text-[8px] text-red-600 uppercase font-black">Total Sorties</p>
+                  <p class="text-2xl font-black text-red-700">${totalSorties}</p>
+                </div>
+                <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-center">
+                  <p class="text-[8px] text-blue-600 uppercase font-black">Solde</p>
+                  <p class="text-2xl font-black ${solde >= 0 ? 'text-blue-700' : 'text-red-700'}">${solde}</p>
+                </div>
+                <div class="bg-slate-50 border-2 border-slate-200 rounded-xl p-4 text-center">
+                  <p class="text-[8px] text-slate-600 uppercase font-black">Mouvements</p>
+                  <p class="text-2xl font-black text-slate-700">${mouvements.length}</p>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="exportFluxMaterielDetailPDF('${escapeHtml(cleanDesignation)}')" class="bg-red-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow-sm hover:bg-red-700">
+                  <i class="fas fa-file-pdf mr-1"></i> Export PDF
+                </button>
+                <button onclick="exportFluxMaterielDetailExcel('${escapeHtml(cleanDesignation)}')" class="bg-green-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow-sm hover:bg-green-700">
+                  <i class="fas fa-file-excel mr-1"></i> Export Excel
+                </button>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-xl border-2 border-slate-200 p-6">
+              <h4 class="text-[11px] font-black uppercase text-slate-800 mb-4">Par Semaine</h4>
+              <div class="space-y-3">
+        `;
+
+        Array.from(groupedByWeek.entries())
+          .sort(([keyA], [keyB]) => keyB.localeCompare(keyA))
+          .forEach(([weekKey, group]) => {
+            const entreesSem = group.mouvements.filter(m => m.type === "ENTREE").reduce((sum, m) => sum + m.qty, 0);
+            const sortiesSem = group.mouvements.filter(m => m.type === "SORTIE").reduce((sum, m) => sum + m.qty, 0);
+            const semDate = new Date(weekKey);
+            const semDateEnd = new Date(weekKey);
+            semDateEnd.setDate(semDateEnd.getDate() + 6);
+            const semLabel = `Semaine du ${semDate.toLocaleDateString('fr-FR')} au ${semDateEnd.toLocaleDateString('fr-FR')}`;
+
+            html += `
+              <div class="bg-gradient-to-r from-slate-50 to-cyan-50 border-2 border-cyan-200 rounded-xl p-4">
+                <p class="text-[9px] font-black text-slate-700 mb-2">${semLabel}</p>
+                <div class="grid grid-cols-3 gap-2">
+                  <div class="bg-white rounded-lg p-2 text-center">
+                    <p class="text-[7px] text-green-600 uppercase">Entrées</p>
+                    <p class="text-[10px] font-black text-green-700">${entreesSem}</p>
+                  </div>
+                  <div class="bg-white rounded-lg p-2 text-center">
+                    <p class="text-[7px] text-red-600 uppercase">Sorties</p>
+                    <p class="text-[10px] font-black text-red-700">${sortiesSem}</p>
+                  </div>
+                  <div class="bg-white rounded-lg p-2 text-center">
+                    <p class="text-[7px] text-blue-600 uppercase">Solde</p>
+                    <p class="text-[10px] font-black ${entreesSem - sortiesSem >= 0 ? 'text-blue-700' : 'text-red-700'}">${entreesSem - sortiesSem}</p>
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+
+        html += `
+              </div>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-xl border-2 border-slate-200 p-6">
+              <h4 class="text-[11px] font-black uppercase text-slate-800 mb-4">Par Mois</h4>
+              <div class="space-y-3">
+        `;
+
+        Array.from(groupedByMonth.entries())
+          .sort(([keyA], [keyB]) => keyB.localeCompare(keyA))
+          .forEach(([monthKey, group]) => {
+            const entroesMois = group.mouvements.filter(m => m.type === "ENTREE").reduce((sum, m) => sum + m.qty, 0);
+            const sortiesMois = group.mouvements.filter(m => m.type === "SORTIE").reduce((sum, m) => sum + m.qty, 0);
+            const [year, month] = monthKey.split('-');
+            const monthLabel = getMonthLabel(parseInt(month) - 1, parseInt(year));
+
+            html += `
+              <div class="bg-gradient-to-r from-slate-50 to-amber-50 border-2 border-amber-200 rounded-xl p-4">
+                <p class="text-[9px] font-black text-slate-700 mb-2">${monthLabel}</p>
+                <div class="grid grid-cols-3 gap-2">
+                  <div class="bg-white rounded-lg p-2 text-center">
+                    <p class="text-[7px] text-green-600 uppercase">Entrées</p>
+                    <p class="text-[10px] font-black text-green-700">${entroesMois}</p>
+                  </div>
+                  <div class="bg-white rounded-lg p-2 text-center">
+                    <p class="text-[7px] text-red-600 uppercase">Sorties</p>
+                    <p class="text-[10px] font-black text-red-700">${sortiesMois}</p>
+                  </div>
+                  <div class="bg-white rounded-lg p-2 text-center">
+                    <p class="text-[7px] text-blue-600 uppercase">Solde</p>
+                    <p class="text-[10px] font-black ${entroesMois - sortiesMois >= 0 ? 'text-blue-700' : 'text-red-700'}">${entroesMois - sortiesMois}</p>
+                  </div>
+                </div>
+                <div class="mt-2">
+                  <p class="text-[8px] text-slate-600 mb-1"><span class="font-black">Détails des mouvements:</span></p>
+                  <div class="space-y-1 max-h-[200px] overflow-y-auto">
+        `;
+
+            group.mouvements
+              .sort((a, b) => getSortieTimestamp(b.date) - getSortieTimestamp(a.date))
+              .forEach((mv) => {
+                const bgColor = mv.type === "ENTREE" ? "bg-green-50" : "bg-red-50";
+                const textColor = mv.type === "ENTREE" ? "text-green-700" : "text-red-700";
+                const icon = mv.type === "ENTREE" ? "fa-arrow-down" : "fa-arrow-up";
+
+                html += `
+                    <div class="text-[7px] ${bgColor} border border-slate-200 rounded px-2 py-1 flex justify-between">
+                      <span><i class="fas ${icon} ${textColor}"></i> ${escapeHtml(mv.details)}</span>
+                      <span class="font-black ${textColor}">${mv.qty} U</span>
+                    </div>
+                `;
+              });
+
+            html += `
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+
+        html += `
+              </div>
+            </div>
+          </div>
+        `;
+
+        container.innerHTML = html;
+      }
+
+      // ===== EXPORTS PDF/EXCEL =====
+      async function exportFluxMaterielsPDF() {
+        const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
+        const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
+        
+        let visibleSorties = sorties;
+        let visibleDemandes = demandes;
+        try {
+          if (
+            currentUser &&
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
+          ) {
+            const allowed = new Set(getManagedOpsNormalized(currentUser));
+            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
+            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+          }
+        } catch (e) {
+          console.error("Erreur export", e);
+          return;
+        }
+
+        if (visibleSorties.length === 0 && visibleDemandes.length === 0) {
+          alert("Aucun flux à exporter");
+          return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        await addLogoToPdf(doc, 14, 8, 34, 14);
+        
+        doc.setFontSize(14);
+        doc.text("RAPPORT - FLUX DE TOUS LES MATÉRIELS", 14, 25);
+        doc.setFontSize(10);
+        doc.text(`Date: ${new Date().toLocaleDateString('fr-FR')}`, 14, 32);
+
+        // Récupère tous les matériels
+        const allMateriels = new Map();
+        
+        visibleSorties.forEach((sortie) => {
+          const items = getSortieItems(sortie) || [];
+          items.forEach((item) => {
+            const label = String(item.label || "").trim().toUpperCase();
+            if (!label) return;
+            if (!allMateriels.has(label)) {
+              allMateriels.set(label, { designation: label, entrees: [], sorties: [] });
+            }
+            allMateriels.get(label).sorties.push({
+              date: sortie.date,
+              qty: Number(item.qty) || 0,
+              op: sortie.op,
+              ref: sortie.ref
+            });
+          });
+        });
+        
+        visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
+          const items = demande.items || [];
+          items.forEach((item) => {
+            const label = String(item.label || "").trim().toUpperCase();
+            if (!label) return;
+            if (!allMateriels.has(label)) {
+              allMateriels.set(label, { designation: label, entrees: [], sorties: [] });
+            }
+            allMateriels.get(label).entrees.push({
+              date: demande.dateLivraison || demande.date,
+              qty: Number(item.qty) || 0,
+              op: demande.op,
+              ref: demande.id
+            });
+          });
+        });
+
+        const materiels = Array.from(allMateriels.values()).sort((a, b) =>
+          b.sorties.length + b.entrees.length - (a.sorties.length + a.entrees.length)
+        );
+
+        let cursorY = 40;
+        const pageHeight = doc.internal.pageSize.getHeight();
+
+        for (let idx = 0; idx < materiels.length; idx++) {
+          const mat = materiels[idx];
+          if (cursorY > pageHeight - 40) {
+            doc.addPage();
+            await addLogoToPdf(doc, 14, 8, 34, 14);
+            cursorY = 20;
+          }
+
+          doc.setFontSize(11);
+          doc.text(`${idx + 1}. ${mat.designation}`, 14, cursorY);
+          cursorY += 6;
+
+          const totalEntrees = mat.entrees.reduce((sum, e) => sum + e.qty, 0);
+          const totalSorties = mat.sorties.reduce((sum, s) => sum + s.qty, 0);
+          
+          doc.setFontSize(9);
+          doc.text(`Entrées: ${totalEntrees} | Sorties: ${totalSorties} | Solde: ${totalEntrees - totalSorties}`, 14, cursorY);
+          cursorY += 5;
+
+          // Tableau des mouvements
+          const tableBody = [];
+          [...mat.entrees, ...mat.sorties]
+            .sort((a, b) => getSortieTimestamp(b.date) - getSortieTimestamp(a.date))
+            .slice(0, 10)
+            .forEach((mv) => {
+              const isEntree = mat.entrees.some(e => e.date === mv.date && e.qty === mv.qty);
+              tableBody.push([
+                isEntree ? "ENTREE" : "SORTIE",
+                String(mv.date || "-"),
+                String(mv.qty),
+                String(mv.op || "-"),
+                String(mv.ref || "-")
+              ]);
+            });
+
+          doc.autoTable({
+            startY: cursorY,
+            head: [["Type", "Date", "Quantité", "Op", "Réf"]],
+            body: tableBody.length > 0 ? tableBody : [["Aucun mouvement", "-", "-", "-", "-"]],
+            theme: "grid",
+            fontSize: 8,
+            columnStyles: {
+              0: { halign: "center", cellWidth: 20 },
+              1: { cellWidth: 35 },
+              2: { halign: "center", cellWidth: 20 },
+              3: { cellWidth: 30 },
+              4: { cellWidth: 30 }
+            }
+          });
+
+          cursorY = (doc.lastAutoTable?.finalY || cursorY) + 8;
+        }
+
+        doc.save(`Flux_Materiels_${Date.now()}.pdf`);
+      }
+
+      async function exportFluxMaterielDetailPDF(designation) {
+        const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
+        const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
+        
+        let visibleSorties = sorties;
+        let visibleDemandes = demandes;
+        try {
+          if (
+            currentUser &&
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
+          ) {
+            const allowed = new Set(getManagedOpsNormalized(currentUser));
+            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
+            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+          }
+        } catch (e) {
+          console.error("Erreur export", e);
+          return;
+        }
+
+        const cleanDesignation = String(designation || "").trim().toUpperCase();
+        const mouvements = [];
+
+        visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
+          const items = demande.items || [];
+          items.forEach((item) => {
+            if (String(item.label || "").trim().toUpperCase() === cleanDesignation) {
+              mouvements.push({
+                type: "ENTREE",
+                date: demande.dateLivraison || demande.date,
+                qty: Number(item.qty) || 0,
+                op: demande.op,
+                ref: demande.id,
+                details: `Demande ${demande.id}`
+              });
+            }
+          });
+        });
+
+        visibleSorties.forEach((sortie) => {
+          const items = getSortieItems(sortie) || [];
+          items.forEach((item) => {
+            if (String(item.label || "").trim().toUpperCase() === cleanDesignation) {
+              mouvements.push({
+                type: "SORTIE",
+                date: sortie.date,
+                qty: Number(item.qty) || 0,
+                op: sortie.op,
+                ref: sortie.ref,
+                details: `Bon ${sortie.ref} - ${sortie.tech || sortie.createdBy}`
+              });
+            }
+          });
+        });
+
+        mouvements.sort((a, b) => getSortieTimestamp(b.date) - getSortieTimestamp(a.date));
+
+        if (mouvements.length === 0) {
+          alert("Aucun mouvement pour ce matériel");
+          return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        await addLogoToPdf(doc, 14, 8, 34, 14);
+
+        doc.setFontSize(14);
+        doc.text(`FLUX DÉTAILLÉ - ${cleanDesignation}`, 14, 25);
+        doc.setFontSize(10);
+        doc.text(`Date: ${new Date().toLocaleDateString('fr-FR')}`, 14, 32);
+
+        const totalEntrees = mouvements.filter(m => m.type === "ENTREE").reduce((sum, m) => sum + m.qty, 0);
+        const totalSorties = mouvements.filter(m => m.type === "SORTIE").reduce((sum, m) => sum + m.qty, 0);
+        const solde = totalEntrees - totalSorties;
+
+        doc.setFontSize(9);
+        doc.text(`Total Entrées: ${totalEntrees} | Total Sorties: ${totalSorties} | Solde: ${solde}`, 14, 38);
+
+        const tableBody = mouvements.map((mv) => [
+          mv.type,
+          String(mv.date || "-"),
+          String(mv.qty),
+          String(mv.op || "-"),
+          escapeHtml(String(mv.details || "-")).substring(0, 30)
+        ]);
+
+        doc.autoTable({
+          startY: 45,
+          head: [["Type", "Date", "Quantité", "Opérateur", "Détails"]],
+          body: tableBody,
+          theme: "grid",
+          fontSize: 9,
+          columnStyles: {
+            0: { halign: "center", cellWidth: 20 },
+            1: { cellWidth: 30 },
+            2: { halign: "center", cellWidth: 20 },
+            3: { cellWidth: 30 },
+            4: { cellWidth: 40 }
+          }
+        });
+
+        doc.save(`Flux_${cleanDesignation}_${Date.now()}.pdf`);
+      }
+
+      async function exportFluxMaterielsExcel() {
+        const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
+        const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
+        
+        let visibleSorties = sorties;
+        let visibleDemandes = demandes;
+        try {
+          if (
+            currentUser &&
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
+          ) {
+            const allowed = new Set(getManagedOpsNormalized(currentUser));
+            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
+            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+          }
+        } catch (e) {
+          console.error("Erreur export", e);
+          return;
+        }
+
+        const allMateriels = new Map();
+        
+        visibleSorties.forEach((sortie) => {
+          const items = getSortieItems(sortie) || [];
+          items.forEach((item) => {
+            const label = String(item.label || "").trim().toUpperCase();
+            if (!label) return;
+            if (!allMateriels.has(label)) {
+              allMateriels.set(label, { designation: label, entrees: [], sorties: [] });
+            }
+            allMateriels.get(label).sorties.push({
+              date: sortie.date,
+              qty: Number(item.qty) || 0,
+              op: sortie.op,
+              ref: sortie.ref
+            });
+          });
+        });
+        
+        visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
+          const items = demande.items || [];
+          items.forEach((item) => {
+            const label = String(item.label || "").trim().toUpperCase();
+            if (!label) return;
+            if (!allMateriels.has(label)) {
+              allMateriels.set(label, { designation: label, entrees: [], sorties: [] });
+            }
+            allMateriels.get(label).entrees.push({
+              date: demande.dateLivraison || demande.date,
+              qty: Number(item.qty) || 0,
+              op: demande.op,
+              ref: demande.id
+            });
+          });
+        });
+
+        const wb = XLSX.utils.book_new();
+        const materiels = Array.from(allMateriels.values()).sort((a, b) =>
+          b.sorties.length + b.entrees.length - (a.sorties.length + a.entrees.length)
+        );
+
+        const summaryData = materiels.map((mat) => {
+          const totalEntrees = mat.entrees.reduce((sum, e) => sum + e.qty, 0);
+          const totalSorties = mat.sorties.reduce((sum, s) => sum + s.qty, 0);
+          return {
+            "Désignation": mat.designation,
+            "Entrées": totalEntrees,
+            "Sorties": totalSorties,
+            "Solde": totalEntrees - totalSorties,
+            "Mouvements": mat.entrees.length + mat.sorties.length
+          };
+        });
+
+        const ws = XLSX.utils.json_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(wb, ws, "Synthèse");
+
+        const detailsData = [];
+        materiels.forEach((mat) => {
+          const totalEntrees = mat.entrees.reduce((sum, e) => sum + e.qty, 0);
+          const totalSorties = mat.sorties.reduce((sum, s) => sum + s.qty, 0);
+          
+          [...mat.entrees, ...mat.sorties]
+            .sort((a, b) => getSortieTimestamp(b.date) - getSortieTimestamp(a.date))
+            .forEach((mv) => {
+              const isEntree = mat.entrees.some(e => e.date === mv.date && e.qty === mv.qty);
+              detailsData.push({
+                "Matériel": mat.designation,
+                "Type": isEntree ? "ENTREE" : "SORTIE",
+                "Date": String(mv.date || "-"),
+                "Quantité": mv.qty,
+                "Opérateur": String(mv.op || "-"),
+                "Référence": String(mv.ref || "-")
+              });
+            });
+        });
+
+        const wsDetails = XLSX.utils.json_to_sheet(detailsData);
+        XLSX.utils.book_append_sheet(wb, wsDetails, "Détails");
+
+        XLSX.writeFile(wb, `Flux_Materiels_${Date.now()}.xlsx`);
+      }
+
+      async function exportFluxMaterielDetailExcel(designation) {
+        const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
+        const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
+        
+        let visibleSorties = sorties;
+        let visibleDemandes = demandes;
+        try {
+          if (
+            currentUser &&
+            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
+          ) {
+            const allowed = new Set(getManagedOpsNormalized(currentUser));
+            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
+            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+          }
+        } catch (e) {
+          console.error("Erreur export", e);
+          return;
+        }
+
+        const cleanDesignation = String(designation || "").trim().toUpperCase();
+        const mouvements = [];
+
+        visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
+          const items = demande.items || [];
+          items.forEach((item) => {
+            if (String(item.label || "").trim().toUpperCase() === cleanDesignation) {
+              mouvements.push({
+                type: "ENTREE",
+                date: demande.dateLivraison || demande.date,
+                qty: Number(item.qty) || 0,
+                op: demande.op,
+                ref: demande.id,
+                details: `Demande ${demande.id}`
+              });
+            }
+          });
+        });
+
+        visibleSorties.forEach((sortie) => {
+          const items = getSortieItems(sortie) || [];
+          items.forEach((item) => {
+            if (String(item.label || "").trim().toUpperCase() === cleanDesignation) {
+              mouvements.push({
+                type: "SORTIE",
+                date: sortie.date,
+                qty: Number(item.qty) || 0,
+                op: sortie.op,
+                ref: sortie.ref,
+                details: `Bon ${sortie.ref} - ${sortie.tech || sortie.createdBy}`
+              });
+            }
+          });
+        });
+
+        mouvements.sort((a, b) => getSortieTimestamp(b.date) - getSortieTimestamp(a.date));
+
+        const wb = XLSX.utils.book_new();
+
+        const totalEntrees = mouvements.filter(m => m.type === "ENTREE").reduce((sum, m) => sum + m.qty, 0);
+        const totalSorties = mouvements.filter(m => m.type === "SORTIE").reduce((sum, m) => sum + m.qty, 0);
+        
+        const summaryData = [{
+          "Matériel": cleanDesignation,
+          "Total Entrées": totalEntrees,
+          "Total Sorties": totalSorties,
+          "Solde": totalEntrees - totalSorties,
+          "Date Export": new Date().toLocaleDateString('fr-FR')
+        }];
+
+        const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(wb, wsSummary, "Synthèse");
+
+        const detailsData = mouvements.map((mv) => ({
+          "Type": mv.type,
+          "Date": String(mv.date || "-"),
+          "Quantité": mv.qty,
+          "Opérateur": String(mv.op || "-"),
+          "Référence": String(mv.ref || "-"),
+          "Détails": String(mv.details || "-")
+        }));
+
+        const wsDetails = XLSX.utils.json_to_sheet(detailsData);
+        XLSX.utils.book_append_sheet(wb, wsDetails, "Détails");
+
+        XLSX.writeFile(wb, `Flux_${cleanDesignation}_${Date.now()}.xlsx`);
+      }
+      // ===== FIN FLUX MATÉRIELS =====
+
     </script>
   </body>
 </html>
