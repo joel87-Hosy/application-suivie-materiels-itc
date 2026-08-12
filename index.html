@@ -9815,6 +9815,118 @@
         `;
       }
 
+      function getFluxWeekInfo(dateText) {
+        const ts = getSortieTimestamp(dateText);
+        if (!ts) return null;
+
+        const date = new Date(ts);
+        const weekStart = new Date(date);
+        const day = weekStart.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        weekStart.setDate(weekStart.getDate() + diff);
+        weekStart.setHours(0, 0, 0, 0);
+
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+
+        return {
+          key: weekStart.toISOString().split("T")[0],
+          label: `Semaine du ${weekStart.toLocaleDateString("fr-FR")} au ${weekEnd.toLocaleDateString("fr-FR")}`,
+        };
+      }
+
+      function updateFluxMaterielsWeekFilter() {
+        const select = document.getElementById("flux-week-filter");
+        const target = document.getElementById("flux-week-content");
+        if (!select || !target) return;
+
+        const selectedWeek = select.value || "all";
+        const movements = Array.isArray(window.fluxMaterielsActiveMovements)
+          ? window.fluxMaterielsActiveMovements
+          : [];
+        const filtered =
+          selectedWeek === "all"
+            ? movements
+            : movements.filter((mv) => mv.weekKey === selectedWeek);
+
+        if (filtered.length === 0) {
+          target.innerHTML = `<div class="p-6 text-center text-slate-400 text-[9px] uppercase font-black">Aucun flux pour cette semaine.</div>`;
+          return;
+        }
+
+        const byMaterial = new Map();
+        filtered.forEach((mv) => {
+          const label = String(mv.designation || "NON DÉFINI").toUpperCase();
+          if (!byMaterial.has(label)) {
+            byMaterial.set(label, {
+              designation: label,
+              entrees: 0,
+              sorties: 0,
+              mouvements: 0,
+            });
+          }
+          const row = byMaterial.get(label);
+          if (mv.type === "ENTREE") row.entrees += Number(mv.qty) || 0;
+          if (mv.type === "SORTIE") row.sorties += Number(mv.qty) || 0;
+          row.mouvements += 1;
+        });
+
+        const rows = Array.from(byMaterial.values()).sort(
+          (a, b) => b.entrees + b.sorties - (a.entrees + a.sorties),
+        );
+        const totalEntrees = filtered
+          .filter((mv) => mv.type === "ENTREE")
+          .reduce((sum, mv) => sum + (Number(mv.qty) || 0), 0);
+        const totalSorties = filtered
+          .filter((mv) => mv.type === "SORTIE")
+          .reduce((sum, mv) => sum + (Number(mv.qty) || 0), 0);
+
+        target.innerHTML = `
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+              <p class="text-[7px] uppercase text-green-600 font-black">Entrées</p>
+              <p class="text-lg font-black text-green-700">${totalEntrees} U</p>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
+              <p class="text-[7px] uppercase text-red-600 font-black">Sorties</p>
+              <p class="text-lg font-black text-red-700">${totalSorties} U</p>
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+              <p class="text-[7px] uppercase text-blue-600 font-black">Solde</p>
+              <p class="text-lg font-black ${totalEntrees - totalSorties >= 0 ? "text-blue-700" : "text-red-700"}">${totalEntrees - totalSorties} U</p>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-900 text-white text-[8px] uppercase font-black">
+                  <th class="p-3">Matériel</th>
+                  <th class="p-3 text-center">Entrées</th>
+                  <th class="p-3 text-center">Sorties</th>
+                  <th class="p-3 text-center">Solde</th>
+                  <th class="p-3 text-center">Mouvements</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 text-[9px] font-bold">
+                ${rows
+                  .map(
+                    (row) => `
+                      <tr>
+                        <td class="p-3">${escapeHtml(row.designation)}</td>
+                        <td class="p-3 text-center text-green-700 font-black">${row.entrees}</td>
+                        <td class="p-3 text-center text-red-700 font-black">${row.sorties}</td>
+                        <td class="p-3 text-center font-black ${row.entrees - row.sorties >= 0 ? "text-blue-700" : "text-red-700"}">${row.entrees - row.sorties}</td>
+                        <td class="p-3 text-center text-slate-500">${row.mouvements}</td>
+                      </tr>
+                    `,
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
       function renderFluxMateriels(container) {
         if (!container) return;
         
@@ -9906,6 +10018,34 @@
             });
           });
         });
+
+        const now = new Date();
+        const activeMonth = now.getMonth();
+        const activeYear = now.getFullYear();
+        const activeMovements = [];
+        allMateriels.forEach((mat) => {
+          [...mat.entrees.map((mv) => ({ ...mv, type: "ENTREE" })), ...mat.sorties.map((mv) => ({ ...mv, type: "SORTIE" }))]
+            .filter((mv) => !mv.archived && isDateInTargetMonth(mv.date, activeMonth, activeYear))
+            .forEach((mv) => {
+              const weekInfo = getFluxWeekInfo(mv.date);
+              if (!weekInfo) return;
+              activeMovements.push({
+                ...mv,
+                designation: mat.designation,
+                weekKey: weekInfo.key,
+                weekLabel: weekInfo.label,
+              });
+            });
+        });
+
+        window.fluxMaterielsActiveMovements = activeMovements;
+        const weekOptions = Array.from(
+          new Map(activeMovements.map((mv) => [mv.weekKey, mv.weekLabel])).entries(),
+        ).sort(([a], [b]) => b.localeCompare(a));
+        const currentMonthLabel = new Date(activeYear, activeMonth, 1).toLocaleString(
+          "fr-FR",
+          { month: "long", year: "numeric" },
+        );
 
         visibleArchives.forEach((archive) => {
           const archiveLabel = archive?.label || archive?.key || "Mois archive";
@@ -10014,6 +10154,27 @@
               <p class="text-[9px] text-slate-500">Cliquez sur un matériel pour voir le détail du flux par semaine/mois</p>
             </div>
 
+            <div class="bg-white rounded-3xl shadow-xl border-b-4 border-cyan-500 p-6">
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h4 class="text-[11px] font-black uppercase text-slate-800">
+                    <i class="fas fa-calendar-week mr-2 text-cyan-600"></i> Filtre par semaine - mois actif
+                  </h4>
+                  <p class="text-[8px] text-slate-500 uppercase mt-1">${escapeHtml(currentMonthLabel)}</p>
+                </div>
+                <select id="flux-week-filter" onchange="updateFluxMaterielsWeekFilter()" class="border-2 border-cyan-100 bg-slate-50 rounded-xl px-4 py-2 text-[9px] font-black uppercase outline-none">
+                  <option value="all">Toutes les semaines</option>
+                  ${weekOptions
+                    .map(
+                      ([weekKey, weekLabel]) =>
+                        `<option value="${escapeHtml(weekKey)}">${escapeHtml(weekLabel)}</option>`,
+                    )
+                    .join("")}
+                </select>
+              </div>
+              <div id="flux-week-content"></div>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         `;
 
@@ -10052,6 +10213,7 @@
         `;
 
         container.innerHTML = html;
+        updateFluxMaterielsWeekFilter();
       }
 
       function renderFluxMaterielDetail(container, designation) {
