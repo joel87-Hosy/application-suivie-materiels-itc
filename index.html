@@ -6215,14 +6215,7 @@
               );
               parts.push('<div class="flex items-center gap-2">');
               parts.push(
-                `<span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">${
-                  String(key || "")
-                    .toUpperCase()
-                    .startsWith("ITC") ||
-                  String(key || "").toUpperCase() === "MTN"
-                    ? qtyVal + " U"
-                    : "DISPO"
-                }</span>`,
+                `<span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">${qtyVal} U</span>`,
               );
               if (
                 String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
