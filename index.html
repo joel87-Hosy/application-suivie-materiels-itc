@@ -1150,7 +1150,7 @@
                 class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
               >
                 <i class="fas fa-clipboard-list w-5 text-indigo-400"></i>
-                Rapports Sorties
+                Bons de Sortie
               </div>
 
               <div
@@ -3705,6 +3705,7 @@
           date: new Date().toLocaleString(),
           createdBy: currentUser ? currentUser.name : "ANONYME",
         };
+        sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
         appData.sorties.push(sortieRecord);
         save(); // Sauvegarde Firebase
 
@@ -4378,6 +4379,97 @@
         }
       }
 
+      function showSortiesPeriodView(mode) {
+        const activeMode = ["day", "week", "month"].includes(mode)
+          ? mode
+          : "day";
+        document.querySelectorAll("[data-sorties-period-panel]").forEach((el) => {
+          el.classList.toggle("hidden", el.dataset.sortiesPeriodPanel !== activeMode);
+        });
+        document.querySelectorAll("[data-sorties-period-tab]").forEach((btn) => {
+          const isActive = btn.dataset.sortiesPeriodTab === activeMode;
+          btn.classList.toggle("bg-indigo-700", isActive);
+          btn.classList.toggle("text-white", isActive);
+          btn.classList.toggle("bg-slate-100", !isActive);
+          btn.classList.toggle("text-slate-600", !isActive);
+        });
+      }
+
+      function getSortiePeriodGroup(sortie, mode) {
+        const ts = getSortieTimestamp(sortie?.date);
+        if (!ts) {
+          return { key: `${mode}-sans-date`, label: "Sans date", sort: 0 };
+        }
+
+        const d = new Date(ts);
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+
+        if (mode === "month") {
+          const label =
+            typeof getMonthLabel === "function"
+              ? getMonthLabel(d.getMonth(), year)
+              : `${month}/${year}`;
+          return {
+            key: `month-${year}-${month}`,
+            label,
+            sort: new Date(year, d.getMonth(), 1).getTime(),
+          };
+        }
+
+        if (mode === "week") {
+          const monday = new Date(d);
+          const dayOfWeek = (monday.getDay() + 6) % 7;
+          monday.setDate(monday.getDate() - dayOfWeek);
+          monday.setHours(0, 0, 0, 0);
+          const sunday = new Date(monday);
+          sunday.setDate(monday.getDate() + 6);
+          const fmt = (value) =>
+            `${String(value.getDate()).padStart(2, "0")}/${String(
+              value.getMonth() + 1,
+            ).padStart(2, "0")}/${value.getFullYear()}`;
+          return {
+            key: `week-${monday.getFullYear()}-${String(
+              monday.getMonth() + 1,
+            ).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`,
+            label: `Semaine du ${fmt(monday)} au ${fmt(sunday)}`,
+            sort: monday.getTime(),
+          };
+        }
+
+        return {
+          key: `day-${year}-${month}-${day}`,
+          label: `${day}/${month}/${year}`,
+          sort: new Date(year, d.getMonth(), d.getDate()).getTime(),
+        };
+      }
+
+      function buildSortiePeriodGroups(sortiesList, mode) {
+        const groupsMap = {};
+        (sortiesList || []).forEach((sortie) => {
+          const period = getSortiePeriodGroup(sortie, mode);
+          if (!groupsMap[period.key]) {
+            groupsMap[period.key] = {
+              refKey: period.key,
+              refLabel: period.label,
+              sort: period.sort,
+              sorties: [],
+            };
+          }
+          groupsMap[period.key].sorties.push(sortie);
+        });
+
+        return Object.values(groupsMap)
+          .sort((a, b) => b.sort - a.sort)
+          .map((group) => {
+            group.sorties.sort(
+              (a, b) => getSortieTimestamp(b?.date) - getSortieTimestamp(a?.date),
+            );
+            return group;
+          });
+      }
+
       function renderRapportsSorties(container, options = {}) {
         if (!container) return;
         const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
@@ -4416,66 +4508,26 @@
           return;
         }
 
-        // Group sorties: for Gestionnaire group by month, otherwise by reference
-        const groupsMap = {};
-        const isGestionnaire =
-          currentUser &&
-          String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE";
-
-        sortedVisibleSorties.forEach((s) => {
-          if (isGestionnaire) {
-            // group by month-year using sortie date
-            const ts = getSortieTimestamp(s.date);
-            if (!ts) {
-              const key = "SANS_DATE";
-              if (!groupsMap[key])
-                groupsMap[key] = {
-                  refKey: key,
-                  refLabel: "Sans date",
-                  sorties: [],
-                };
-              groupsMap[key].sorties.push(s);
-            } else {
-              const d = new Date(ts);
-              const monthIndex = d.getMonth();
-              const year = d.getFullYear();
-              const key = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
-              const label =
-                typeof getMonthLabel === "function"
-                  ? getMonthLabel(monthIndex, year)
-                  : `${monthIndex + 1}/${year}`;
-              if (!groupsMap[key])
-                groupsMap[key] = { refKey: key, refLabel: label, sorties: [] };
-              groupsMap[key].sorties.push(s);
-            }
-          } else {
-            const refValue = String(s?.ref || "SANS RÉF").trim();
-            const key = refValue.toUpperCase() || "SANS RÉF";
-            if (!groupsMap[key])
-              groupsMap[key] = {
-                refKey: key,
-                refLabel: refValue || "SANS RÉF",
-                sorties: [],
-              };
-            groupsMap[key].sorties.push(s);
-          }
-        });
-
-        const groups = Object.values(groupsMap).sort((a, b) => {
-          const ta = a.sorties.length
-            ? getSortieTimestamp(a.sorties[0].date)
-            : 0;
-          const tb = b.sorties.length
-            ? getSortieTimestamp(b.sorties[0].date)
-            : 0;
-          return tb - ta;
-        });
-
-        groups.forEach((group) => {
-          group.sorties.sort(
-            (a, b) => getSortieTimestamp(b?.date) - getSortieTimestamp(a?.date),
-          );
-        });
+        const periodViews = [
+          {
+            mode: "day",
+            tabLabel: "Jour",
+            title: "Bons generes par jour",
+            groups: buildSortiePeriodGroups(sortedVisibleSorties, "day"),
+          },
+          {
+            mode: "week",
+            tabLabel: "Semaine",
+            title: "Bons generes par semaine",
+            groups: buildSortiePeriodGroups(sortedVisibleSorties, "week"),
+          },
+          {
+            mode: "month",
+            tabLabel: "Mois",
+            title: "Bons generes par mois",
+            groups: buildSortiePeriodGroups(sortedVisibleSorties, "month"),
+          },
+        ];
 
         const totalSortiesCount = sortedVisibleSorties.length;
         const totalUnitsOut = sortedVisibleSorties.reduce((sum, s) => {
@@ -4499,7 +4551,7 @@
           '<div class="max-w-6xl mx-auto bg-white p-6 rounded-3xl shadow-xl border border-slate-200">',
         );
         parts.push(
-          '<h3 class="mb-2 uppercase text-indigo-700 font-black flex items-center gap-2"><i class="fas fa-file-lines"></i>Rapports - Sorties Bon Physique</h3>',
+          '<h3 class="mb-2 uppercase text-indigo-700 font-black flex items-center gap-2"><i class="fas fa-file-lines"></i>Bons de Sortie Generes</h3>',
         );
         if (isReadOnly) {
           parts.push(
@@ -4531,117 +4583,153 @@
           '<div class="dashboard-hover-block dashboard-hover-chart bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"><p class="text-[9px] text-slate-600 font-black mb-2 flex items-center gap-2"><i class="fas fa-user-group text-cyan-600"></i>TOP DESTINATAIRES</p><div class="h-[180px]"><canvas id="sorties-dest-chart"></canvas></div></div>',
         );
         parts.push("</div>");
-        parts.push('<div class="space-y-4">');
+        parts.push(
+          '<div class="flex flex-wrap gap-2 mb-4" role="tablist">',
+        );
+        periodViews.forEach((view, index) => {
+          parts.push(
+            '<button type="button" data-sorties-period-tab="' +
+              escapeHtml(view.mode) +
+              '" onclick="showSortiesPeriodView(\'' +
+              escapeHtml(view.mode) +
+              '\')" class="px-4 py-2 rounded-xl text-[9px] font-black uppercase transition ' +
+              (index === 0 ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-600") +
+              '">' +
+              escapeHtml(view.tabLabel) +
+              '</button>',
+          );
+        });
+        parts.push("</div>");
 
-        groups.forEach((group) => {
+        periodViews.forEach((view, index) => {
           parts.push(
-            '<div class="sortie-ref-block p-4 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50/90 to-white">',
-          );
-          parts.push('<div class="flex items-center justify-between">');
-          parts.push("<div>");
-          parts.push(
-            '<p class="text-[10px] font-black text-indigo-700 tracking-wide">Référence: ' +
-              escapeHtml(group.refLabel) +
-              "</p>",
+            '<div data-sorties-period-panel="' +
+              escapeHtml(view.mode) +
+              '" class="space-y-4 ' +
+              (index === 0 ? "" : "hidden") +
+              '">',
           );
           parts.push(
-            '<p class="text-[8px] text-indigo-500 mt-1">' +
-              escapeHtml(String(group.sorties.length || 0)) +
-              " rapport(s)</p>",
+            '<div class="flex items-center justify-between gap-3 flex-wrap"><h4 class="text-[11px] font-black uppercase text-slate-700">' +
+              escapeHtml(view.title) +
+              '</h4><span class="text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1">' +
+              escapeHtml(String(view.groups.length)) +
+              ' groupe(s)</span></div>',
           );
-          parts.push("</div>");
-          parts.push('<div class="flex items-center gap-2">');
-          if (canEdit) {
+
+          if (view.groups.length === 0) {
             parts.push(
-              '<button class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black" onclick="editSortieRefBlock(\'' +
-                encodeURIComponent(group.refKey) +
-                "')\">Modifier Réf</button>",
+              '<div class="p-6 text-center text-slate-400 text-[9px] uppercase font-black border border-dashed rounded-2xl">Aucun bon de sortie dans ce classement.</div>',
             );
           }
-          parts.push("</div>");
-          parts.push("</div>");
 
-          // list sorties in this group
-          group.sorties.forEach((s) => {
+          view.groups.forEach((group) => {
             parts.push(
-              '<div class="sortie-report-card mt-3 p-4 bg-white rounded-xl border border-slate-200" data-op="' +
-                escapeHtml(String(s.op || "")) +
-                '" data-date="' +
-                escapeHtml(extractIsoDateFromLocaleString(s.date || "")) +
-                '">',
+              '<div class="sortie-ref-block p-4 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50/90 to-white">',
             );
-            parts.push('<div class="flex justify-between items-start gap-4">');
-            // left: details
-            parts.push('<div class="min-w-0">');
+            parts.push('<div class="flex items-center justify-between gap-3 flex-wrap">');
+            parts.push("<div>");
             parts.push(
-              '<div class="text-sm font-black">' +
-                escapeHtml(String(s.ref || "SANS RÉF")) +
-                "</div>",
+              '<p class="text-[10px] font-black text-indigo-700 tracking-wide">' +
+                escapeHtml(group.refLabel) +
+                "</p>",
             );
             parts.push(
-              '<div class="text-[9px] text-slate-600">ID: ' +
-                escapeHtml(String(s.id || "-")) +
-                " • Opérateur: " +
-                escapeHtml(String(s.op || "-")) +
-                " • Destinataire: " +
-                escapeHtml(String(s.tech || "-")) +
-                "</div>",
+              '<p class="text-[8px] text-indigo-500 mt-1">' +
+                escapeHtml(String(group.sorties.length || 0)) +
+                " bon(s) genere(s)</p>",
             );
-            parts.push(
-              '<div class="text-[9px] text-slate-500 mt-1">Créé par: ' +
-                escapeHtml(String(s.createdBy || "-")) +
-                " • Le: " +
-                escapeHtml(String(s.date || "-")) +
-                "</div>",
-            );
-            if (s.updatedAt)
+            parts.push("</div>");
+            parts.push("</div>");
+
+            group.sorties.forEach((s) => {
               parts.push(
-                '<div class="text-[8px] text-amber-600">Modifié le ' +
-                  escapeHtml(String(s.updatedAt)) +
-                  " par " +
-                  escapeHtml(String(s.updatedBy || "-")) +
+                '<div class="sortie-report-card mt-3 p-4 bg-white rounded-xl border border-slate-200" data-op="' +
+                  escapeHtml(String(s.op || "")) +
+                  '" data-date="' +
+                  escapeHtml(extractIsoDateFromLocaleString(s.date || "")) +
+                  '">',
+              );
+              parts.push('<div class="flex justify-between items-start gap-4">');
+              parts.push('<div class="min-w-0">');
+              parts.push(
+                '<div class="text-sm font-black">Bon PDF - ' +
+                  escapeHtml(String(s.ref || "SANS REF")) +
                   "</div>",
               );
-
-            // items
-            const items = getSortieItems(s) || [];
-            if (items.length > 0) {
-              parts.push('<ul class="mt-2 text-[9px] list-disc pl-4">');
-              items.forEach((it) => {
+              parts.push(
+                '<div class="text-[8px] text-red-600 font-black mt-1">' +
+                  escapeHtml(String(s.pdfName || `Bon_Sortie_${s.id}.pdf`)) +
+                  "</div>",
+              );
+              parts.push(
+                '<div class="text-[9px] text-slate-600">ID: ' +
+                  escapeHtml(String(s.id || "-")) +
+                  " | Operateur: " +
+                  escapeHtml(String(s.op || "-")) +
+                  " | Destinataire: " +
+                  escapeHtml(String(s.tech || "-")) +
+                  "</div>",
+              );
+              parts.push(
+                '<div class="text-[9px] text-slate-500 mt-1">Cree par: ' +
+                  escapeHtml(String(s.createdBy || "-")) +
+                  " | Le: " +
+                  escapeHtml(String(s.date || "-")) +
+                  "</div>",
+              );
+              if (s.updatedAt) {
                 parts.push(
-                  "<li>" +
-                    escapeHtml(String(it.label || "")) +
-                    " — " +
-                    escapeHtml(String(it.qty || "")) +
-                    " U</li>",
+                  '<div class="text-[8px] text-amber-600">Modifie le ' +
+                    escapeHtml(String(s.updatedAt)) +
+                    " par " +
+                    escapeHtml(String(s.updatedBy || "-")) +
+                    "</div>",
                 );
-              });
-              parts.push("</ul>");
-            }
+              }
 
-            // logs
-            if (Array.isArray(s.logs) && s.logs.length > 0) {
+              const items = getSortieItems(s) || [];
+              if (items.length > 0) {
+                parts.push('<ul class="mt-2 text-[9px] list-disc pl-4">');
+                items.forEach((it) => {
+                  parts.push(
+                    "<li>" +
+                      escapeHtml(String(it.label || "")) +
+                      " - " +
+                      escapeHtml(String(it.qty || "")) +
+                      " U</li>",
+                  );
+                });
+                parts.push("</ul>");
+              }
+
+              if (Array.isArray(s.logs) && s.logs.length > 0) {
+                parts.push(
+                  '<div class="mt-2 text-[8px] text-slate-500">Trace stock: ' +
+                    escapeHtml(s.logs.join(" | ")) +
+                    "</div>",
+                );
+              }
+
+              parts.push("</div>");
+              parts.push('<div class="text-right shrink-0 flex flex-col gap-2">');
               parts.push(
-                '<div class="mt-2 text-[8px] text-slate-500">Trace stock: ' +
-                  escapeHtml(s.logs.join(" | ")) +
-                  "</div>",
-              );
-            }
-
-            parts.push("</div>");
-
-            // right: actions
-            parts.push('<div class="text-right">');
-            if (canEdit) {
-              parts.push(
-                '<button class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black mr-2" onclick="openEditSortie(\'' +
+                '<button class="bg-red-600 text-white px-3 py-2 rounded-lg text-[9px] font-black" onclick="exportSortiePDF(\'' +
                   escapeHtml(String(s.id || "")) +
-                  "')\">Modifier</button>",
+                  '\')"><i class="fas fa-file-pdf mr-1"></i>PDF</button>',
               );
-            }
-            parts.push("</div>");
+              if (canEdit) {
+                parts.push(
+                  '<button class="bg-amber-500 text-white px-3 py-2 rounded-lg text-[9px] font-black" onclick="openEditSortie(\'' +
+                    escapeHtml(String(s.id || "")) +
+                    '\')">Modifier</button>',
+                );
+              }
+              parts.push("</div>");
+              parts.push("</div>");
+              parts.push("</div>");
+            });
 
-            parts.push("</div>");
             parts.push("</div>");
           });
 
