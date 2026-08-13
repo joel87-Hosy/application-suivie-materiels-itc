@@ -3630,7 +3630,7 @@
         document.getElementById("sortie-items-list").appendChild(div);
       }
 
-      function handleSortiePhysique(e) {
+      async function handleSortiePhysique(e) {
         e.preventDefault();
 
         if (!appData.stock) appData.stock = [];
@@ -3707,6 +3707,8 @@
         };
         appData.sorties.push(sortieRecord);
         save(); // Sauvegarde Firebase
+
+        await exportSortiePDF(sortieRecord.id);
 
         alert("SORTIE DE STOCK ENREGISTRÉE AVEC SUCCÈS.");
         showSection("cockpit");
@@ -4778,30 +4780,220 @@
         alert("Référence du bloc mise à jour avec succès.");
       }
 
+      function getPdfSafeDateParts(dateValue) {
+        const raw = String(dateValue || "").trim();
+        const match = raw.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
+        if (!match) {
+          const now = new Date();
+          return {
+            day: String(now.getDate()).padStart(2, "0"),
+            month: String(now.getMonth() + 1).padStart(2, "0"),
+            year: String(now.getFullYear()),
+          };
+        }
+        return {
+          day: match[1].padStart(2, "0"),
+          month: match[2].padStart(2, "0"),
+          year: match[3],
+        };
+      }
+
+      async function drawSortieBonBesoinPdf(doc, sortie) {
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+        const items = getSortieItems(sortie);
+        const dateParts = getPdfSafeDateParts(sortie.date);
+        const totalQty = items.reduce(
+          (sum, item) => sum + (parseInt(item.qty, 10) || 0),
+          0,
+        );
+        const createdBy = String(sortie.createdBy || "GESTIONNAIRE").toUpperCase();
+        const receiver = String(sortie.tech || "").toUpperCase();
+        const ref = String(sortie.ref || "").toUpperCase();
+        const op = String(sortie.op || "").toUpperCase();
+
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(20, 20, 20);
+        doc.setDrawColor(20, 20, 20);
+
+        doc.autoTable({
+          startY: 10,
+          margin: { left: margin, right: margin },
+          theme: "grid",
+          styles: {
+            font: "helvetica",
+            fontSize: 8,
+            cellPadding: 2,
+            lineColor: [20, 20, 20],
+            lineWidth: 0.25,
+            valign: "middle",
+          },
+          columnStyles: {
+            0: { cellWidth: 42, minCellHeight: 20 },
+            1: { cellWidth: 82, halign: "center", fontStyle: "bold" },
+            2: { cellWidth: 58, fontSize: 7 },
+          },
+          body: [
+            [
+              "",
+              { content: "SERVICE LOGISTIQUE", styles: { fontSize: 10 } },
+              "Cree le 26 janv. 2026\nRevise le ........",
+            ],
+            [
+              "",
+              {
+                content: "FICHE D'EXPRESSION DE BESOINS MATERIELS",
+                styles: { fontSize: 11, fontStyle: "bold", halign: "center" },
+              },
+              "",
+            ],
+          ],
+        });
+        await addLogoToPdf(doc, margin + 3, 15, 34, 13);
+
+        let y = doc.lastAutoTable.finalY + 6;
+        doc.setFontSize(8);
+        doc.text(
+          "Pour etre dans les delais, toutes les demandes doivent etre formulees deux (02) semaines avant la date de livraison",
+          margin,
+          y,
+          { maxWidth: pageWidth - margin * 2 },
+        );
+        y += 8;
+        doc.setFont("helvetica", "bold");
+        doc.text(
+          "NB : La fiche doit etre validee par le superieur hierarchique et transmise au charge logistique",
+          margin,
+          y,
+          { maxWidth: pageWidth - margin * 2 },
+        );
+        doc.setFont("helvetica", "normal");
+        y += 10;
+
+        doc.setFontSize(9);
+        doc.text("Service/Departement : LOGISTIQUE", margin, y);
+        doc.text(`Emetteur : ${createdBy}`, 105, y);
+        y += 7;
+        doc.text("Fonction : GESTIONNAIRE", margin, y);
+        y += 9;
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Information sur la Demande", pageWidth / 2, y, {
+          align: "center",
+        });
+        doc.setFont("helvetica", "normal");
+        y += 8;
+        doc.text("Nature de la Demande : SORTIE DE MATERIELS", margin, y);
+        doc.text(`Operateur/Client : ${op}`, 115, y);
+        y += 7;
+        doc.text(`Description de la Demande : ${ref}`, margin, y, {
+          maxWidth: pageWidth - margin * 2,
+        });
+        y += 8;
+        if (receiver) {
+          doc.text(`Destinataire : ${receiver}`, margin, y, {
+            maxWidth: pageWidth - margin * 2,
+          });
+          y += 7;
+        }
+
+        const body = items.length
+          ? items.map((item, index) => [
+              String(index + 1).padStart(2, "0"),
+              String(item.label || "").toUpperCase(),
+              ref || "-",
+              String(parseInt(item.qty, 10) || 0),
+            ])
+          : [["", "Detail des articles indisponible", ref || "-", "-"]];
+        while (body.length < 10) {
+          body.push(["", "", "", ""]);
+        }
+
+        doc.autoTable({
+          startY: y,
+          margin: { left: margin, right: margin },
+          theme: "grid",
+          head: [["Code", "Materiels", "Projets/Activites", "Quantites"]],
+          body,
+          foot: [["Total", "", "", `${totalQty}`]],
+          styles: {
+            font: "helvetica",
+            fontSize: 8,
+            cellPadding: 2.2,
+            lineColor: [20, 20, 20],
+            lineWidth: 0.25,
+            valign: "middle",
+          },
+          headStyles: {
+            fillColor: [255, 255, 255],
+            textColor: [20, 20, 20],
+            fontStyle: "bold",
+            halign: "center",
+          },
+          footStyles: {
+            fillColor: [255, 255, 255],
+            textColor: [20, 20, 20],
+            fontStyle: "bold",
+          },
+          columnStyles: {
+            0: { cellWidth: 22, halign: "center" },
+            1: { cellWidth: 75 },
+            2: { cellWidth: 60 },
+            3: { cellWidth: 25, halign: "center" },
+          },
+        });
+
+        y = doc.lastAutoTable.finalY + 8;
+        doc.setFontSize(9);
+        doc.text(
+          `Motif de la demande : ${ref || "SORTIE DE MATERIELS"}`,
+          margin,
+          y,
+          { maxWidth: pageWidth - margin * 2 },
+        );
+        y += 9;
+        doc.text(
+          `Fiche recue le : ${dateParts.day} / ${dateParts.month} / ${dateParts.year}`,
+          margin,
+          y,
+        );
+        doc.text(
+          `Echeance de la Demande : ${dateParts.day} / ${dateParts.month} / ${dateParts.year}`,
+          105,
+          y,
+        );
+        y += 10;
+
+        doc.autoTable({
+          startY: y,
+          margin: { left: margin, right: margin },
+          theme: "grid",
+          head: [["Emetteur", "Logistique", "Charge de la Gestion"]],
+          body: [["Date et Signature", "Date et signature", "Date et Signature"]],
+          styles: {
+            font: "helvetica",
+            fontSize: 8,
+            cellPadding: 3,
+            lineColor: [20, 20, 20],
+            lineWidth: 0.25,
+            halign: "center",
+            minCellHeight: 18,
+          },
+          headStyles: {
+            fillColor: [255, 255, 255],
+            textColor: [20, 20, 20],
+            fontStyle: "bold",
+          },
+        });
+      }
+
       async function exportSortiePDF(id) {
         const s = (appData.sorties || []).find((x) => x.id === id);
         if (!s) return alert("Rapport introuvable");
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        await addLogoToPdf(doc, 14, 8, 34, 14);
-        doc.setFontSize(12);
-        doc.text(`Rapport de Sortie - ${s.ref}`, 14, 20);
-        doc.setFontSize(10);
-        doc.text(`ID: ${s.id}`, 14, 28);
-        doc.text(`Date: ${s.date}`, 14, 34);
-        doc.text(`Opérateur: ${s.op}`, 14, 40);
-        doc.text(`Destinataire: ${s.tech}`, 14, 46);
-        doc.text(`Confirmé par: ${s.createdBy}`, 14, 52);
-        const body = getSortieItems(s).map((it) => [it.label, String(it.qty)]);
-        doc.autoTable({
-          startY: 60,
-          head: [["Désignation", "Quantité"]],
-          body:
-            body.length > 0
-              ? body
-              : [["Détail des articles indisponible", "-"]],
-        });
-        doc.save(`${s.id}.pdf`);
+        await drawSortieBonBesoinPdf(doc, s);
+        doc.save(`Bon_Sortie_${s.id}.pdf`);
       }
 
       async function exportSortieRefPDF(refKeyEncoded) {
