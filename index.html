@@ -3591,7 +3591,8 @@
                           <div>
                               <label class="text-[8px] text-slate-400 uppercase">Opérateur</label>
                               <select id="s-op" class="w-full border-2 p-3 rounded-xl text-xs font-black uppercase bg-white">
-                                  <option value="ITC" ${String(saved.op || "").toUpperCase() === "ITC" ? "selected" : ""}>ITC</option>
+                                  <option value="ITC-B01" ${normalizeOperatorKey(saved.op || "") === "ITC-B01" ? "selected" : ""}>STOCK ITC BUREAU 01</option>
+                                  <option value="ITC-B02" ${normalizeOperatorKey(saved.op || "") === "ITC-B02" ? "selected" : ""}>STOCK ITC BUREAU 02</option>
                                   <option value="ORANGE" ${String(saved.op || "").toUpperCase() === "ORANGE" ? "selected" : ""}>ORANGE</option>
                                   <option value="MOOV" ${String(saved.op || "").toUpperCase() === "MOOV" ? "selected" : ""}>MOOV</option>
                                   <option value="MTN" ${String(saved.op || "").toUpperCase() === "MTN" ? "selected" : ""}>MTN</option>
