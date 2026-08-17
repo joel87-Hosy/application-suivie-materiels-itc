@@ -3541,10 +3541,23 @@
         }
       }
 
+      function getSortieDraft() {
+        try {
+          const draft = JSON.parse(localStorage.getItem("draft_sortie") || "{}");
+          if (!draft || typeof draft !== "object") return {};
+          return draft;
+        } catch (e) {
+          console.warn("Brouillon sortie illisible", e);
+          return {};
+        }
+      }
+
       function renderSortiePhysiqueForm() {
-        const saved = JSON.parse(localStorage.getItem("draft_sortie")) || {
-          items: [{ label: "", qty: "" }],
-        };
+        const saved = getSortieDraft();
+        const savedItems =
+          Array.isArray(saved.items) && saved.items.length > 0
+            ? saved.items
+            : [{ label: "", qty: "" }];
         const itcDesignations = [
           ...new Set(
             ((appData && appData.stock) || [])
@@ -3569,7 +3582,7 @@
                         </div>
                         <div class="bg-white/20 px-4 py-2 rounded-xl text-center min-w-[140px]">
                           <p class="text-[8px] uppercase">Lignes brouillon</p>
-                          <p class="text-2xl font-black">${Array.isArray(saved.items) ? saved.items.length : 1}</p>
+                          <p class="text-2xl font-black">${savedItems.length}</p>
                         </div>
                       </div>
                   </div>
@@ -3578,10 +3591,10 @@
                           <div>
                               <label class="text-[8px] text-slate-400 uppercase">Opérateur</label>
                               <select id="s-op" class="w-full border-2 p-3 rounded-xl text-xs font-black uppercase bg-white">
-                                  <option value="ITC">ITC</option>
-                                  <option value="ORANGE">ORANGE</option>
-                                  <option value="MOOV">MOOV</option>
-                                  <option value="MTN">MTN</option>
+                                  <option value="ITC" ${String(saved.op || "").toUpperCase() === "ITC" ? "selected" : ""}>ITC</option>
+                                  <option value="ORANGE" ${String(saved.op || "").toUpperCase() === "ORANGE" ? "selected" : ""}>ORANGE</option>
+                                  <option value="MOOV" ${String(saved.op || "").toUpperCase() === "MOOV" ? "selected" : ""}>MOOV</option>
+                                  <option value="MTN" ${String(saved.op || "").toUpperCase() === "MTN" ? "selected" : ""}>MTN</option>
                               </select>
                           </div>
                           <div>
@@ -3615,10 +3628,24 @@
               </div>`;
 
         constrainOperatorSelectForCurrentUser("s-op");
+        const sortieOp = document.getElementById("s-op");
+        if (
+          saved.op &&
+          Array.from(sortieOp?.options || []).some(
+            (option) => option.value === saved.op,
+          )
+        ) {
+          sortieOp.value = saved.op;
+        }
+        const sortieTech = document.getElementById("s-tech");
+        if (sortieTech) sortieTech.value = saved.tech || "";
+        const sortieRef = document.getElementById("s-ref");
+        if (sortieRef) sortieRef.value = saved.ref || "";
+        restoreSortieDraftRows(savedItems);
       }
 
       // Fonction pour ajouter une ligne d'article dynamiquement
-      function addArticleRowSortie() {
+      function addArticleRowSortie(label = "", qty = "") {
         const div = document.createElement("div");
         div.className =
           "flex gap-2 items-center art-row-sortie bg-slate-50 p-2 rounded-xl border";
@@ -3627,7 +3654,39 @@
               <input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />
               <button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>
           `;
-        document.getElementById("sortie-items-list").appendChild(div);
+        const deleteButton = div.querySelector("button");
+        if (deleteButton) deleteButton.onclick = () => removeSortieRow(deleteButton);
+        div.querySelector(".art-l").value = label || "";
+        div.querySelector(".art-q").value = qty || "";
+        const list = document.getElementById("sortie-items-list");
+        list.insertBefore(div, list.lastElementChild);
+        saveSortieDraft();
+      }
+
+      function restoreSortieDraftRows(items) {
+        const list = document.getElementById("sortie-items-list");
+        if (!list) return;
+        list.querySelectorAll(".art-row-sortie").forEach((row) => row.remove());
+        const rows =
+          Array.isArray(items) && items.length > 0
+            ? items
+            : [{ label: "", qty: "" }];
+        rows.forEach((item) => addArticleRowSortie(item.label, item.qty));
+      }
+
+      function removeSortieRow(button) {
+        const row = button?.closest(".art-row-sortie");
+        if (row) row.remove();
+        if (document.querySelectorAll(".art-row-sortie").length === 0) {
+          addArticleRowSortie();
+          return;
+        }
+        saveSortieDraft();
+      }
+
+      function clearSortieDraft() {
+        localStorage.removeItem("draft_sortie");
+        renderSortiePhysiqueForm();
       }
 
       async function handleSortiePhysique(e) {
@@ -3647,6 +3706,7 @@
 
         let logs = [];
         let errors = [];
+        let updates = [];
 
         rows.forEach((row) => {
           const label = row.querySelector(".art-l").value.toUpperCase().trim();
@@ -3669,7 +3729,7 @@
           if (itemInStock) {
             const available = parseInt(itemInStock.qty) || 0;
             if (available >= qty) {
-              itemInStock.qty = available - qty;
+              updates.push({ itemInStock, nextQty: available - qty });
               logs.push(`${label} (-${qty})`);
             } else {
               errors.push(
@@ -3689,6 +3749,10 @@
         }
 
         // Enregistrement de l'activité
+        updates.forEach(({ itemInStock, nextQty }) => {
+          itemInStock.qty = nextQty;
+        });
+
         addNotification(
           1,
           `SORTIE PHYSIQUE : ${ref} par ${tech}. Articles : ${logs.join(", ")}`,
@@ -3708,6 +3772,7 @@
         sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
         appData.sorties.push(sortieRecord);
         save(); // Sauvegarde Firebase
+        localStorage.removeItem("draft_sortie");
 
         await exportSortiePDF(sortieRecord.id);
 
@@ -6149,6 +6214,15 @@
 
       // On écoute les changements dans la section sortie
       document.addEventListener("input", (e) => {
+        if (
+          e.target.closest("#app-container") &&
+          currentSectionId === "sortie-physique"
+        ) {
+          saveSortieDraft();
+        }
+      });
+
+      document.addEventListener("change", (e) => {
         if (
           e.target.closest("#app-container") &&
           currentSectionId === "sortie-physique"
