@@ -1809,13 +1809,10 @@
           });
       }
 
-      // Utility: rebuild datalist options from all designations present in appData.stock
-      function refreshDesignationsDatalists() {
-        if (!appData || !Array.isArray(appData.stock)) return;
-
-        const allLabels = [
+      function getDesignationLabelsFromStock(stockEntries) {
+        return [
           ...new Set(
-            appData.stock
+            (stockEntries || [])
               .map((s) =>
                 String(s.label || "")
                   .trim()
@@ -1824,20 +1821,60 @@
               .filter(Boolean),
           ),
         ].sort();
+      }
 
-        const optionsHtml = allLabels
-          .map((label) => `<option value="${escapeHtml(label)}"></option>`)
+      function getStockEntriesForCurrentUserDesignations() {
+        const stock = appData && Array.isArray(appData.stock) ? appData.stock : [];
+        if (!isGestionnaireUser(currentUser)) return stock;
+
+        const managed = new Set(getManagedOpsNormalized(currentUser));
+        return stock.filter((s) => managed.has(normalizeOperatorKey(s.op)));
+      }
+
+      function getCurrentUserDesignationLabels() {
+        return getDesignationLabelsFromStock(
+          getStockEntriesForCurrentUserDesignations(),
+        );
+      }
+
+      function buildDatalistOptions(labels) {
+        return (labels || [])
+          .map((label) => `<option value="${escapeHtml(String(label || ""))}"></option>`)
           .join("");
+      }
 
-        // IDs used in forms
-        [
-          "itc-designations-list",
-          "sortie-itc-designations-list",
-          "direct-itc-designations-list",
-        ].forEach((id) => {
-          const el = document.getElementById(id);
-          if (el) el.innerHTML = optionsHtml;
-        });
+      function isLabelAllowedForDatalist(label, datalistId) {
+        if (datalistId !== "sortie-itc-designations-list") return true;
+        if (!isGestionnaireUser(currentUser)) return true;
+
+        const normalizedLabel = String(label || "")
+          .trim()
+          .toUpperCase();
+        if (!normalizedLabel) return false;
+
+        return getStockEntriesForCurrentUserDesignations().some(
+          (s) =>
+            String(s.label || "")
+              .trim()
+              .toUpperCase() === normalizedLabel,
+        );
+      }
+
+      function setDatalistOptions(id, labels) {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = buildDatalistOptions(labels);
+      }
+
+      // Utility: rebuild datalist options from stock designations
+      function refreshDesignationsDatalists() {
+        if (!appData || !Array.isArray(appData.stock)) return;
+
+        const allLabels = getDesignationLabelsFromStock(appData.stock);
+        const currentUserLabels = getCurrentUserDesignationLabels();
+
+        setDatalistOptions("itc-designations-list", allLabels);
+        setDatalistOptions("direct-itc-designations-list", allLabels);
+        setDatalistOptions("sortie-itc-designations-list", currentUserLabels);
       }
 
       const DEFAULT_MATERIAL_TYPES = [
@@ -1919,23 +1956,26 @@
         }
       }
 
-      // Ensure a given designation exists in all datalists (live update)
-      function ensureDesignationInDatalists(rawLabel) {
+      // Ensure a given designation exists in the relevant datalist (live update)
+      function ensureDesignationInDatalists(rawLabel, targetDatalistId = "") {
         const label = String(rawLabel || "")
           .trim()
           .toUpperCase();
         if (!label) return;
 
-        const ids = [
-          "itc-designations-list",
-          "sortie-itc-designations-list",
-          "direct-itc-designations-list",
-        ];
+        const ids = targetDatalistId
+          ? [targetDatalistId]
+          : [
+              "itc-designations-list",
+              "sortie-itc-designations-list",
+              "direct-itc-designations-list",
+            ];
 
         let added = false;
         ids.forEach((id) => {
           const dl = document.getElementById(id);
           if (!dl) return;
+          if (!isLabelAllowedForDatalist(label, id)) return;
           const exists = Array.from(dl.options || []).some(
             (o) => String(o.value || "").toUpperCase() === label,
           );
@@ -2011,7 +2051,7 @@
           const val = String(t.value || "").trim();
           if (!val) return;
           // Only update visible datalists for UX; do NOT persist to stock automatically
-          ensureDesignationInDatalists(val);
+          ensureDesignationInDatalists(val, t.getAttribute("list"));
         } catch (err) {
           console.warn("Erreur lors de la mise à jour live des datalists", err);
         }
@@ -3558,17 +3598,7 @@
           Array.isArray(saved.items) && saved.items.length > 0
             ? saved.items
             : [{ label: "", qty: "" }];
-        const itcDesignations = [
-          ...new Set(
-            ((appData && appData.stock) || [])
-              .map((s) =>
-                String(s.label || "")
-                  .trim()
-                  .toUpperCase(),
-              )
-              .filter(Boolean),
-          ),
-        ].sort();
+        const itcDesignations = getCurrentUserDesignationLabels();
         const container = document.getElementById("app-container");
         container.innerHTML = `
               <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
@@ -3611,14 +3641,14 @@
                       <div class="space-y-3" id="sortie-items-list">
                           <p class="text-[9px] text-red-600 mb-2 uppercase font-black">Articles à déduire du stock :</p>
                         <datalist id="sortie-itc-designations-list">
-                          ${itcDesignations.map((label) => `<option value="${escapeHtml(label)}"></option>`).join("")}
+                          ${buildDatalistOptions(itcDesignations)}
                         </datalist>
                           <div class="flex gap-2 items-center art-row-sortie bg-slate-50 p-2 rounded-xl border">
                           <input type="text" list="sortie-itc-designations-list" placeholder="DÉSIGNATION" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
                               <input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />
                               <button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>
                           </div>
-                        <p class="text-[7px] text-slate-400 uppercase">Suggestions issues du stock (tous opérateurs)</p>
+                        <p class="text-[7px] text-slate-400 uppercase">Suggestions issues des stocks autorisés</p>
                       </div>
 
                         <div class="flex gap-4">
@@ -3632,6 +3662,7 @@
         const sortieOp = document.getElementById("s-op");
         if (
           saved.op &&
+          isOperatorAllowedForUser(currentUser, saved.op) &&
           Array.from(sortieOp?.options || []).some(
             (option) => option.value === saved.op,
           )
