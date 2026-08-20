@@ -3592,6 +3592,55 @@
         }
       }
 
+      const DEFAULT_SORTIE_EMETTEURS = [
+        "COORDINATEUR DORGELESS",
+        "COORDINATEUR JONAS",
+        "SUPERVISEUR CYNTHIA",
+        "COORDINATRICE NICOLE",
+      ];
+
+      function getSortieEmetteurs() {
+        let savedEmetteurs = [];
+        try {
+          const parsed = JSON.parse(
+            localStorage.getItem("sortie_emetteurs") || "[]",
+          );
+          if (Array.isArray(parsed)) savedEmetteurs = parsed;
+        } catch (e) {
+          savedEmetteurs = [];
+        }
+
+        const sortieEmetteurs = ((appData && appData.sorties) || [])
+          .map((sortie) => sortie?.emetteur)
+          .filter(Boolean);
+
+        return [
+          ...new Set(
+            [...DEFAULT_SORTIE_EMETTEURS, ...savedEmetteurs, ...sortieEmetteurs]
+              .map((name) =>
+                String(name || "")
+                  .trim()
+                  .toUpperCase(),
+              )
+              .filter(Boolean),
+          ),
+        ].sort();
+      }
+
+      function rememberSortieEmetteur(name) {
+        const cleanName = String(name || "")
+          .trim()
+          .toUpperCase();
+        if (!cleanName) return;
+
+        const emetteurs = getSortieEmetteurs();
+        if (emetteurs.includes(cleanName)) return;
+        localStorage.setItem(
+          "sortie_emetteurs",
+          JSON.stringify([...emetteurs, cleanName].sort()),
+        );
+      }
+
       function renderSortiePhysiqueForm() {
         const saved = getSortieDraft();
         const savedItems =
@@ -3599,6 +3648,7 @@
             ? saved.items
             : [{ label: "", qty: "" }];
         const itcDesignations = getCurrentUserDesignationLabels();
+        const sortieEmetteurs = getSortieEmetteurs();
         const container = document.getElementById("app-container");
         container.innerHTML = `
               <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
@@ -3631,6 +3681,13 @@
                           <div>
                               <label class="text-[8px] text-slate-400 uppercase">Destinataire (Chef d'équipe/Technicien)</label>
                               <input id="s-tech" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="NOM DU RÉCEPTIONNAIRE" required />
+                          </div>
+                          <div class="md:col-span-2">
+                              <label class="text-[8px] text-slate-400 uppercase">Emetteur</label>
+                              <input id="s-emetteur" type="text" list="sortie-emetteurs-list" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="NOM DE L'EMETTEUR" required />
+                              <datalist id="sortie-emetteurs-list">
+                                ${buildDatalistOptions(sortieEmetteurs)}
+                              </datalist>
                           </div>
                           <div class="md:col-span-2">
                               <label class="text-[8px] text-slate-400 uppercase">Référence du Bon Physique / Motif</label>
@@ -3671,6 +3728,8 @@
         }
         const sortieTech = document.getElementById("s-tech");
         if (sortieTech) sortieTech.value = saved.tech || "";
+        const sortieEmetteur = document.getElementById("s-emetteur");
+        if (sortieEmetteur) sortieEmetteur.value = saved.emetteur || "";
         const sortieRef = document.getElementById("s-ref");
         if (sortieRef) sortieRef.value = saved.ref || "";
         restoreSortieDraftRows(savedItems);
@@ -3734,6 +3793,10 @@
         const opKey = normalizeOperatorKey(op);
         const ref = document.getElementById("s-ref").value.toUpperCase();
         const tech = document.getElementById("s-tech").value.toUpperCase();
+        const emetteur = document
+          .getElementById("s-emetteur")
+          .value.toUpperCase()
+          .trim();
         const rows = document.querySelectorAll(".art-row-sortie");
 
         let logs = [];
@@ -3796,6 +3859,7 @@
           ref,
           op,
           tech,
+          emetteur,
           items: rowsToItems(rows),
           logs,
           date: new Date().toLocaleString(),
@@ -3804,6 +3868,7 @@
           validatedById: currentUser ? currentUser.id : null,
           validatedAt: new Date().toLocaleString(),
         };
+        rememberSortieEmetteur(emetteur);
         sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
         appData.sorties.push(sortieRecord);
         save(); // Sauvegarde Firebase
@@ -5049,6 +5114,9 @@
           0,
         );
         const createdBy = String(sortie.createdBy || "GESTIONNAIRE").toUpperCase();
+        const emetteur = String(
+          sortie.emetteur || sortie.coordinateurNom || "EMETTEUR NON RENSEIGNE",
+        ).toUpperCase();
         const managerSignature = getSortieSignatureText(sortie, createdBy);
         const technicianSignature = getSortieTechnicianSignatureText(sortie);
         const coordinationSignature = getSortieCoordinationSignatureText(sortie);
@@ -5116,7 +5184,7 @@
 
         doc.setFontSize(9);
         doc.text("Service/Departement : LOGISTIQUE", margin, y);
-        doc.text(`Emetteur : ${createdBy}`, 105, y);
+        doc.text(`Emetteur : ${emetteur}`, 105, y);
         y += 7;
         doc.text("Fonction : GESTIONNAIRE", margin, y);
         y += 9;
@@ -6298,6 +6366,7 @@
         const draft = {
           op: document.getElementById("s-op")?.value,
           tech: document.getElementById("s-tech")?.value,
+          emetteur: document.getElementById("s-emetteur")?.value,
           ref: document.getElementById("s-ref")?.value,
           items: items,
         };
