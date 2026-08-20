@@ -5013,6 +5013,32 @@
         );
       }
 
+      function drawValidatedStamp(doc, data) {
+        if (!data || data.section !== "body" || !data.cell) return;
+
+        const cell = data.cell;
+        const stampWidth = 24;
+        const stampHeight = 7;
+        const stampX = cell.x + cell.width / 2 - stampWidth / 2;
+        const stampY = cell.y + cell.height - stampHeight - 3;
+
+        doc.setDrawColor(22, 163, 74);
+        doc.setFillColor(240, 253, 244);
+        doc.setTextColor(22, 101, 52);
+        doc.setLineWidth(0.5);
+        doc.rect(stampX, stampY, stampWidth, stampHeight, "FD");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.text("VALIDE", cell.x + cell.width / 2, stampY + 5, {
+          align: "center",
+        });
+
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(20, 20, 20);
+        doc.setDrawColor(20, 20, 20);
+        doc.setLineWidth(0.25);
+      }
+
       async function drawSortieBonBesoinPdf(doc, sortie) {
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
@@ -5195,13 +5221,14 @@
             lineColor: [20, 20, 20],
             lineWidth: 0.25,
             halign: "center",
-            minCellHeight: 22,
+            minCellHeight: 30,
           },
           headStyles: {
             fillColor: [255, 255, 255],
             textColor: [20, 20, 20],
             fontStyle: "bold",
           },
+          didDrawCell: drawValidatedStamp,
         });
       }
 
@@ -8469,9 +8496,10 @@
                 fontSize: 8,
                 cellPadding: 3,
                 halign: "center",
-                minCellHeight: 22,
+                minCellHeight: 30,
               },
               headStyles: { fillColor: [102, 34, 119] },
+              didDrawCell: d.status === "LIVREE" ? drawValidatedStamp : undefined,
             });
 
             doc.save(`BS_ITC_${d.id}.pdf`);
