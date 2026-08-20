@@ -5082,10 +5082,10 @@
         if (!data || data.section !== "body" || !data.cell) return;
 
         const cell = data.cell;
-        const stampWidth = 24;
-        const stampHeight = 7;
+        const stampWidth = 22;
+        const stampHeight = 6;
         const stampX = cell.x + cell.width / 2 - stampWidth / 2;
-        const stampY = cell.y + cell.height - stampHeight - 3;
+        const stampY = cell.y + cell.height - stampHeight - 2;
 
         doc.setDrawColor(22, 163, 74);
         doc.setFillColor(240, 253, 244);
@@ -5093,8 +5093,8 @@
         doc.setLineWidth(0.5);
         doc.rect(stampX, stampY, stampWidth, stampHeight, "FD");
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
-        doc.text("VALIDE", cell.x + cell.width / 2, stampY + 5, {
+        doc.setFontSize(7);
+        doc.text("VALIDE", cell.x + cell.width / 2, stampY + 4.4, {
           align: "center",
         });
 
@@ -5217,9 +5217,6 @@
               String(parseInt(item.qty, 10) || 0),
             ])
           : [["", "Detail des articles indisponible", ref || "-", "-"]];
-        while (body.length < 10) {
-          body.push(["", "", "", ""]);
-        }
 
         doc.autoTable({
           startY: y,
@@ -5230,8 +5227,8 @@
           foot: [["Total", "", "", `${totalQty}`]],
           styles: {
             font: "helvetica",
-            fontSize: 8,
-            cellPadding: 2.2,
+            fontSize: 7.4,
+            cellPadding: 1.4,
             lineColor: [20, 20, 20],
             lineWidth: 0.25,
             valign: "middle",
@@ -5255,15 +5252,15 @@
           },
         });
 
-        y = doc.lastAutoTable.finalY + 8;
-        doc.setFontSize(9);
+        y = doc.lastAutoTable.finalY + 5;
+        doc.setFontSize(8);
         doc.text(
           `Motif de la demande : ${ref || "SORTIE DE MATERIELS"}`,
           margin,
           y,
           { maxWidth: pageWidth - margin * 2 },
         );
-        y += 9;
+        y += 7;
         doc.text(
           `Fiche recue le : ${dateParts.day} / ${dateParts.month} / ${dateParts.year}`,
           margin,
@@ -5274,7 +5271,7 @@
           105,
           y,
         );
-        y += 10;
+        y += 7;
 
         doc.autoTable({
           startY: y,
@@ -5284,13 +5281,15 @@
           body: [[technicianSignature, managerSignature, coordinationSignature]],
           styles: {
             font: "helvetica",
-            fontSize: 8,
-            cellPadding: 3,
+            fontSize: 7.2,
+            cellPadding: 2,
             lineColor: [20, 20, 20],
             lineWidth: 0.25,
             halign: "center",
-            minCellHeight: 30,
+            minCellHeight: 24,
           },
+          pageBreak: "avoid",
+          rowPageBreak: "avoid",
           headStyles: {
             fillColor: [255, 255, 255],
             textColor: [20, 20, 20],
