@@ -3800,6 +3800,9 @@
           logs,
           date: new Date().toLocaleString(),
           createdBy: currentUser ? currentUser.name : "ANONYME",
+          validatedBy: currentUser ? currentUser.name : "GESTIONNAIRE",
+          validatedById: currentUser ? currentUser.id : null,
+          validatedAt: new Date().toLocaleString(),
         };
         sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
         appData.sorties.push(sortieRecord);
@@ -4983,6 +4986,33 @@
         };
       }
 
+      function formatAutomaticSignature(name, dateValue) {
+        const signer = String(name || "GESTIONNAIRE").trim().toUpperCase();
+        const signatureDate = String(dateValue || new Date().toLocaleString()).trim();
+        return `Signe electroniquement\n${signer}\nLe ${signatureDate}`;
+      }
+
+      function getSortieSignatureText(sortie, fallbackName) {
+        return formatAutomaticSignature(
+          sortie?.validatedBy || sortie?.signedBy || sortie?.createdBy || fallbackName,
+          sortie?.validatedAt || sortie?.signedAt || sortie?.date,
+        );
+      }
+
+      function getSortieTechnicianSignatureText(sortie) {
+        return formatAutomaticSignature(
+          sortie?.tech || sortie?.demandeurName || sortie?.technicien || "TECHNICIEN",
+          sortie?.validatedAt || sortie?.signedAt || sortie?.dateLivraison || sortie?.date,
+        );
+      }
+
+      function getSortieCoordinationSignatureText(sortie) {
+        return formatAutomaticSignature(
+          sortie?.coordinateurNom || sortie?.coordinationBy || "COORDINATION",
+          sortie?.validatedAt || sortie?.signedAt || sortie?.dateLivraison || sortie?.date,
+        );
+      }
+
       async function drawSortieBonBesoinPdf(doc, sortie) {
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
@@ -4993,6 +5023,9 @@
           0,
         );
         const createdBy = String(sortie.createdBy || "GESTIONNAIRE").toUpperCase();
+        const managerSignature = getSortieSignatureText(sortie, createdBy);
+        const technicianSignature = getSortieTechnicianSignatureText(sortie);
+        const coordinationSignature = getSortieCoordinationSignatureText(sortie);
         const receiver = String(sortie.tech || "").toUpperCase();
         const ref = String(sortie.ref || "").toUpperCase();
         const op = String(sortie.op || "").toUpperCase();
@@ -5153,8 +5186,8 @@
           startY: y,
           margin: { left: margin, right: margin },
           theme: "grid",
-          head: [["Emetteur", "Logistique", "Charge de la Gestion"]],
-          body: [["Date et Signature", "Date et signature", "Date et Signature"]],
+          head: [["Technicien", "Logistique", "Coordination"]],
+          body: [[technicianSignature, managerSignature, coordinationSignature]],
           styles: {
             font: "helvetica",
             fontSize: 8,
@@ -5162,7 +5195,7 @@
             lineColor: [20, 20, 20],
             lineWidth: 0.25,
             halign: "center",
-            minCellHeight: 18,
+            minCellHeight: 22,
           },
           headStyles: {
             fillColor: [255, 255, 255],
@@ -7307,7 +7340,9 @@
 
       function renderLivraisonForm(container) {
         const demandes = appData.demandes || []; // Gilet de sauvetage
-        const aLivrer = demandes.filter((d) => d.status === "PREPAREE");
+        const aLivrer = demandes.filter((d) =>
+          ["PRET", "PREPAREE"].includes(d.status),
+        );
         const totalItemsToDeliver = aLivrer.reduce(
           (sum, d) =>
             sum +
@@ -7370,6 +7405,9 @@
         });
         d.status = "LIVREE";
         d.dateLivraison = new Date().toLocaleDateString();
+        d.validatedBy = currentUser ? currentUser.name : "GESTIONNAIRE";
+        d.validatedById = currentUser ? currentUser.id : null;
+        d.validatedAt = new Date().toLocaleString();
         addNotification(1, `AUDIT : SORTIE VALIDÉE (${d.id})`);
         addNotification(
           d.demandeurOriginalId,
@@ -7378,6 +7416,10 @@
         save();
         alert("TERMINÉ.");
         showSection("cockpit");
+      }
+
+      function validerLivraison(id) {
+        finalSortie(id);
       }
 
       function renderGestionRetours(container) {
@@ -8401,6 +8443,34 @@
                 d.status === "LIVREE" ? i.qty : "___",
               ]),
               theme: "grid",
+              headStyles: { fillColor: [102, 34, 119] },
+            });
+
+            const demandeSignature =
+              d.status === "LIVREE"
+                ? getSortieSignatureText(d, "GESTIONNAIRE")
+                : "Date et Signature";
+            doc.autoTable({
+              startY: (doc.lastAutoTable?.finalY || 105) + 12,
+              head: [["Technicien", "Logistique", "Coordination"]],
+              body: [
+                [
+                  d.status === "LIVREE"
+                    ? getSortieTechnicianSignatureText(d)
+                    : "Date et Signature",
+                  demandeSignature,
+                  d.status === "LIVREE"
+                    ? getSortieCoordinationSignatureText(d)
+                    : "Date et Signature",
+                ],
+              ],
+              theme: "grid",
+              styles: {
+                fontSize: 8,
+                cellPadding: 3,
+                halign: "center",
+                minCellHeight: 22,
+              },
               headStyles: { fillColor: [102, 34, 119] },
             });
 
