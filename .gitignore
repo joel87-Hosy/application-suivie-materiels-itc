@@ -1,0 +1,6 @@
+tools/serviceAccountKey.json
+serviceAccountKey.json
+*.pem
+*.key
+.env
+.env.*

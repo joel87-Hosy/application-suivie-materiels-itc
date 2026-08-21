@@ -697,16 +697,17 @@
           <div class="login-2026-brand p-6 md:p-10 lg:p-12 border-b md:border-b-0 md:border-r border-sky-100/70">
             <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full login-2026-chip text-[10px] tracking-[0.2em] text-slate-700 mb-5">
               <span class="w-2 h-2 rounded-full bg-sky-500"></span>
-              ITC COMMAND HUB 2026
+              <span id="login-brand-chip">STOCKFLOW SAAS</span>
             </div>
             <div class="flex-shrink-0 flex items-center justify-start md:justify-start p-0 mb-5">
             <img
-              src="assets/nouveau-logo-itc.png"
-              alt="Logo ITC"
+              id="login-brand-logo"
+              src="assets/saas-logo.svg"
+              alt="Logo StockFlow SaaS"
               class="h-24 md:h-28 object-contain"
             />
             </div>
-            <h2 class="text-2xl md:text-[2rem] leading-tight font-bold text-slate-900 normal-case tracking-tight">
+            <h2 id="login-brand-title" class="text-2xl md:text-[2rem] leading-tight font-bold text-slate-900 normal-case tracking-tight">
               Operations command center
             </h2>
             <p class="mt-4 text-[12px] md:text-[13px] text-slate-600 normal-case font-semibold leading-relaxed">
@@ -951,12 +952,31 @@
             class="p-4 bg-white border-b border-slate-800 flex flex-col items-center shrink-0"
           >
             <img
+              id="sidebar-brand-logo"
               src="assets/nouveau-logo-itc.png"
               alt="Logo ITC"
               class="h-16 lg:h-20 object-contain"
             />
           </div>
           <nav class="flex-1 mt-4 overflow-y-auto custom-scrollbar pb-10">
+            <div id="menu-super-admin" class="mt-4 hidden">
+              <p
+                class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50"
+              >
+                Plateforme SaaS
+              </p>
+              <div
+                onclick="
+                  showSection('super-admin');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-3 px-6 flex items-center hover:bg-slate-800 transition italic text-cyan-300 font-black"
+              >
+                <i class="fas fa-shield-halved w-6 text-cyan-400"></i>
+                <span class="ml-2">Super Admin</span>
+              </div>
+            </div>
+
             <div
               id="menu-cockpit"
               onclick="
@@ -1017,6 +1037,16 @@
               >
                 <i class="fas fa-clipboard-list w-5 text-indigo-400"></i>
                 Rapports Sorties (Magasin)
+              </div>
+              <div
+                onclick="
+                  showSection('company-users');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-cyan-300"
+              >
+                <i class="fas fa-users-gear w-5 text-cyan-400"></i>
+                Utilisateurs
               </div>
             </div>
             <div id="menu-technicien" class="mt-6 hidden">
@@ -1463,7 +1493,70 @@
       firebase.initializeApp(firebaseConfig);
       const db = firebase.database();
 
+      function getLoginTenantId() {
+        try {
+          const params = new URLSearchParams(window.location.search || "");
+          return String(params.get("tenant") || "").trim();
+        } catch (e) {
+          return "";
+        }
+      }
+
+      function applyLoginBranding(branding = {}) {
+        const name = branding.name || "StockFlow SaaS";
+        const logoUrl = branding.logo_url || "assets/saas-logo.svg";
+        const chip = document.getElementById("login-brand-chip");
+        const logo = document.getElementById("login-brand-logo");
+        const title = document.getElementById("login-brand-title");
+
+        if (chip) chip.innerText = `${name} LOGIN`.toUpperCase();
+        if (title) title.innerText = `${name} command center`;
+        if (logo) {
+          logo.src = logoUrl;
+          logo.alt = `Logo ${name}`;
+          logo.onerror = () => {
+            logo.onerror = null;
+            logo.src = "assets/saas-logo.svg";
+          };
+        }
+      }
+
+      function getTenantLoginUrl(companyId) {
+        const base = `${window.location.origin}${window.location.pathname}`;
+        return `${base}?tenant=${encodeURIComponent(companyId)}`;
+      }
+
+      function initLoginBranding() {
+        const tenantId = getLoginTenantId();
+        if (!tenantId) {
+          applyLoginBranding();
+          return;
+        }
+
+        if (tenantId === "COMP-ITC-LEGACY") {
+          applyLoginBranding({
+            name: "ITC",
+            logo_url: "assets/nouveau-logo-itc.png",
+          });
+          return;
+        }
+
+        db.ref(`tenant_branding/${tenantId}`)
+          .once("value")
+          .then((snapshot) => {
+            const branding = snapshot.val();
+            if (branding) applyLoginBranding(branding);
+            else applyLoginBranding();
+          })
+          .catch((error) => {
+            console.warn("Branding tenant inaccessible", error);
+            applyLoginBranding();
+          });
+      }
+
       // L'unique déclaration de currentUser pour toute l'app
+      initLoginBranding();
+
       let currentUser = null;
       // Dernier compteur local de notifications non lues (pour détecter nouvelles notifs)
       let lastNotificationCount = 0;
@@ -1509,6 +1602,8 @@
         retours: [],
         notifications: [],
         consumptionArchives: [],
+        companies: [],
+        platformAuditLogs: [],
         lastConsumptionArchiveKey: null,
         scansDuJour: [],
         derniereDateScan: null,
@@ -1563,6 +1658,14 @@
           normalized.consumptionArchives,
         )
           ? normalized.consumptionArchives
+          : [];
+        normalized.companies = Array.isArray(normalized.companies)
+          ? normalized.companies
+          : [];
+        normalized.platformAuditLogs = Array.isArray(
+          normalized.platformAuditLogs,
+        )
+          ? normalized.platformAuditLogs
           : [];
         normalized.lastConsumptionArchiveKey =
           normalized.lastConsumptionArchiveKey || null;
@@ -1641,7 +1744,12 @@
                     container &&
                     container.innerHTML.trim() === ""
                   ) {
-                    showSection("cockpit");
+                    showSection(
+                      String(currentUser.role || "").toUpperCase() ===
+                        "SUPER_ADMIN"
+                        ? "super-admin"
+                        : "cockpit",
+                    );
                   }
                 } catch (e) {
                   // ignore si showSection non disponible
@@ -1718,6 +1826,10 @@
             renderRapportsSorties(container);
           } else if (currentSectionId === "flux-materiels") {
             renderFluxMateriels(container);
+          } else if (currentSectionId === "super-admin") {
+            renderSuperAdminDashboard(container);
+          } else if (currentSectionId === "company-users") {
+            renderCompanyUsersAdmin(container);
           } else if (currentSectionId === "superviseur-rapports-sorties") {
             renderRapportsSorties(container, { readOnly: true });
           } else if (currentSectionId.startsWith("stock-")) {
@@ -2083,6 +2195,13 @@
           );
 
           if (userProfile) {
+            if (isCompanySuspendedForUser(userProfile)) {
+              await firebase.auth().signOut();
+              alert(
+                "Acces bloque : votre entreprise est suspendue. Contactez l'administrateur plateforme.",
+              );
+              return;
+            }
             currentUser = userProfile;
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("main-app").classList.remove("hidden");
@@ -2093,7 +2212,9 @@
 
             // Redirection intelligente
             showSection(
-              currentUser.role === "Technicien"
+              String(currentUser.role || "").toUpperCase() === "SUPER_ADMIN"
+                ? "super-admin"
+                : currentUser.role === "Technicien"
                 ? "tech-nouvelle-demande"
                 : "cockpit",
             );
@@ -2166,25 +2287,44 @@
 
         // On transforme le rôle en MAJUSCULES pour éviter les erreurs de saisie
         const r = currentUser.role.trim().toUpperCase();
+        const isSuperAdmin = r === "SUPER_ADMIN";
+
+        const menuSuperAdmin = document.getElementById("menu-super-admin");
+        if (menuSuperAdmin)
+          menuSuperAdmin.classList.toggle("hidden", !isSuperAdmin);
         console.log("Rôle détecté (sécurisé) :", r);
 
         // 1. Menu Superviseur
         const menuSup = document.getElementById("menu-superviseur");
-        if (menuSup) menuSup.classList.toggle("hidden", r !== "SUPERVISEUR");
+        if (menuSup)
+          menuSup.classList.toggle(
+            "hidden",
+            isSuperAdmin || r !== "SUPERVISEUR",
+          );
 
         // 2. Menu Technicien
         const menuTech = document.getElementById("menu-technicien");
-        if (menuTech) menuTech.classList.toggle("hidden", r !== "TECHNICIEN");
+        if (menuTech)
+          menuTech.classList.toggle(
+            "hidden",
+            isSuperAdmin || r !== "TECHNICIEN",
+          );
 
         // 3. Menu Coordinatrice
         const menuCoord = document.getElementById("menu-coordinatrice");
         if (menuCoord)
-          menuCoord.classList.toggle("hidden", r !== "COORDINATRICE");
+          menuCoord.classList.toggle(
+            "hidden",
+            isSuperAdmin || r !== "COORDINATRICE",
+          );
 
         // 4. Menu Gestionnaire (MAGASIN) - On vérifie plusieurs variantes possibles
         const menuGest = document.getElementById("menu-gestionnaire");
         if (menuGest) {
-          if (r === "GESTIONNAIRE" || r === "MAGASINIER" || r === "GEST") {
+          if (
+            !isSuperAdmin &&
+            (r === "GESTIONNAIRE" || r === "MAGASINIER" || r === "GEST")
+          ) {
             menuGest.classList.remove("hidden");
             console.log("Menu Gestionnaire affiché.");
           } else {
@@ -2194,11 +2334,18 @@
 
         // 5. Sections Communes (Consultation Stock & Cockpit)
         const secStock = document.getElementById("section-stock-disponible");
-        if (secStock) secStock.classList.toggle("hidden", r === "TECHNICIEN");
+        if (secStock)
+          secStock.classList.toggle(
+            "hidden",
+            isSuperAdmin || r === "TECHNICIEN",
+          );
 
         const menuCockpit = document.getElementById("menu-cockpit");
         if (menuCockpit)
-          menuCockpit.classList.toggle("hidden", r === "TECHNICIEN");
+          menuCockpit.classList.toggle(
+            "hidden",
+            isSuperAdmin || r === "TECHNICIEN",
+          );
 
         // 6. Menu spécifique : STOCK ITC BUREAU 02 (visible seulement au superviseur
         // ou au gestionnaire qui gère ITC-B02)
@@ -2281,6 +2428,16 @@
         document.getElementById("user-name").innerText = currentUser.name;
         document.getElementById("user-role-badge").innerText =
           currentUser.role.toUpperCase();
+        const branding = getBrandingForCurrentUser();
+        const logo = document.getElementById("sidebar-brand-logo");
+        if (logo) {
+          logo.src = branding.logo;
+          logo.alt = `Logo ${branding.name}`;
+          logo.onerror = () => {
+            logo.onerror = null;
+            logo.src = "assets/saas-logo.svg";
+          };
+        }
       }
       function toggleSidebar() {
         document.getElementById("sidebar").classList.toggle("sidebar-hidden");
@@ -5583,6 +5740,12 @@
         }
         if (id === "cockpit") {
           renderCockpit(container);
+        } else if (id === "super-admin") {
+          viewTitle.innerText = "SUPER ADMIN";
+          renderSuperAdminDashboard(container);
+        } else if (id === "company-users") {
+          viewTitle.innerText = "UTILISATEURS ENTREPRISE";
+          renderCompanyUsersAdmin(container);
         } else if (id === "stats-consommation") {
           renderStatsConsommation(container);
         } else if (id === "archives-consommations") {
@@ -6545,6 +6708,590 @@
         } catch (e) {
           console.warn("Erreur cockpit alert chart", e);
         }
+      }
+
+      function isCurrentSuperAdmin() {
+        return String(currentUser?.role || "").toUpperCase() === "SUPER_ADMIN";
+      }
+
+      function getCompanyById(companyId) {
+        const id = String(companyId || "");
+        return (appData.companies || []).find((c) => String(c.id) === id) || null;
+      }
+
+      function getCompanyForUser(user) {
+        const companyId = getUserCompanyIdForSuperAdmin(user);
+        if (!companyId) return null;
+        if (companyId === "COMP-ITC-LEGACY") {
+          return {
+            id: "COMP-ITC-LEGACY",
+            name: "ITC",
+            logo_url: "assets/nouveau-logo-itc.png",
+          };
+        }
+        return getCompanyById(companyId);
+      }
+
+      function getBrandingForCurrentUser() {
+        const role = String(currentUser?.role || "").toUpperCase();
+        if (role === "SUPER_ADMIN") {
+          return {
+            name: "StockFlow SaaS",
+            logo: "assets/saas-logo.svg",
+          };
+        }
+        const company = getCompanyForUser(currentUser);
+        return {
+          name: company?.name || "ITC",
+          logo: company?.logo_url || "assets/nouveau-logo-itc.png",
+        };
+      }
+
+      function getUserCompanyIdForSuperAdmin(user) {
+        if (!user || String(user.role || "").toUpperCase() === "SUPER_ADMIN") {
+          return null;
+        }
+        return user.company_id || "COMP-ITC-LEGACY";
+      }
+
+      function getCompaniesForSuperAdminView(users) {
+        const companies = Array.isArray(appData.companies)
+          ? appData.companies.slice()
+          : [];
+        const hasLegacyItcUsers = (users || []).some(
+          (user) =>
+            String(user?.role || "").toUpperCase() !== "SUPER_ADMIN" &&
+            !user?.company_id,
+        );
+        const hasItcCompany = companies.some(
+          (company) => String(company.id) === "COMP-ITC-LEGACY",
+        );
+
+        if (hasLegacyItcUsers && !hasItcCompany) {
+          companies.unshift({
+            id: "COMP-ITC-LEGACY",
+            name: "ITC",
+            email: "contact@itc.local",
+            phone: "",
+            logo_url: "assets/nouveau-logo-itc.png",
+            status: "active",
+            plan_type: "enterprise",
+            max_users: Math.max(20, users.length),
+            max_stores: 6,
+            created_at: "",
+            legacy: true,
+          });
+        }
+
+        return companies;
+      }
+
+      function isCompanySuspendedForUser(user) {
+        if (!user || String(user.role || "").toUpperCase() === "SUPER_ADMIN") {
+          return false;
+        }
+        const companyId = getUserCompanyIdForSuperAdmin(user);
+        if (!companyId) return false;
+        const company = getCompanyById(companyId);
+        return String(company?.status || "").toLowerCase() === "suspended";
+      }
+
+      function getPlanDefaults(planType) {
+        const plan = String(planType || "starter").toLowerCase();
+        if (plan === "enterprise") return { max_users: 100, max_stores: 20 };
+        if (plan === "business") return { max_users: 30, max_stores: 8 };
+        return { max_users: 10, max_stores: 2 };
+      }
+
+      function renderSuperAdminDashboard(container) {
+        if (!container) return;
+        if (!isCurrentSuperAdmin()) {
+          container.innerHTML = `
+            <div class="bg-white rounded-3xl p-8 shadow-xl border border-red-100 text-center">
+              <h3 class="text-red-600 font-black uppercase">Acces refuse</h3>
+              <p class="text-[10px] text-slate-500 mt-2">Cette section est reservee au role SUPER_ADMIN.</p>
+            </div>`;
+          return;
+        }
+
+        const users = Array.isArray(appData.users) ? appData.users : [];
+        const companies = getCompaniesForSuperAdminView(users);
+        const legacyItcCompany = companies.find(
+          (company) => String(company.id) === "COMP-ITC-LEGACY",
+        );
+        if (legacyItcCompany) publishTenantBranding(legacyItcCompany);
+        const activeCompanies = companies.filter(
+          (c) => String(c.status || "active").toLowerCase() === "active",
+        ).length;
+        const suspendedCompanies = companies.filter(
+          (c) => String(c.status || "").toLowerCase() === "suspended",
+        ).length;
+        const activeUsers = users.filter((u) => u.is_active !== false).length;
+        const operationsVolume =
+          (appData.sorties || []).length +
+          (appData.demandes || []).length +
+          (appData.retours || []).length;
+
+        const companyRows = companies
+          .map((company) => {
+            const companyUsers = users.filter(
+              (u) =>
+                String(getUserCompanyIdForSuperAdmin(u) || "") ===
+                String(company.id),
+            );
+            const activeCompanyUsers = companyUsers.filter(
+              (u) => u.is_active !== false,
+            );
+            const usersPreview = activeCompanyUsers
+              .slice(0, 4)
+              .map(
+                (u) =>
+                  `<span class="inline-block bg-slate-100 text-slate-600 rounded-lg px-2 py-1 mr-1 mb-1">${escapeHtml(u.name || u.full_name || u.email)} - ${escapeHtml(u.role || "")}</span>`,
+              )
+              .join("");
+            const loginUrl = getTenantLoginUrl(company.id);
+            const status = String(company.status || "active").toLowerCase();
+            const statusClass =
+              status === "active"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-red-50 text-red-700 border-red-200";
+            const companyLogo =
+              company.logo_url ||
+              (company.legacy
+                ? "assets/nouveau-logo-itc.png"
+                : "assets/saas-logo.svg");
+            return `
+              <tr class="border-b border-slate-100">
+                <td class="py-3 font-black uppercase">
+                  <div class="flex items-center gap-2">
+                    <img src="${escapeHtml(companyLogo)}" alt="Logo ${escapeHtml(company.name || "")}" class="h-8 w-12 object-contain rounded-lg border border-slate-100 bg-white p-1" onerror="this.src='assets/saas-logo.svg'" />
+                    <span>${escapeHtml(company.name || "-")}</span>
+                  </div>
+                </td>
+                <td class="py-3 text-slate-500">${escapeHtml(company.email || "-")}</td>
+                <td class="py-3">${escapeHtml(company.plan_type || "starter")}</td>
+                <td class="py-3 text-center">${activeCompanyUsers.length}/${Number(company.max_users) || 0}</td>
+                <td class="py-3 text-center">
+                  <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${statusClass}">${escapeHtml(status)}</span>
+                </td>
+                <td class="py-3 text-right">
+                  <button onclick="toggleCompanyStatus('${escapeHtml(company.id)}')" class="bg-slate-900 text-white px-3 py-2 rounded-xl text-[8px] font-black uppercase">
+                    ${status === "active" ? "Suspendre" : "Activer"}
+                  </button>
+                </td>
+              </tr>
+              <tr class="border-b border-slate-100">
+                <td colspan="6" class="pb-3 text-[8px] text-slate-400">
+                  ${usersPreview || "Aucun compte actif"}
+                  ${
+                    activeCompanyUsers.length > 4
+                      ? `<span class="text-slate-500 font-black">+${activeCompanyUsers.length - 4} autre(s)</span>`
+                      : ""
+                  }
+                  <div class="mt-2 flex items-center gap-2">
+                    <span class="font-black text-slate-500">Lien connexion:</span>
+                    <input readonly value="${escapeHtml(loginUrl)}" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-2 py-1 text-[8px] text-slate-500 bg-slate-50" onclick="this.select()" />
+                  </div>
+                </td>
+              </tr>`;
+          })
+          .join("");
+
+        container.innerHTML = `
+          <div class="space-y-6 p-4">
+            <div class="bg-slate-950 text-white rounded-3xl p-6 shadow-xl">
+              <div class="flex items-center gap-4">
+                <img src="assets/saas-logo.svg" alt="Logo StockFlow SaaS" class="h-16 w-40 object-contain rounded-2xl bg-white/5 p-2 border border-white/10" />
+                <div>
+                  <p class="text-[9px] uppercase tracking-[0.22em] text-cyan-300">Administration plateforme</p>
+                  <h2 class="text-2xl font-black uppercase mt-1">Super Admin SaaS</h2>
+                  <p class="text-[10px] text-slate-300 mt-2">Gestion globale des entreprises clientes, quotas et acces.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                <p class="text-[8px] text-slate-500 uppercase font-black">Entreprises</p>
+                <p class="text-2xl font-black text-slate-900">${companies.length}</p>
+              </div>
+              <div class="bg-white border border-emerald-200 rounded-2xl p-4 shadow-sm">
+                <p class="text-[8px] text-emerald-600 uppercase font-black">Actives</p>
+                <p class="text-2xl font-black text-emerald-700">${activeCompanies}</p>
+              </div>
+              <div class="bg-white border border-red-200 rounded-2xl p-4 shadow-sm">
+                <p class="text-[8px] text-red-600 uppercase font-black">Suspendues</p>
+                <p class="text-2xl font-black text-red-700">${suspendedCompanies}</p>
+              </div>
+              <div class="bg-white border border-cyan-200 rounded-2xl p-4 shadow-sm">
+                <p class="text-[8px] text-cyan-600 uppercase font-black">Operations</p>
+                <p class="text-2xl font-black text-cyan-700">${operationsVolume}</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <form onsubmit="createCompanyFromSuperAdmin(event)" class="bg-white rounded-3xl border border-slate-200 shadow-xl p-5 space-y-3">
+                <h3 class="text-[11px] font-black uppercase text-slate-800">Nouvelle entreprise</h3>
+                <input id="sa-company-name" class="w-full border rounded-xl p-3 text-xs" placeholder="Nom entreprise" required />
+                <input id="sa-company-email" class="w-full border rounded-xl p-3 text-xs" type="email" placeholder="Email entreprise" required />
+                <input id="sa-company-phone" class="w-full border rounded-xl p-3 text-xs" placeholder="Telephone" />
+                <input id="sa-company-logo" class="w-full border rounded-xl p-3 text-xs" placeholder="URL du logo entreprise" />
+                <select id="sa-company-plan" class="w-full border rounded-xl p-3 text-xs">
+                  <option value="starter">Starter</option>
+                  <option value="business">Business</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+                <div class="grid grid-cols-2 gap-3">
+                  <input id="sa-company-max-users" class="border rounded-xl p-3 text-xs" type="number" min="1" placeholder="Max users" />
+                  <input id="sa-company-max-stores" class="border rounded-xl p-3 text-xs" type="number" min="1" placeholder="Max magasins" />
+                </div>
+                <div class="border-t pt-3 space-y-3">
+                  <input id="sa-admin-name" class="w-full border rounded-xl p-3 text-xs" placeholder="Nom superviseur entreprise" required />
+                  <input id="sa-admin-email" class="w-full border rounded-xl p-3 text-xs" type="email" placeholder="Email superviseur entreprise" required />
+                </div>
+                <button class="w-full bg-cyan-600 text-white rounded-xl p-3 text-[9px] font-black uppercase">Creer entreprise</button>
+                <p class="text-[8px] text-slate-400">Le profil Superviseur est cree dans la base. Le compte Auth doit etre cree cote Admin SDK/backend.</p>
+              </form>
+
+              <div class="xl:col-span-2 bg-white rounded-3xl border border-slate-200 shadow-xl p-5">
+                <div class="flex items-center justify-between gap-3 mb-4">
+                  <h3 class="text-[11px] font-black uppercase text-slate-800">Entreprises clientes</h3>
+                  <span class="text-[9px] text-slate-400">${activeUsers} utilisateur(s) actif(s)</span>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left text-[10px]">
+                    <thead class="text-slate-400 uppercase">
+                      <tr>
+                        <th class="pb-2">Nom</th>
+                        <th class="pb-2">Email</th>
+                        <th class="pb-2">Plan</th>
+                        <th class="pb-2 text-center">Users</th>
+                        <th class="pb-2 text-center">Statut</th>
+                        <th class="pb-2 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>${companyRows || '<tr><td colspan="6" class="py-8 text-center text-slate-400">Aucune entreprise creee.</td></tr>'}</tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      function createCompanyFromSuperAdmin(event) {
+        event.preventDefault();
+        if (!isCurrentSuperAdmin()) return;
+
+        const plan = document.getElementById("sa-company-plan").value;
+        const defaults = getPlanDefaults(plan);
+        const company = {
+          id: `COMP-${Date.now()}`,
+          name: document.getElementById("sa-company-name").value.trim(),
+          email: document.getElementById("sa-company-email").value.trim().toLowerCase(),
+          phone: document.getElementById("sa-company-phone").value.trim(),
+          logo_url:
+            document.getElementById("sa-company-logo").value.trim() ||
+            "assets/saas-logo.svg",
+          status: "active",
+          plan_type: plan,
+          max_users:
+            Number(document.getElementById("sa-company-max-users").value) ||
+            defaults.max_users,
+          max_stores:
+            Number(document.getElementById("sa-company-max-stores").value) ||
+            defaults.max_stores,
+          created_at: new Date().toISOString(),
+        };
+
+        const users = Array.isArray(appData.users) ? appData.users : [];
+        const maxId = users.reduce((max, u) => Math.max(max, Number(u.id) || 0), 0);
+        const adminProfile = {
+          id: maxId + 1,
+          company_id: company.id,
+          company_logo_url: company.logo_url,
+          role: "Superviseur",
+          name: document.getElementById("sa-admin-name").value.trim(),
+          full_name: document.getElementById("sa-admin-name").value.trim(),
+          email: document.getElementById("sa-admin-email").value.trim().toLowerCase(),
+          is_active: true,
+          created_at: new Date().toISOString(),
+        };
+
+        appData.companies = Array.isArray(appData.companies)
+          ? appData.companies
+          : [];
+        appData.platformAuditLogs = Array.isArray(appData.platformAuditLogs)
+          ? appData.platformAuditLogs
+          : [];
+        appData.companies.push(company);
+        appData.users.push(adminProfile);
+        appData.platformAuditLogs.unshift({
+          action: "CREATE_COMPANY",
+          company_id: company.id,
+          by: currentUser.email,
+          date: new Date().toLocaleString("fr-FR"),
+        });
+        save();
+        publishTenantBranding(company);
+        renderSuperAdminDashboard(document.getElementById("app-container"));
+      }
+
+      function publishTenantBranding(company) {
+        if (!company?.id) return;
+        db.ref(`tenant_branding/${company.id}`)
+          .set({
+            id: company.id,
+            name: company.name || "Entreprise",
+            logo_url: company.logo_url || "assets/saas-logo.svg",
+            status: company.status || "active",
+          })
+          .catch((error) => {
+            console.warn("Publication branding tenant impossible", error);
+          });
+      }
+
+      function toggleCompanyStatus(companyId) {
+        if (!isCurrentSuperAdmin()) return;
+        let company = getCompanyById(companyId);
+        if (!company && String(companyId) === "COMP-ITC-LEGACY") {
+          appData.companies = Array.isArray(appData.companies)
+            ? appData.companies
+            : [];
+          company = {
+            id: "COMP-ITC-LEGACY",
+            name: "ITC",
+            email: "contact@itc.local",
+            phone: "",
+            logo_url: "assets/nouveau-logo-itc.png",
+            status: "active",
+            plan_type: "enterprise",
+            max_users: Math.max(20, (appData.users || []).length),
+            max_stores: 6,
+            created_at: new Date().toISOString(),
+          };
+          appData.companies.unshift(company);
+        }
+        if (!company) return;
+        company.status =
+          String(company.status || "active").toLowerCase() === "active"
+            ? "suspended"
+            : "active";
+        appData.platformAuditLogs = Array.isArray(appData.platformAuditLogs)
+          ? appData.platformAuditLogs
+          : [];
+        appData.platformAuditLogs.unshift({
+          action: "TOGGLE_COMPANY_STATUS",
+          company_id: company.id,
+          status: company.status,
+          by: currentUser.email,
+          date: new Date().toLocaleString("fr-FR"),
+        });
+        save();
+        publishTenantBranding(company);
+        renderSuperAdminDashboard(document.getElementById("app-container"));
+      }
+
+      function isCurrentCompanySupervisor() {
+        return String(currentUser?.role || "").toUpperCase() === "SUPERVISEUR";
+      }
+
+      function getDefaultManagedOpsForRole(role) {
+        return [];
+      }
+
+      function generateTemporaryPassword() {
+        const alphabet =
+          "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+        let randomPart = "";
+        try {
+          const values = new Uint32Array(8);
+          window.crypto.getRandomValues(values);
+          randomPart = Array.from(values)
+            .map((value) => alphabet[value % alphabet.length])
+            .join("");
+        } catch (e) {
+          randomPart = Math.random().toString(36).slice(2, 10);
+        }
+        return `Temp-${randomPart}!26`;
+      }
+
+      function refreshCompanyUserTempPassword() {
+        const input = document.getElementById("cu-temp-password");
+        if (input) input.value = generateTemporaryPassword();
+      }
+
+      function renderCompanyUsersAdmin(container) {
+        if (!container) return;
+        if (!isCurrentCompanySupervisor()) {
+          container.innerHTML = `
+            <div class="bg-white rounded-3xl p-8 shadow-xl border border-red-100 text-center">
+              <h3 class="text-red-600 font-black uppercase">Acces refuse</h3>
+              <p class="text-[10px] text-slate-500 mt-2">Cette section est reservee au Superviseur de l'entreprise.</p>
+            </div>`;
+          return;
+        }
+
+        const companyId = getUserCompanyIdForSuperAdmin(currentUser);
+        const company = getCompanyForUser(currentUser);
+        const users = Array.isArray(appData.users) ? appData.users : [];
+        const companyUsers = users.filter(
+          (user) => getUserCompanyIdForSuperAdmin(user) === companyId,
+        );
+
+        const rows = companyUsers
+          .filter((user) => String(user.role || "").toUpperCase() !== "SUPER_ADMIN")
+          .map((user) => {
+            const role = String(user.role || "").toUpperCase();
+            const badge =
+              role === "SUPERVISEUR"
+                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                : role === "GESTIONNAIRE"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : role === "COORDINATRICE"
+                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                    : "bg-cyan-50 text-cyan-700 border-cyan-200";
+            return `
+              <tr class="border-b border-slate-100">
+                <td class="py-3 font-black">${escapeHtml(user.name || user.full_name || "-")}</td>
+                <td class="py-3 text-slate-500">${escapeHtml(user.email || "-")}</td>
+                <td class="py-3">
+                  <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${badge}">${escapeHtml(user.role || "-")}</span>
+                </td>
+                <td class="py-3 text-slate-400">${Array.isArray(user.managedOps) ? escapeHtml(user.managedOps.join(", ")) : "-"}</td>
+                <td class="py-3">
+                  ${
+                    user.temporary_password
+                      ? `<input readonly value="${escapeHtml(user.temporary_password)}" class="border rounded-lg px-2 py-1 text-[8px] font-black text-slate-600 bg-slate-50 w-36" onclick="this.select()" />`
+                      : '<span class="text-slate-300">-</span>'
+                  }
+                </td>
+              </tr>`;
+          })
+          .join("");
+
+        container.innerHTML = `
+          <div class="space-y-6 p-4">
+            <div class="bg-white rounded-3xl border border-slate-200 shadow-xl p-6">
+              <div class="flex items-center gap-4">
+                <img src="${escapeHtml(company?.logo_url || "assets/saas-logo.svg")}" alt="Logo ${escapeHtml(company?.name || "")}" class="h-14 w-24 object-contain rounded-2xl border border-slate-100 bg-white p-2" onerror="this.src='assets/saas-logo.svg'" />
+                <div>
+                  <p class="text-[9px] uppercase tracking-[0.18em] text-slate-400">Administration entreprise</p>
+                  <h2 class="text-xl font-black uppercase text-slate-900">${escapeHtml(company?.name || "Entreprise")}</h2>
+                  <p class="text-[10px] text-slate-500">Creation des comptes par defaut : Gestionnaire, Coordinatrice, Technicien.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <form onsubmit="createCompanyUserFromSupervisor(event)" class="bg-white rounded-3xl border border-slate-200 shadow-xl p-5 space-y-3">
+                <h3 class="text-[11px] font-black uppercase text-slate-800">Nouveau compte</h3>
+                <input id="cu-user-name" class="w-full border rounded-xl p-3 text-xs" placeholder="Nom complet" required />
+                <input id="cu-user-email" class="w-full border rounded-xl p-3 text-xs" type="email" placeholder="Email" required />
+                <select id="cu-user-role" class="w-full border rounded-xl p-3 text-xs">
+                  <option value="Gestionnaire">Gestionnaire</option>
+                  <option value="Coordinatrice">Coordinatrice</option>
+                  <option value="Technicien">Technicien</option>
+                </select>
+                <input id="cu-managed-ops" class="w-full border rounded-xl p-3 text-xs" placeholder="Acces stock du gestionnaire (ex: MAGASIN-A,DEPOT-1)" />
+                <div class="grid grid-cols-[1fr_auto] gap-2">
+                  <input id="cu-temp-password" class="w-full border rounded-xl p-3 text-xs font-black text-slate-700" readonly value="${generateTemporaryPassword()}" onclick="this.select()" />
+                  <button type="button" onclick="refreshCompanyUserTempPassword()" class="bg-cyan-600 text-white rounded-xl px-3 text-[8px] font-black uppercase">Generer</button>
+                </div>
+                <button class="w-full bg-slate-900 text-white rounded-xl p-3 text-[9px] font-black uppercase">Creer le profil</button>
+                <p class="text-[8px] text-slate-400">Le mot de passe temporaire est genere automatiquement. Utilisez-le pour creer le compte Auth via le script Admin SDK.</p>
+              </form>
+
+              <div class="xl:col-span-2 bg-white rounded-3xl border border-slate-200 shadow-xl p-5">
+                <div class="flex items-center justify-between gap-3 mb-4">
+                  <h3 class="text-[11px] font-black uppercase text-slate-800">Comptes entreprise</h3>
+                  <span class="text-[9px] text-slate-400">${companyUsers.length} compte(s)</span>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left text-[10px]">
+                    <thead class="text-slate-400 uppercase">
+                      <tr>
+                        <th class="pb-2">Nom</th>
+                        <th class="pb-2">Email</th>
+                        <th class="pb-2">Role</th>
+                        <th class="pb-2">Acces</th>
+                        <th class="pb-2">Mot de passe temp.</th>
+                      </tr>
+                    </thead>
+                    <tbody>${rows || '<tr><td colspan="5" class="py-8 text-center text-slate-400">Aucun utilisateur cree.</td></tr>'}</tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      function createCompanyUserFromSupervisor(event) {
+        event.preventDefault();
+        if (!isCurrentCompanySupervisor()) return;
+
+        const companyId = getUserCompanyIdForSuperAdmin(currentUser);
+        const company = getCompanyForUser(currentUser);
+        const role = document.getElementById("cu-user-role").value;
+        const manualOps = document
+          .getElementById("cu-managed-ops")
+          .value.split(",")
+          .map((op) => op.trim())
+          .filter(Boolean);
+        const managedOps =
+          String(role).toUpperCase() === "GESTIONNAIRE"
+            ? manualOps
+            : [];
+
+        appData.users = Array.isArray(appData.users) ? appData.users : [];
+        const email = document.getElementById("cu-user-email").value.trim().toLowerCase();
+        const temporaryPassword =
+          document.getElementById("cu-temp-password").value ||
+          generateTemporaryPassword();
+        const exists = appData.users.some(
+          (user) => String(user.email || "").toLowerCase() === email,
+        );
+        if (exists) {
+          alert("Un profil existe deja avec cet email.");
+          return;
+        }
+
+        const maxId = appData.users.reduce(
+          (max, user) => Math.max(max, Number(user.id) || 0),
+          0,
+        );
+        appData.users.push({
+          id: maxId + 1,
+          company_id: companyId,
+          company_logo_url: company?.logo_url || "assets/saas-logo.svg",
+          role,
+          name: document.getElementById("cu-user-name").value.trim(),
+          full_name: document.getElementById("cu-user-name").value.trim(),
+          email,
+          managedOps,
+          temporary_password: temporaryPassword,
+          must_change_password: true,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          created_by: currentUser.email,
+        });
+
+        appData.platformAuditLogs = Array.isArray(appData.platformAuditLogs)
+          ? appData.platformAuditLogs
+          : [];
+        appData.platformAuditLogs.unshift({
+          action: "CREATE_COMPANY_USER",
+          company_id: companyId,
+          role,
+          email,
+          by: currentUser.email,
+          date: new Date().toLocaleString("fr-FR"),
+        });
+        save();
+        const authCommand = `npm.cmd run create-user -- --email "${email}" --password "${temporaryPassword}" --name "${document.getElementById("cu-user-name").value.trim()}" --role ${role} --companyId "${companyId}"${managedOps.length ? ` --managedOps ${managedOps.join(",")}` : ""} --serviceAccount tools/serviceAccountKey.json`;
+        alert(
+          `Profil cree.\n\nEmail: ${email}\nMot de passe temporaire: ${temporaryPassword}\n\nCommande Auth a executer:\n${authCommand}`,
+        );
+        renderCompanyUsersAdmin(document.getElementById("app-container"));
       }
 
       function renderCockpit(container) {
