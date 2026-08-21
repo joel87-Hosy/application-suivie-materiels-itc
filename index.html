@@ -10360,6 +10360,70 @@
         `;
       }
 
+      function getVisibleStockEntriesForFlux() {
+        const stock = Array.isArray(appData?.stock) ? appData.stock : [];
+        const allowed = getAllowedOpsForFluxUser();
+        if (!allowed) return stock;
+        return stock.filter((s) => isFluxEntryAllowedForCurrentUser(s));
+      }
+
+      function getAllowedOpsForFluxUser() {
+        try {
+          if (!currentUser) return null;
+          const role = String(currentUser.role || "").toUpperCase();
+          const managed = getManagedOpsNormalized(currentUser);
+          const hasManagedOps = managed.length > 0;
+          const isGestionnaireLike =
+            role.includes("GESTIONNAIRE") ||
+            String(currentUser.name || "").toUpperCase().includes("GESTIONNAIRE") ||
+            hasManagedOps;
+          if (!isGestionnaireLike) return null;
+          return new Set(managed);
+        } catch (e) {
+          console.error("Erreur droits flux materiels", e);
+          return new Set();
+        }
+      }
+
+      function isFluxEntryAllowedForCurrentUser(entry) {
+        const allowed = getAllowedOpsForFluxUser();
+        if (!allowed) return true;
+        return allowed.has(normalizeOperatorKey(entry?.op));
+      }
+
+      function buildStockQtyByDesignation(stockEntries = getVisibleStockEntriesForFlux()) {
+        const stockByDesignation = new Map();
+        stockEntries.forEach((entry) => {
+          const label = String(entry?.label || "").trim().toUpperCase();
+          if (!label) return;
+          stockByDesignation.set(
+            label,
+            (stockByDesignation.get(label) || 0) + (Number(entry?.qty) || 0),
+          );
+        });
+        return stockByDesignation;
+      }
+
+      function getCurrentStockQtyForDesignation(designation) {
+        const cleanDesignation = String(designation || "").trim().toUpperCase();
+        if (!cleanDesignation) return 0;
+        return buildStockQtyByDesignation().get(cleanDesignation) || 0;
+      }
+
+      function ensureFluxMaterial(allMateriels, label) {
+        const cleanLabel = String(label || "").trim().toUpperCase();
+        if (!cleanLabel) return null;
+        if (!allMateriels.has(cleanLabel)) {
+          allMateriels.set(cleanLabel, {
+            designation: cleanLabel,
+            entrees: [],
+            sorties: [],
+            stockActuel: 0,
+          });
+        }
+        return allMateriels.get(cleanLabel);
+      }
+
       function renderFluxMateriels(container) {
         if (!container) return;
         
@@ -10374,13 +10438,10 @@
         let visibleDemandes = demandes;
         let visibleArchives = archives;
         try {
-          if (
-            currentUser &&
-            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
-          ) {
-            const allowed = new Set(getManagedOpsNormalized(currentUser));
-            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
-            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+          const allowed = getAllowedOpsForFluxUser();
+          if (allowed) {
+            visibleSorties = sorties.filter((s) => isFluxEntryAllowedForCurrentUser(s));
+            visibleDemandes = demandes.filter((d) => isFluxEntryAllowedForCurrentUser(d));
             visibleArchives = archives
               .map((archive) => {
                 const operatorStats = {};
@@ -10403,6 +10464,12 @@
 
         // Récupère tous les matériels uniques
         const allMateriels = new Map();
+        const stockQtyByDesignation = buildStockQtyByDesignation();
+
+        stockQtyByDesignation.forEach((qty, label) => {
+          const material = ensureFluxMaterial(allMateriels, label);
+          if (material) material.stockActuel = qty;
+        });
         
         // Depuis les sorties (bons physiques)
         visibleSorties.forEach((sortie) => {
@@ -10411,15 +10478,7 @@
             const label = String(item.label || "").trim().toUpperCase();
             if (!label) return;
             
-            if (!allMateriels.has(label)) {
-              allMateriels.set(label, {
-                designation: label,
-                entrees: [],
-                sorties: []
-              });
-            }
-            
-            allMateriels.get(label).sorties.push({
+            ensureFluxMaterial(allMateriels, label).sorties.push({
               date: sortie.date,
               qty: Number(item.qty) || 0,
               op: sortie.op,
@@ -10435,15 +10494,7 @@
             const label = String(item.label || "").trim().toUpperCase();
             if (!label) return;
             
-            if (!allMateriels.has(label)) {
-              allMateriels.set(label, {
-                designation: label,
-                entrees: [],
-                sorties: []
-              });
-            }
-            
-            allMateriels.get(label).entrees.push({
+            ensureFluxMaterial(allMateriels, label).entrees.push({
               date: demande.dateLivraison || demande.date,
               qty: Number(item.qty) || 0,
               op: demande.op,
@@ -10463,14 +10514,7 @@
               const cleanLabel = String(label || "").trim().toUpperCase();
               const quantity = Number(qty) || 0;
               if (!cleanLabel || quantity <= 0) return;
-              if (!allMateriels.has(cleanLabel)) {
-                allMateriels.set(cleanLabel, {
-                  designation: cleanLabel,
-                  entrees: [],
-                  sorties: [],
-                });
-              }
-              allMateriels.get(cleanLabel).entrees.push({
+              ensureFluxMaterial(allMateriels, cleanLabel).entrees.push({
                 date: archiveDate,
                 qty: quantity,
                 op,
@@ -10487,14 +10531,7 @@
                 const cleanLabel = String(detail?.designation || "").trim().toUpperCase();
                 const quantity = Number(detail?.qty) || 0;
                 if (!cleanLabel || quantity <= 0) return;
-                if (!allMateriels.has(cleanLabel)) {
-                  allMateriels.set(cleanLabel, {
-                    designation: cleanLabel,
-                    entrees: [],
-                    sorties: [],
-                  });
-                }
-                allMateriels.get(cleanLabel).sorties.push({
+                ensureFluxMaterial(allMateriels, cleanLabel).sorties.push({
                   date: archiveDate,
                   qty: quantity,
                   op,
@@ -10509,14 +10546,7 @@
               const cleanLabel = String(label || "").trim().toUpperCase();
               const quantity = Number(qty) || 0;
               if (!cleanLabel || quantity <= 0) return;
-              if (!allMateriels.has(cleanLabel)) {
-                allMateriels.set(cleanLabel, {
-                  designation: cleanLabel,
-                  entrees: [],
-                  sorties: [],
-                });
-              }
-              allMateriels.get(cleanLabel).sorties.push({
+              ensureFluxMaterial(allMateriels, cleanLabel).sorties.push({
                 date: archiveDate,
                 qty: quantity,
                 op,
@@ -10566,12 +10596,13 @@
           const totalEntrees = mat.entrees.reduce((sum, e) => sum + e.qty, 0);
           const totalSorties = mat.sorties.reduce((sum, s) => sum + s.qty, 0);
           const solde = totalEntrees - totalSorties;
+          const stockActuel = Number(mat.stockActuel) || 0;
 
           html += `
             <div class="bg-gradient-to-br from-slate-50 to-white border-2 border-cyan-200 rounded-2xl p-4 cursor-pointer hover:shadow-lg transition hover:border-cyan-400 hover-lift" 
                  onclick="renderFluxMaterielDetail(document.getElementById('app-container'), '${escapeHtml(mat.designation)}')">
               <p class="text-[10px] font-black text-slate-800 uppercase mb-3 truncate">${escapeHtml(mat.designation)}</p>
-              <div class="grid grid-cols-3 gap-2 mb-3">
+              <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
                 <div class="bg-green-50 border border-green-200 rounded-lg p-2 text-center">
                   <p class="text-[7px] text-green-600 uppercase">Entrées</p>
                   <p class="text-[10px] font-black text-green-700">${totalEntrees}</p>
@@ -10583,6 +10614,10 @@
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-2 text-center">
                   <p class="text-[7px] text-blue-600 uppercase">Solde</p>
                   <p class="text-[10px] font-black ${solde >= 0 ? 'text-blue-700' : 'text-red-700'}">${solde}</p>
+                </div>
+                <div class="bg-cyan-50 border border-cyan-200 rounded-lg p-2 text-center">
+                  <p class="text-[7px] text-cyan-600 uppercase">Stock actuel</p>
+                  <p class="text-[10px] font-black ${stockActuel > 0 ? 'text-cyan-700' : 'text-red-700'}">${stockActuel}</p>
                 </div>
               </div>
               <p class="text-[8px] text-slate-500">Mouvements: ${mat.entrees.length + mat.sorties.length}</p>
@@ -10613,13 +10648,10 @@
         let visibleDemandes = demandes;
         let visibleArchives = archives;
         try {
-          if (
-            currentUser &&
-            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
-          ) {
-            const allowed = new Set(getManagedOpsNormalized(currentUser));
-            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
-            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+          const allowed = getAllowedOpsForFluxUser();
+          if (allowed) {
+            visibleSorties = sorties.filter((s) => isFluxEntryAllowedForCurrentUser(s));
+            visibleDemandes = demandes.filter((d) => isFluxEntryAllowedForCurrentUser(d));
             visibleArchives = archives
               .map((archive) => {
                 const operatorStats = {};
@@ -10641,6 +10673,7 @@
         }
 
         const cleanDesignation = String(designation || "").trim().toUpperCase();
+        const stockActuel = getCurrentStockQtyForDesignation(cleanDesignation);
         
         // Récupère les mouvements
         const mouvements = [];
@@ -10745,6 +10778,10 @@
         if (mouvements.length === 0) {
           container.innerHTML = `
             <div class="space-y-4 p-4">
+              <div class="bg-white rounded-2xl border border-cyan-200 p-5 text-center">
+                <p class="text-[8px] text-cyan-600 uppercase font-black">Stock actuel disponible</p>
+                <p class="text-2xl font-black ${stockActuel > 0 ? 'text-cyan-700' : 'text-red-700'}">${stockActuel}</p>
+              </div>
               <button onclick="renderFluxMateriels(document.getElementById('app-container'))" class="text-blue-600 text-[9px] font-black mb-4">
                 <i class="fas fa-arrow-left mr-2"></i> Retour à la liste
               </button>
@@ -10795,7 +10832,7 @@
 
             <div class="bg-white rounded-3xl shadow-xl border-2 border-cyan-600 p-6">
               <h3 class="text-lg font-black uppercase text-slate-800 mb-4">${escapeHtml(cleanDesignation)}</h3>
-              <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                 <div class="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-center">
                   <p class="text-[8px] text-green-600 uppercase font-black">Total Entrées</p>
                   <p class="text-2xl font-black text-green-700">${totalEntrees}</p>
@@ -10807,6 +10844,10 @@
                 <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-center">
                   <p class="text-[8px] text-blue-600 uppercase font-black">Solde</p>
                   <p class="text-2xl font-black ${solde >= 0 ? 'text-blue-700' : 'text-red-700'}">${solde}</p>
+                </div>
+                <div class="bg-cyan-50 border-2 border-cyan-200 rounded-xl p-4 text-center">
+                  <p class="text-[8px] text-cyan-600 uppercase font-black">Stock actuel</p>
+                  <p class="text-2xl font-black ${stockActuel > 0 ? 'text-cyan-700' : 'text-red-700'}">${stockActuel}</p>
                 </div>
                 <div class="bg-slate-50 border-2 border-slate-200 rounded-xl p-4 text-center">
                   <p class="text-[8px] text-slate-600 uppercase font-black">Mouvements</p>
@@ -10937,20 +10978,23 @@
         let visibleSorties = sorties;
         let visibleDemandes = demandes;
         try {
-          if (
-            currentUser &&
-            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
-          ) {
-            const allowed = new Set(getManagedOpsNormalized(currentUser));
-            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
-            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+          const allowed = getAllowedOpsForFluxUser();
+          if (allowed) {
+            visibleSorties = sorties.filter((s) => isFluxEntryAllowedForCurrentUser(s));
+            visibleDemandes = demandes.filter((d) => isFluxEntryAllowedForCurrentUser(d));
           }
         } catch (e) {
           console.error("Erreur export", e);
           return;
         }
 
-        if (visibleSorties.length === 0 && visibleDemandes.length === 0) {
+        const stockQtyByDesignation = buildStockQtyByDesignation();
+
+        if (
+          visibleSorties.length === 0 &&
+          visibleDemandes.length === 0 &&
+          stockQtyByDesignation.size === 0
+        ) {
           alert("Aucun flux à exporter");
           return;
         }
@@ -10966,6 +11010,10 @@
 
         // Récupère tous les matériels
         const allMateriels = new Map();
+        stockQtyByDesignation.forEach((qty, label) => {
+          const material = ensureFluxMaterial(allMateriels, label);
+          if (material) material.stockActuel = qty;
+        });
         
         visibleSorties.forEach((sortie) => {
           const items = getSortieItems(sortie) || [];
@@ -11022,9 +11070,10 @@
 
           const totalEntrees = mat.entrees.reduce((sum, e) => sum + e.qty, 0);
           const totalSorties = mat.sorties.reduce((sum, s) => sum + s.qty, 0);
+          const stockActuel = Number(mat.stockActuel) || 0;
           
           doc.setFontSize(9);
-          doc.text(`Entrées: ${totalEntrees} | Sorties: ${totalSorties} | Solde: ${totalEntrees - totalSorties}`, 14, cursorY);
+          doc.text(`Entrées: ${totalEntrees} | Sorties: ${totalSorties} | Solde: ${totalEntrees - totalSorties} | Stock actuel: ${stockActuel}`, 14, cursorY);
           cursorY += 5;
 
           // Tableau des mouvements
@@ -11071,13 +11120,10 @@
         let visibleSorties = sorties;
         let visibleDemandes = demandes;
         try {
-          if (
-            currentUser &&
-            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
-          ) {
-            const allowed = new Set(getManagedOpsNormalized(currentUser));
-            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
-            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+          const allowed = getAllowedOpsForFluxUser();
+          if (allowed) {
+            visibleSorties = sorties.filter((s) => isFluxEntryAllowedForCurrentUser(s));
+            visibleDemandes = demandes.filter((d) => isFluxEntryAllowedForCurrentUser(d));
           }
         } catch (e) {
           console.error("Erreur export", e);
@@ -11085,6 +11131,7 @@
         }
 
         const cleanDesignation = String(designation || "").trim().toUpperCase();
+        const stockActuel = getCurrentStockQtyForDesignation(cleanDesignation);
         const mouvements = [];
 
         visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
@@ -11140,7 +11187,7 @@
         const solde = totalEntrees - totalSorties;
 
         doc.setFontSize(9);
-        doc.text(`Total Entrées: ${totalEntrees} | Total Sorties: ${totalSorties} | Solde: ${solde}`, 14, 38);
+        doc.text(`Total Entrées: ${totalEntrees} | Total Sorties: ${totalSorties} | Solde: ${solde} | Stock actuel: ${stockActuel}`, 14, 38);
 
         const tableBody = mouvements.map((mv) => [
           mv.type,
@@ -11175,20 +11222,22 @@
         let visibleSorties = sorties;
         let visibleDemandes = demandes;
         try {
-          if (
-            currentUser &&
-            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
-          ) {
-            const allowed = new Set(getManagedOpsNormalized(currentUser));
-            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
-            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+          const allowed = getAllowedOpsForFluxUser();
+          if (allowed) {
+            visibleSorties = sorties.filter((s) => isFluxEntryAllowedForCurrentUser(s));
+            visibleDemandes = demandes.filter((d) => isFluxEntryAllowedForCurrentUser(d));
           }
         } catch (e) {
           console.error("Erreur export", e);
           return;
         }
 
+        const stockQtyByDesignation = buildStockQtyByDesignation();
         const allMateriels = new Map();
+        stockQtyByDesignation.forEach((qty, label) => {
+          const material = ensureFluxMaterial(allMateriels, label);
+          if (material) material.stockActuel = qty;
+        });
         
         visibleSorties.forEach((sortie) => {
           const items = getSortieItems(sortie) || [];
@@ -11232,11 +11281,13 @@
         const summaryData = materiels.map((mat) => {
           const totalEntrees = mat.entrees.reduce((sum, e) => sum + e.qty, 0);
           const totalSorties = mat.sorties.reduce((sum, s) => sum + s.qty, 0);
+          const stockActuel = Number(mat.stockActuel) || 0;
           return {
             "Désignation": mat.designation,
             "Entrées": totalEntrees,
             "Sorties": totalSorties,
             "Solde": totalEntrees - totalSorties,
+            "Stock actuel": stockActuel,
             "Mouvements": mat.entrees.length + mat.sorties.length
           };
         });
@@ -11277,13 +11328,10 @@
         let visibleSorties = sorties;
         let visibleDemandes = demandes;
         try {
-          if (
-            currentUser &&
-            String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
-          ) {
-            const allowed = new Set(getManagedOpsNormalized(currentUser));
-            visibleSorties = sorties.filter((s) => allowed.has(normalizeOperatorKey(s.op)));
-            visibleDemandes = demandes.filter((d) => allowed.has(normalizeOperatorKey(d.op)));
+          const allowed = getAllowedOpsForFluxUser();
+          if (allowed) {
+            visibleSorties = sorties.filter((s) => isFluxEntryAllowedForCurrentUser(s));
+            visibleDemandes = demandes.filter((d) => isFluxEntryAllowedForCurrentUser(d));
           }
         } catch (e) {
           console.error("Erreur export", e);
@@ -11291,6 +11339,7 @@
         }
 
         const cleanDesignation = String(designation || "").trim().toUpperCase();
+        const stockActuel = getCurrentStockQtyForDesignation(cleanDesignation);
         const mouvements = [];
 
         visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
@@ -11337,6 +11386,7 @@
           "Total Entrées": totalEntrees,
           "Total Sorties": totalSorties,
           "Solde": totalEntrees - totalSorties,
+          "Stock actuel": stockActuel,
           "Date Export": new Date().toLocaleDateString('fr-FR')
         }];
 
