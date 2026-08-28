@@ -214,6 +214,12 @@
         overscroll-behavior-y: contain;
       }
 
+      input,
+      textarea,
+      select {
+        text-transform: none !important;
+      }
+
       @media (max-width: 768px) {
         body {
           font-size: 11px;
@@ -686,7 +692,7 @@
     </style>
   </head>
   <body
-    class="bg-slate-100 font-sans text-slate-800 overflow-hidden uppercase italic font-bold text-[10px]"
+    class="bg-slate-100 font-sans text-slate-800 overflow-hidden italic font-bold text-[10px]"
   >
     <audio
       id="beep-sound"
@@ -759,7 +765,7 @@
                 id="login-email"
                 type="email"
                 placeholder="EMAIL PROFESSIONNEL"
-                class="login-2026-input w-full p-3.5 md:p-4 rounded-2xl text-[11px] uppercase font-bold"
+                class="login-2026-input w-full p-3.5 md:p-4 rounded-2xl text-[11px] normal-case font-bold"
                 required
               />
 
@@ -768,7 +774,7 @@
                   id="login-password"
                   type="password"
                   placeholder="MOT DE PASSE"
-                  class="login-2026-input w-full p-3.5 md:p-4 rounded-2xl text-[11px] uppercase font-bold pr-11"
+                  class="login-2026-input w-full p-3.5 md:p-4 rounded-2xl text-[11px] normal-case font-bold pr-11"
                   required
                 />
                 <button
@@ -2028,8 +2034,15 @@
         return BON_OPERATORS.filter((op) => managed.has(normalizeOperatorKey(op)));
       }
 
+      function getDefaultWorkflowOperatorForCurrentUser() {
+        const operators = getWorkflowOperatorsForCurrentUser();
+        return operators.length > 0 ? operators[0] : "ITC-B01";
+      }
+
       function getWorkflowOperatorOptions(selectedValue = "") {
-        const selectedKey = normalizeOperatorKey(selectedValue);
+        const selectedKey = selectedValue
+          ? normalizeOperatorKey(selectedValue)
+          : getDefaultWorkflowOperatorForCurrentUser();
         return getWorkflowOperatorsForCurrentUser().map((op) => {
           const meta = getOperatorMeta(op);
           const selected = normalizeOperatorKey(op) === selectedKey ? "selected" : "";
@@ -8111,7 +8124,7 @@
               </div>`;
       }
 
-      function addTechDemandeRow(label = "", qty = "", op = "") {
+      function addTechDemandeRow(label = "", qty = "", op = getDefaultWorkflowOperatorForCurrentUser()) {
         const div = document.createElement("div");
         div.className =
           "grid grid-cols-1 md:grid-cols-[150px_1fr_100px_38px] gap-2 items-end tech-demande-row bg-slate-50 p-3 rounded-xl border";
