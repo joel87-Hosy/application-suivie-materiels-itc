@@ -953,8 +953,68 @@
         window.addEventListener("load", () => {
           navigator.serviceWorker
             .register("sw.js")
+            .then((registration) => {
+              registration.update().catch(() => {});
+              registration.addEventListener("updatefound", () => {
+                const worker = registration.installing;
+                if (!worker) return;
+                worker.addEventListener("statechange", () => {
+                  if (
+                    worker.state === "installed" &&
+                    navigator.serviceWorker.controller
+                  ) {
+                    showAppUpdateButton(true);
+                  }
+                });
+              });
+            })
             .catch((error) => console.warn("Service worker non actif", error));
         });
+      }
+
+      function showAppUpdateButton(isVisible) {
+        const button = document.getElementById("app-update-button");
+        if (button) button.classList.toggle("hidden", !isVisible);
+      }
+
+      async function updateInstalledApp() {
+        const button = document.getElementById("app-update-button");
+        const originalText = button ? button.innerHTML : "";
+        try {
+          if (button) {
+            button.disabled = true;
+            button.innerHTML =
+              '<i class="fas fa-spinner fa-spin mr-2"></i>Mise à jour...';
+          }
+
+          if ("serviceWorker" in navigator) {
+            const registration = await navigator.serviceWorker.getRegistration();
+            if (registration) {
+              await registration.update().catch(() => {});
+              const waitingWorker =
+                registration.waiting || registration.installing;
+              if (waitingWorker) {
+                waitingWorker.postMessage({ type: "SKIP_WAITING" });
+              }
+            }
+          }
+
+          if ("caches" in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map((name) => caches.delete(name)));
+          }
+
+          window.location.reload();
+        } catch (error) {
+          console.warn("Mise à jour impossible", error);
+          alert(
+            "Impossible de mettre à jour automatiquement. Vérifiez la connexion internet puis réessayez.",
+          );
+          if (button) {
+            button.disabled = false;
+            button.innerHTML = originalText;
+          }
+        }
       }
     </script>
 
@@ -1368,6 +1428,13 @@
             </div>
           </nav>
           <div class="p-4 border-t border-slate-800">
+            <button
+              id="app-update-button"
+              onclick="updateInstalledApp()"
+              class="w-full bg-sky-600 text-white py-2 rounded-xl text-xs font-black uppercase hover:bg-sky-700 transition mb-2"
+            >
+              <i class="fas fa-rotate mr-2"></i>Mettre à jour l'app
+            </button>
             <button
               onclick="logout()"
               class="w-full bg-red-600 text-white py-2 rounded-xl text-xs font-black uppercase hover:bg-red-700 transition"

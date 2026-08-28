@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v3";
+const CACHE_NAME = "itc-gestion-materiels-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -36,6 +36,12 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
@@ -65,13 +71,13 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      caches.match("./index.html").then((cached) => {
-        const networkFetch = fetch(request)
-          .then((response) => updateCache("./index.html", response))
-          .catch(() => cached || caches.match("./offline.html"));
-
-        return cached || networkFetch;
-      })
+      fetch(request)
+        .then((response) => updateCache("./index.html", response))
+        .catch(() =>
+          caches
+            .match("./index.html")
+            .then((cached) => cached || caches.match("./offline.html")),
+        )
     );
     return;
   }
