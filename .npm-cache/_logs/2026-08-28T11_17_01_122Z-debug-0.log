@@ -1,0 +1,21 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.12.1
+2 info using node@v24.15.0
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\ITC-PROBOOK_2\Desktop\Application-gestion-materiels\.npmrc
+5 silly config load:file:C:\Users\ITC-PROBOOK_2\.npmrc
+6 silly config load:file:C:\Users\ITC-PROBOOK_2\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm install ms@2.1.3
+8 verbose argv "install" "ms@2.1.3" "--cache" ".npm-cache" "--prefer-online" "--force"
+9 verbose logfile logs-max:10 dir:C:\Users\ITC-PROBOOK_2\Desktop\Application-gestion-materiels\.npm-cache\_logs\2026-08-28T11_17_01_122Z-
+10 verbose logfile C:\Users\ITC-PROBOOK_2\Desktop\Application-gestion-materiels\.npm-cache\_logs\2026-08-28T11_17_01_122Z-debug-0.log
+11 warn using --force Recommended protections disabled.
+12 silly logfile done cleaning log files
+13 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+14 silly idealTree buildDeps
+15 silly fetch manifest ms@2.1.3
+16 silly packumentCache full:https://registry.npmjs.org/ms cache-miss
+17 http fetch GET https://registry.npmjs.org/npm attempt 1 failed with ECONNRESET
+18 http fetch GET https://registry.npmjs.org/ms attempt 1 failed with ECONNRESET
+19 http fetch GET https://registry.npmjs.org/npm attempt 2 failed with ECONNRESET
+20 http fetch GET https://registry.npmjs.org/ms attempt 2 failed with ECONNRESET

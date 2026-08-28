@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
@@ -2319,6 +2319,16 @@
               await firebase.auth().signOut();
               alert(
                 "Acces bloque : votre entreprise est suspendue. Contactez l'administrateur plateforme.",
+              );
+              return;
+            }
+            if (userProfile.is_active === false) {
+              await firebase.auth().signOut();
+              const accountStatus = String(userProfile.account_status || "suspended").toLowerCase();
+              alert(
+                accountStatus === "disabled"
+                  ? "Acces bloque : votre compte est desactive. Contactez le superviseur."
+                  : "Acces bloque : votre compte est suspendu. Contactez le superviseur.",
               );
               return;
             }
@@ -7249,6 +7259,64 @@
         return [];
       }
 
+      function getCompanyUserStatus(user) {
+        if (user?.is_active === false) {
+          return String(user.account_status || "suspended").toLowerCase() === "disabled"
+            ? "disabled"
+            : "suspended";
+        }
+        return "active";
+      }
+
+      function manageCompanyUser(userId, action) {
+        if (!isCurrentCompanySupervisor()) return;
+
+        const users = Array.isArray(appData.users) ? appData.users : [];
+        const userIndex = users.findIndex((user) => String(user.id) === String(userId));
+        if (userIndex < 0) return;
+
+        const user = users[userIndex];
+        const isCurrentUser =
+          String(user.uid || "") === String(currentUser?.uid || "") ||
+          String(user.email || "").toLowerCase() === String(currentUser?.email || "").toLowerCase();
+        if (isCurrentUser) {
+          alert("Vous ne pouvez pas modifier votre propre compte depuis cette liste.");
+          return;
+        }
+
+        const labels = {
+          suspend: "suspendre",
+          disable: "desactiver",
+          activate: "reactiver",
+          delete: "supprimer definitivement le profil",
+        };
+        if (!labels[action]) return;
+        if (!window.confirm(`Voulez-vous ${labels[action]} le compte ${user.email || "selectionne"} ?`)) return;
+
+        if (action === "delete") {
+          users.splice(userIndex, 1);
+        } else {
+          user.is_active = action === "activate";
+          user.account_status = action === "activate" ? "active" : action === "disable" ? "disabled" : "suspended";
+          user.updated_at = new Date().toISOString();
+          user.updated_by = currentUser.email;
+        }
+
+        appData.users = users;
+        appData.platformAuditLogs = Array.isArray(appData.platformAuditLogs)
+          ? appData.platformAuditLogs
+          : [];
+        appData.platformAuditLogs.unshift({
+          action: `ACCOUNT_${action.toUpperCase()}`,
+          user_id: user.id,
+          email: user.email,
+          by: currentUser.email,
+          date: new Date().toLocaleString("fr-FR"),
+        });
+        save();
+        renderCompanyUsersAdmin(document.getElementById("app-container"));
+      }
+
       function generateTemporaryPassword() {
         const alphabet =
           "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -7311,11 +7379,31 @@
                 </td>
                 <td class="py-3 text-slate-400">${Array.isArray(user.managedOps) ? escapeHtml(user.managedOps.join(", ")) : "-"}</td>
                 <td class="py-3">
+                  <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${
+                    getCompanyUserStatus(user) === "active"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : getCompanyUserStatus(user) === "disabled"
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200"
+                  }">${getCompanyUserStatus(user) === "active" ? "Actif" : getCompanyUserStatus(user) === "disabled" ? "Desactive" : "Suspendu"}</span>
+                </td>
+                <td class="py-3">
                   ${
                     user.temporary_password
                       ? `<input readonly value="${escapeHtml(user.temporary_password)}" class="border rounded-lg px-2 py-1 text-[8px] font-black text-slate-600 bg-slate-50 w-36" onclick="this.select()" />`
                       : '<span class="text-slate-300">-</span>'
                   }
+                </td>
+                <td class="py-3">
+                  <div class="flex flex-wrap gap-1">
+                    ${
+                      getCompanyUserStatus(user) === "active"
+                        ? `<button type="button" onclick="manageCompanyUser('${escapeHtml(user.id)}', 'suspend')" class="bg-amber-100 text-amber-800 rounded-lg px-2 py-1 text-[8px] font-black uppercase" title="Suspendre ce compte"><i class="fas fa-pause mr-1"></i>Suspendre</button>
+                           <button type="button" onclick="manageCompanyUser('${escapeHtml(user.id)}', 'disable')" class="bg-red-100 text-red-800 rounded-lg px-2 py-1 text-[8px] font-black uppercase" title="Desactiver ce compte"><i class="fas fa-ban mr-1"></i>Desactiver</button>`
+                        : `<button type="button" onclick="manageCompanyUser('${escapeHtml(user.id)}', 'activate')" class="bg-emerald-100 text-emerald-800 rounded-lg px-2 py-1 text-[8px] font-black uppercase" title="Reactiver ce compte"><i class="fas fa-play mr-1"></i>Reactiver</button>`
+                    }
+                    <button type="button" onclick="manageCompanyUser('${escapeHtml(user.id)}', 'delete')" class="bg-slate-100 text-slate-700 rounded-lg px-2 py-1 text-[8px] font-black uppercase" title="Supprimer le profil"><i class="fas fa-trash mr-1"></i>Supprimer</button>
+                  </div>
                 </td>
               </tr>`;
           })
@@ -7368,10 +7456,12 @@
                         <th class="pb-2">Email</th>
                         <th class="pb-2">Role</th>
                         <th class="pb-2">Acces</th>
+                        <th class="pb-2">Statut</th>
                         <th class="pb-2">Mot de passe temp.</th>
+                        <th class="pb-2">Actions</th>
                       </tr>
                     </thead>
-                    <tbody>${rows || '<tr><td colspan="5" class="py-8 text-center text-slate-400">Aucun utilisateur cree.</td></tr>'}</tbody>
+                    <tbody>${rows || '<tr><td colspan="7" class="py-8 text-center text-slate-400">Aucun utilisateur cree.</td></tr>'}</tbody>
                   </table>
                 </div>
               </div>
