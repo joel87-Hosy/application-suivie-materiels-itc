@@ -3,6 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0369a1" />
+    <meta name="description" content="Application de gestion des materiels, stocks et bons de sortie ITC." />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="ITC Stock" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="assets/pwa-icon-192.png" />
     <title>ITC Telecom ERP | Automation & Stock Expert</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
@@ -935,6 +943,13 @@
           console.warn("Erreur clearStockFilter", e);
         }
       }
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("sw.js")
+            .catch((error) => console.warn("Service worker non actif", error));
+        });
+      }
     </script>
 
     <div id="main-app" class="hidden">
@@ -1678,9 +1693,17 @@
           },
           {
             id: 8,
-            name: "TECHNICIEN TERRAIN",
+            name: "TECHNICIEN BUREAU 01",
             role: "Technicien",
             email: "tech@itc.ci",
+            managedOps: ["ITC-B01"],
+          },
+          {
+            id: 10,
+            name: "TECHNICIEN BUREAU 02",
+            role: "Technicien",
+            email: "tech_b02@itc.ci",
+            managedOps: ["ITC-B02"],
           },
         ],
       };
@@ -1979,7 +2002,7 @@
 
       function getStockEntriesForCurrentUserDesignations() {
         const stock = appData && Array.isArray(appData.stock) ? appData.stock : [];
-        if (!isGestionnaireUser(currentUser)) return stock;
+        if (!isStockScopedUser(currentUser)) return stock;
 
         const managed = new Set(getManagedOpsNormalized(currentUser));
         return stock.filter((s) => managed.has(normalizeOperatorKey(s.op)));
@@ -1999,9 +2022,15 @@
 
       const BON_OPERATORS = ["ITC-B01", "ITC-B02", "ORANGE", "MOOV", "MTN"];
 
+      function getWorkflowOperatorsForCurrentUser() {
+        if (!isStockScopedUser(currentUser)) return BON_OPERATORS;
+        const managed = new Set(getManagedOpsNormalized(currentUser));
+        return BON_OPERATORS.filter((op) => managed.has(normalizeOperatorKey(op)));
+      }
+
       function getWorkflowOperatorOptions(selectedValue = "") {
         const selectedKey = normalizeOperatorKey(selectedValue);
-        return BON_OPERATORS.map((op) => {
+        return getWorkflowOperatorsForCurrentUser().map((op) => {
           const meta = getOperatorMeta(op);
           const selected = normalizeOperatorKey(op) === selectedKey ? "selected" : "";
           return `<option value="${escapeHtml(op)}" ${selected}>${escapeHtml(meta.label)}</option>`;
@@ -2595,8 +2624,20 @@
         );
       }
 
+      function isTechnicienUser(user) {
+        return (
+          String(user?.role || "")
+            .trim()
+            .toUpperCase() === "TECHNICIEN"
+        );
+      }
+
+      function isStockScopedUser(user) {
+        return isGestionnaireUser(user) || isTechnicienUser(user);
+      }
+
       function isOperatorAllowedForUser(user, opValue) {
-        if (!isGestionnaireUser(user)) return true;
+        if (!isStockScopedUser(user)) return true;
 
         const managed = new Set(getManagedOpsNormalized(user));
         const raw = String(opValue || "")
@@ -7305,7 +7346,7 @@
                   <option value="Coordinatrice">Coordinatrice</option>
                   <option value="Technicien">Technicien</option>
                 </select>
-                <input id="cu-managed-ops" class="w-full border rounded-xl p-3 text-xs" placeholder="Acces stock du gestionnaire (ex: MAGASIN-A,DEPOT-1)" />
+                <input id="cu-managed-ops" class="w-full border rounded-xl p-3 text-xs" placeholder="Acces stock gestionnaire/technicien (ex: ITC-B01 ou ITC-B02)" />
                 <div class="grid grid-cols-[1fr_auto] gap-2">
                   <input id="cu-temp-password" class="w-full border rounded-xl p-3 text-xs font-black text-slate-700" readonly value="${generateTemporaryPassword()}" onclick="this.select()" />
                   <button type="button" onclick="refreshCompanyUserTempPassword()" class="bg-cyan-600 text-white rounded-xl px-3 text-[8px] font-black uppercase">Generer</button>
@@ -7350,10 +7391,15 @@
           .value.split(",")
           .map((op) => op.trim())
           .filter(Boolean);
-        const managedOps =
-          String(role).toUpperCase() === "GESTIONNAIRE"
+        let managedOps =
+          ["GESTIONNAIRE", "TECHNICIEN"].includes(String(role).toUpperCase())
             ? manualOps
             : [];
+        if (String(role).toUpperCase() === "TECHNICIEN" && managedOps.length === 0) {
+          const fingerprint = `${document.getElementById("cu-user-name").value} ${document.getElementById("cu-user-email").value}`.toUpperCase();
+          if (fingerprint.includes("B02") || fingerprint.includes("BUREAU 02")) managedOps = ["ITC-B02"];
+          else managedOps = ["ITC-B01"];
+        }
 
         appData.users = Array.isArray(appData.users) ? appData.users : [];
         const email = document.getElementById("cu-user-email").value.trim().toLowerCase();
@@ -8010,6 +8056,10 @@
           const ops = [...new Set(items.map((item) => item.op))];
           if (!items.length || !ops.length) {
             alert("Ajoutez au moins un article avec son operateur.");
+            return;
+          }
+          if (ops.some((op) => !isOperatorAllowedForUser(currentUser, op))) {
+            alert("Vous n'avez pas acces a un des operateurs selectionnes.");
             return;
           }
           if (ops.length > 2) {
