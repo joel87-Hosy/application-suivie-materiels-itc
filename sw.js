@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v2";
+const CACHE_NAME = "itc-gestion-materiels-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -41,22 +41,37 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
+
+  const updateCache = (cacheKey, response) => {
+    if (response && response.ok) {
+      const clone = response.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(cacheKey, clone));
+    }
+    return response;
+  };
+
   if (url.origin !== self.location.origin) {
     event.respondWith(
-      fetch(request).catch(() => caches.match(request))
+      caches.match(request).then((cached) => {
+        const networkFetch = fetch(request)
+          .then((response) => updateCache(request, response))
+          .catch(() => cached);
+
+        return cached || networkFetch;
+      })
     );
     return;
   }
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", clone));
-          return response;
-        })
-        .catch(() => caches.match("./index.html").then((cached) => cached || caches.match("./offline.html")))
+      caches.match("./index.html").then((cached) => {
+        const networkFetch = fetch(request)
+          .then((response) => updateCache("./index.html", response))
+          .catch(() => cached || caches.match("./offline.html"));
+
+        return cached || networkFetch;
+      })
     );
     return;
   }
