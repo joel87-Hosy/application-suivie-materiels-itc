@@ -16,7 +16,7 @@ const argv = yargs
   .option("role", {
     type: "string",
     default: "Gestionnaire",
-    choices: ["Superviseur", "Gestionnaire", "Coordinatrice", "Technicien"],
+    choices: ["Superviseur", "Superviseur Terrain", "Gestionnaire", "Coordinatrice", "Coordinateur", "Technicien"],
   })
   .option("companyId", {
     type: "string",

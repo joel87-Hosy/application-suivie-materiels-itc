@@ -1011,6 +1011,26 @@
               </div>
               <div
                 onclick="
+                  showSection('coord-demandes-tech');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-orange-300"
+              >
+                <i class="fas fa-file-signature w-5 text-orange-400"></i>
+                Bons Techniciens
+              </div>
+              <div
+                onclick="
+                  showSection('bons-signes');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-emerald-300"
+              >
+                <i class="fas fa-clock-rotate-left w-5 text-emerald-400"></i>
+                Bons Signes
+              </div>
+              <div
+                onclick="
                   showSection('stats-consommation');
                   toggleSidebarMobile();
                 "
@@ -1114,6 +1134,16 @@
                 <i class="fas fa-plus-square w-5 text-pink-400"></i> Commande
                 Directe
               </div>
+              <div
+                onclick="
+                  showSection('bons-signes');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
+              >
+                <i class="fas fa-clock-rotate-left w-5 text-emerald-400"></i>
+                Bons Signes
+              </div>
               <input
                 type="file"
                 id="excel-upload"
@@ -1181,6 +1211,16 @@
               >
                 <i class="fas fa-clipboard-list w-5 text-indigo-400"></i>
                 Bons de Sortie
+              </div>
+              <div
+                onclick="
+                  showSection('bons-signes');
+                  toggleSidebarMobile();
+                "
+                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-emerald-300"
+              >
+                <i class="fas fa-clock-rotate-left w-5 text-emerald-400"></i>
+                Bons Signes
               </div>
 
               <div
@@ -1903,6 +1943,8 @@
                   renderDemandesGestionnaire(container);
                 else if (currentSectionId === "tech-mes-demandes")
                   renderTechMesDemandes(container);
+                else if (currentSectionId === "bons-signes")
+                  renderSignedBonsHistory(container);
                 else if (currentSectionId.startsWith("stock-"))
                   renderStock(
                     currentSectionId.replace("stock-", ""),
@@ -1953,6 +1995,55 @@
         return (labels || [])
           .map((label) => `<option value="${escapeHtml(String(label || ""))}"></option>`)
           .join("");
+      }
+
+      const BON_OPERATORS = ["ITC-B01", "ITC-B02", "ORANGE", "MOOV", "MTN"];
+
+      function getWorkflowOperatorOptions(selectedValue = "") {
+        const selectedKey = normalizeOperatorKey(selectedValue);
+        return BON_OPERATORS.map((op) => {
+          const meta = getOperatorMeta(op);
+          const selected = normalizeOperatorKey(op) === selectedKey ? "selected" : "";
+          return `<option value="${escapeHtml(op)}" ${selected}>${escapeHtml(meta.label)}</option>`;
+        }).join("");
+      }
+
+      function getCoordinatorUsers() {
+        return (appData.users || []).filter((u) => {
+          const role = String(u.role || "").toUpperCase();
+          return role.includes("COORD") || role === "SUPERVISEUR TERRAIN";
+        });
+      }
+
+      function getGestionnaireUsers() {
+        return (appData.users || []).filter((u) => {
+          const role = String(u.role || "").toUpperCase();
+          return role.includes("GESTION") || role.includes("MAGASIN");
+        });
+      }
+
+      function getDemandeOps(demande) {
+        const ops = Array.isArray(demande?.ops)
+          ? demande.ops
+          : String(demande?.op || "")
+              .split("/")
+              .map((op) => op.trim());
+        return [
+          ...new Set(
+            ops
+              .map((op) => normalizeOperatorKey(op))
+              .filter(Boolean),
+          ),
+        ];
+      }
+
+      function formatDemandeOps(demande) {
+        const ops = getDemandeOps(demande);
+        return ops.map((op) => getOperatorMeta(op).label).join(" / ") || "NON RENSEIGNE";
+      }
+
+      function getDemandItemOperator(item, demande) {
+        return normalizeOperatorKey(item?.op || demande?.op || "ITC-B01");
       }
 
       function isLabelAllowedForDatalist(label, datalistId) {
@@ -2315,7 +2406,12 @@
         if (menuCoord)
           menuCoord.classList.toggle(
             "hidden",
-            isSuperAdmin || r !== "COORDINATRICE",
+            isSuperAdmin ||
+              !(
+                r === "COORDINATRICE" ||
+                r === "COORDINATEUR" ||
+                r === "SUPERVISEUR TERRAIN"
+              ),
           );
 
         // 4. Menu Gestionnaire (MAGASIN) - On vérifie plusieurs variantes possibles
@@ -5215,6 +5311,9 @@
       }
 
       function getSortieSignatureText(sortie, fallbackName) {
+        if (sortie?.managerSignatureText) {
+          return String(sortie.managerSignatureText).trim();
+        }
         return formatAutomaticSignature(
           sortie?.validatedBy || sortie?.signedBy || sortie?.createdBy || fallbackName,
           sortie?.validatedAt || sortie?.signedAt || sortie?.date,
@@ -5222,6 +5321,9 @@
       }
 
       function getSortieTechnicianSignatureText(sortie) {
+        if (sortie?.technicianSignatureText) {
+          return String(sortie.technicianSignatureText).trim();
+        }
         return formatAutomaticSignature(
           sortie?.tech || sortie?.demandeurName || sortie?.technicien || "TECHNICIEN",
           sortie?.validatedAt || sortie?.signedAt || sortie?.dateLivraison || sortie?.date,
@@ -5229,6 +5331,9 @@
       }
 
       function getSortieCoordinationSignatureText(sortie) {
+        if (sortie?.coordinationSignatureText) {
+          return String(sortie.coordinationSignatureText).trim();
+        }
         return formatAutomaticSignature(
           sortie?.coordinateurNom || sortie?.coordinationBy || "COORDINATION",
           sortie?.validatedAt || sortie?.signedAt || sortie?.dateLivraison || sortie?.date,
@@ -5279,7 +5384,8 @@
         const coordinationSignature = getSortieCoordinationSignatureText(sortie);
         const receiver = String(sortie.tech || "").toUpperCase();
         const ref = String(sortie.ref || "").toUpperCase();
-        const op = String(sortie.op || "").toUpperCase();
+        const op = formatDemandeOps(sortie).toUpperCase();
+        const receiverRole = String(sortie.receptionnaireRole || sortie.demandeurRole || "GESTIONNAIRE").toUpperCase();
 
         doc.setFont("helvetica", "normal");
         doc.setTextColor(20, 20, 20);
@@ -5343,7 +5449,7 @@
         doc.text("Service/Departement : LOGISTIQUE", margin, y);
         doc.text(`Emetteur : ${emetteur}`, 105, y);
         y += 7;
-        doc.text("Fonction : GESTIONNAIRE", margin, y);
+        doc.text(`Fonction : ${receiverRole}`, margin, y);
         y += 9;
 
         doc.setFont("helvetica", "bold");
@@ -5370,7 +5476,7 @@
           ? items.map((item, index) => [
               String(index + 1).padStart(2, "0"),
               String(item.label || "").toUpperCase(),
-              ref || "-",
+              `${getOperatorMeta(getDemandItemOperator(item, sortie)).label} / ${ref || "-"}`,
               String(parseInt(item.qty, 10) || 0),
             ])
           : [["", "Detail des articles indisponible", ref || "-", "-"]];
@@ -5765,6 +5871,9 @@
           renderCoordCreationDirecte(container);
         } else if (id === "coord-excel") {
           renderCoordExcelUpload(container);
+        } else if (id === "bons-signes") {
+          viewTitle.innerText = "HISTORIQUE DES BONS SIGNES";
+          renderSignedBonsHistory(container);
         } else if (id === "demandes-coordonnatrice") {
           renderDemandesGestionnaire(container);
         } else if (id === "reception") {
@@ -7147,7 +7256,9 @@
                 ? "bg-indigo-50 text-indigo-700 border-indigo-200"
                 : role === "GESTIONNAIRE"
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : role === "COORDINATRICE"
+                  : role === "COORDINATRICE" ||
+                      role === "COORDINATEUR" ||
+                      role === "SUPERVISEUR TERRAIN"
                     ? "bg-amber-50 text-amber-700 border-amber-200"
                     : "bg-cyan-50 text-cyan-700 border-cyan-200";
             return `
@@ -7177,7 +7288,7 @@
                 <div>
                   <p class="text-[9px] uppercase tracking-[0.18em] text-slate-400">Administration entreprise</p>
                   <h2 class="text-xl font-black uppercase text-slate-900">${escapeHtml(company?.name || "Entreprise")}</h2>
-                  <p class="text-[10px] text-slate-500">Creation des comptes par defaut : Gestionnaire, Coordinatrice, Technicien.</p>
+                  <p class="text-[10px] text-slate-500">Creation des comptes : Superviseur Terrain, Coordinateur, Gestionnaire, Technicien. Le role Superviseur reste reserve au directeur.</p>
                 </div>
               </div>
             </div>
@@ -7188,6 +7299,8 @@
                 <input id="cu-user-name" class="w-full border rounded-xl p-3 text-xs" placeholder="Nom complet" required />
                 <input id="cu-user-email" class="w-full border rounded-xl p-3 text-xs" type="email" placeholder="Email" required />
                 <select id="cu-user-role" class="w-full border rounded-xl p-3 text-xs">
+                  <option value="Superviseur Terrain">Superviseur Terrain</option>
+                  <option value="Coordinateur">Coordinateur</option>
                   <option value="Gestionnaire">Gestionnaire</option>
                   <option value="Coordinatrice">Coordinatrice</option>
                   <option value="Technicien">Technicien</option>
@@ -7539,13 +7652,13 @@
         const myBS = sourceDemandes.filter(
           (d) =>
             d.demandeurOriginalId === currentUser.id &&
-            ["EN ATTENTE GESTIONNAIRE", "PRET", "LIVREE"].includes(d.status),
+            ["EN ATTENTE COORDINATION", "EN ATTENTE GESTIONNAIRE", "PRET", "LIVREE"].includes(d.status),
         );
 
         const kpiReady = myBS.filter((d) => d.status === "PRET").length;
         const kpiDelivered = myBS.filter((d) => d.status === "LIVREE").length;
         const kpiPending = myBS.filter(
-          (d) => d.status === "EN ATTENTE GESTIONNAIRE",
+          (d) => ["EN ATTENTE COORDINATION", "EN ATTENTE GESTIONNAIRE"].includes(d.status),
         ).length;
 
         // Optionnel : On inverse pour voir les plus récents en premier
@@ -7613,7 +7726,177 @@
                   </div>
               </div>`;
       }
+
+      function isBonSignedByCurrentUser(bon) {
+        const userId = parseInt(currentUser?.id);
+        const userName = String(currentUser?.name || "").trim().toUpperCase();
+        const isTechSigner = parseInt(bon?.demandeurOriginalId) === userId && !!bon?.technicianSignatureText;
+        const isCoordSigner =
+          (parseInt(bon?.coordinateurId) === userId ||
+            String(bon?.coordinationBy || "").trim().toUpperCase() === userName ||
+            String(bon?.coordinateurNom || "").trim().toUpperCase() === userName) &&
+          !!bon?.coordinationSignatureText;
+        const isManagerSigner =
+          (parseInt(bon?.validatedById) === userId ||
+            String(bon?.validatedBy || "").trim().toUpperCase() === userName) &&
+          (!!bon?.managerSignatureText || !!bon?.validatedAt);
+        return isTechSigner || isCoordSigner || isManagerSigner;
+      }
+
+      function getBonSignatureRoleForCurrentUser(bon) {
+        const userId = parseInt(currentUser?.id);
+        const userName = String(currentUser?.name || "").trim().toUpperCase();
+        if (parseInt(bon?.demandeurOriginalId) === userId && bon?.technicianSignatureText) {
+          return "Technicien";
+        }
+        if (
+          (parseInt(bon?.coordinateurId) === userId ||
+            String(bon?.coordinationBy || "").trim().toUpperCase() === userName ||
+            String(bon?.coordinateurNom || "").trim().toUpperCase() === userName) &&
+          bon?.coordinationSignatureText
+        ) {
+          return "Coordination / Supervision";
+        }
+        if (
+          (parseInt(bon?.validatedById) === userId ||
+            String(bon?.validatedBy || "").trim().toUpperCase() === userName) &&
+          bon?.managerSignatureText
+        ) {
+          return "Gestionnaire";
+        }
+        return "Signataire";
+      }
+
+      function renderSignedBonsHistory(container) {
+        const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
+        const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
+        const signedDemandes = demandes
+          .filter((bon) => bon?.workflow === "TECH_BON_SORTIE" && isBonSignedByCurrentUser(bon));
+        const signedSorties = sorties
+          .filter((sortie) => !sortie.sourceDemandeId && isBonSignedByCurrentUser(sortie))
+          .map((sortie) => ({ ...sortie, historySource: "SORTIE" }));
+        const signedBons = [...signedDemandes, ...signedSorties]
+          .slice()
+          .sort((a, b) => getSortieTimestamp(b.validatedAt || b.coordinationSignedAt || b.date) - getSortieTimestamp(a.validatedAt || a.coordinationSignedAt || a.date));
+
+        container.innerHTML = `
+          <div class="bg-white rounded-3xl p-8 shadow-xl italic font-bold">
+            <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 text-white">
+              <div class="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <p class="text-[8px] tracking-[0.2em] opacity-80">TRACABILITE PERSONNELLE</p>
+                  <h3 class="text-xl font-black mt-1 uppercase"><i class="fas fa-clock-rotate-left mr-2"></i>Historique des bons signes</h3>
+                </div>
+                <div class="bg-white/20 px-4 py-2 rounded-xl text-center min-w-[120px]">
+                  <p class="text-[8px] uppercase">Bons</p>
+                  <p class="text-2xl font-black">${signedBons.length}</p>
+                </div>
+              </div>
+            </div>
+            <div class="space-y-3">
+              ${
+                signedBons.length
+                  ? signedBons
+                      .map((bon) => {
+                        const role = getBonSignatureRoleForCurrentUser(bon);
+                        return `
+                          <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-emerald-300 transition">
+                            <div class="flex justify-between items-start gap-3 flex-wrap">
+                              <div>
+                                <p class="font-black text-slate-900 text-[11px] uppercase"><i class="fas fa-file-signature text-emerald-600 mr-2"></i>${escapeHtml(bon.id)} - ${escapeHtml(bon.demandeurName || "")}</p>
+                                <p class="text-[8px] text-slate-500 uppercase mt-1">Role signature : ${escapeHtml(role)} | Statut : ${escapeHtml(bon.status || "")}</p>
+                                <p class="text-[8px] text-slate-500 uppercase mt-1">Operateur(s) : ${escapeHtml(formatDemandeOps(bon))}</p>
+                                <p class="text-[8px] text-orange-600 uppercase mt-1">Motif : ${escapeHtml(bon.motif || bon.ref || "")}</p>
+                              </div>
+                              <button onclick="${bon.historySource === "SORTIE" ? "exportSortiePDF" : "downloadPDF"}('${bon.id}')" class="bg-emerald-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-emerald-700 transition inline-flex items-center gap-2">
+                                <i class="fas fa-file-pdf"></i> PDF
+                              </button>
+                            </div>
+                          </div>`;
+                      })
+                      .join("")
+                  : `<div class="text-center py-12 opacity-40"><i class="fas fa-folder-open text-4xl mb-3 text-slate-300"></i><p class="uppercase font-black text-[9px] text-slate-400">Aucun bon signe pour ce compte</p></div>`
+              }
+            </div>
+          </div>`;
+      }
       function renderTechDemandeForm(container) {
+        const designations = getDesignationLabelsFromStock(appData.stock || []);
+        const coordinators = getCoordinatorUsers();
+        const coordinatorOptions = coordinators.length
+          ? coordinators
+              .map(
+                (u) =>
+                  `<option value="${u.id}">${escapeHtml(u.name)} - ${escapeHtml(u.role || "")}</option>`,
+              )
+              .join("")
+          : `<option value="7">COORDINATION / SUPERVISION</option>`;
+        container.innerHTML = `
+              <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
+                  <div class="mb-8 rounded-2xl p-5 bg-gradient-to-r from-indigo-800 via-blue-700 to-cyan-600 text-white">
+                    <div class="flex items-center justify-between gap-4 flex-wrap">
+                      <div>
+                        <p class="text-[8px] tracking-[0.2em] opacity-80">BON TECHNICIEN</p>
+                        <h3 class="mt-1 uppercase text-xl font-black italic">
+                          <i class="fas fa-file-signature mr-2"></i> Demande de Materiels
+                        </h3>
+                      </div>
+                      <div class="bg-white/20 px-4 py-2 rounded-xl text-center min-w-[150px]">
+                        <p class="text-[8px] uppercase">Operateurs choisis</p>
+                        <p id="tech-selected-ops-count" class="text-2xl font-black">0</p>
+                      </div>
+                    </div>
+                  </div>
+                  <form onsubmit="handleTechSubmit(event)" class="space-y-6">
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border-2">
+                          <div>
+                              <label class="text-[8px] text-slate-400 uppercase">Operateur(s)</label>
+                              <input id="t-op" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="AUTO" readonly required />
+                          </div>
+                          <div>
+                              <label class="text-[8px] text-slate-400 uppercase">Receptionnaire</label>
+                              <input id="t-nom" type="text" value="${escapeHtml(currentUser.name || "")}" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="VOTRE NOM" required />
+                          </div>
+                          <div>
+                              <label class="text-[8px] text-slate-400 uppercase">Role du receptionnaire</label>
+                              <input id="t-role" type="text" value="${escapeHtml(currentUser.role || "TECHNICIEN")}" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="EX: TECHNICIEN" required />
+                          </div>
+                          <div>
+                              <label class="text-[8px] text-slate-400 uppercase">Emetteur / Coordinateur ou Superviseur</label>
+                              <select id="t-coordinateur" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" required>
+                                ${coordinatorOptions}
+                              </select>
+                          </div>
+                          <div class="md:col-span-2">
+                              <label class="text-[8px] text-slate-400 uppercase">Reference du bon / Motif</label>
+                              <input id="t-objectif" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="EX: BON N 123 - CHANTIER ABOBO" required />
+                          </div>
+                      </div>
+
+                      <div class="space-y-3" id="tech-items-list">
+                          <p class="text-[9px] text-indigo-600 mb-2 uppercase font-black">Articles demandes par operateur :</p>
+                          <datalist id="tech-designations-list">${buildDatalistOptions(designations)}</datalist>
+                      </div>
+
+                      <button type="button" onclick="addTechDemandeRow()" class="bg-slate-200 text-slate-700 px-6 py-3 rounded-xl text-[9px] uppercase font-black inline-flex items-center gap-2">
+                        <i class="fas fa-plus"></i> Ajouter un article
+                      </button>
+
+                      <div id="tech-operator-stock-view" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+
+                      <div>
+                          <label class="text-[8px] text-slate-400 uppercase">Signature electronique du technicien</label>
+                          <textarea id="t-signature" class="w-full border-2 p-3 rounded-xl text-xs h-24 uppercase bg-slate-50 outline-none focus:border-indigo-500" placeholder="ECRIVEZ VOTRE NOM COMPLET POUR SIGNER" required></textarea>
+                      </div>
+
+                      <button type="submit" class="w-full bg-indigo-600 text-white py-4 rounded-2xl text-[10px] uppercase font-black shadow-lg hover:bg-indigo-700 transition inline-flex items-center justify-center gap-2">
+                          <i class="fas fa-paper-plane"></i>
+                          Envoyer a la coordination
+                      </button>
+                  </form>
+              </div>`;
+        addTechDemandeRow();
+        return;
         container.innerHTML = `
               <div class="max-w-2xl mx-auto bg-white p-8 rounded-3xl shadow-xl italic font-bold">
                   <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-indigo-800 via-blue-700 to-cyan-600 text-white">
@@ -7650,8 +7933,125 @@
               </div>`;
       }
 
+      function addTechDemandeRow(label = "", qty = "", op = "ITC-B01") {
+        const div = document.createElement("div");
+        div.className =
+          "grid grid-cols-1 md:grid-cols-[150px_1fr_100px_38px] gap-2 items-end tech-demande-row bg-slate-50 p-3 rounded-xl border";
+        div.innerHTML = `
+          <div>
+            <label class="text-[7px] text-slate-400 uppercase">Operateur</label>
+            <select class="w-full border p-2 rounded-lg text-[9px] art-op uppercase bg-white" onchange="updateTechDemandeOperators()" required>
+              ${getWorkflowOperatorOptions(op)}
+            </select>
+          </div>
+          <div>
+            <label class="text-[7px] text-slate-400 uppercase">Designation</label>
+            <input type="text" list="tech-designations-list" placeholder="NOM DE L'ARTICLE" class="w-full border p-2 rounded-lg text-[9px] art-l uppercase bg-white" value="${escapeHtml(label)}" required />
+          </div>
+          <div>
+            <label class="text-[7px] text-slate-400 uppercase">Quantite</label>
+            <input type="number" placeholder="QTE" class="w-full border p-2 rounded-lg text-[9px] art-q" value="${escapeHtml(qty)}" required min="1" />
+          </div>
+          <button type="button" onclick="this.closest('.tech-demande-row').remove(); updateTechDemandeOperators();" class="text-red-500 p-2 hover:bg-red-50 rounded-lg transition"><i class="fas fa-trash"></i></button>
+        `;
+        document.getElementById("tech-items-list").appendChild(div);
+        updateTechDemandeOperators();
+      }
+
+      function updateTechDemandeOperators() {
+        const rows = Array.from(document.querySelectorAll(".tech-demande-row"));
+        const ops = [
+          ...new Set(
+            rows
+              .map((row) => normalizeOperatorKey(row.querySelector(".art-op")?.value))
+              .filter(Boolean),
+          ),
+        ];
+        const labels = ops.map((op) => getOperatorMeta(op).label);
+        const opInput = document.getElementById("t-op");
+        if (opInput) opInput.value = labels.join(" / ");
+        const count = document.getElementById("tech-selected-ops-count");
+        if (count) count.innerText = String(ops.length);
+
+        const view = document.getElementById("tech-operator-stock-view");
+        if (!view) return;
+        view.innerHTML = ops
+          .map((op) => {
+            const meta = getOperatorMeta(op);
+            const entries = (appData.stock || [])
+              .filter((s) => normalizeOperatorKey(s.op) === op)
+              .slice(0, 8);
+            return `
+              <div class="border rounded-2xl p-3 bg-white">
+                <p class="text-[8px] uppercase font-black ${meta.badge} inline-flex px-2 py-1 rounded-lg">${escapeHtml(meta.label)}</p>
+                <div class="mt-2 space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+                  ${
+                    entries.length
+                      ? entries.map((s) => `<p class="text-[8px] uppercase text-slate-500 flex justify-between gap-2"><span>${escapeHtml(s.label)}</span><b>${parseInt(s.qty) || 0}</b></p>`).join("")
+                      : `<p class="text-[8px] uppercase text-slate-400">Aucun stock visible</p>`
+                  }
+                </div>
+              </div>`;
+          })
+          .join("");
+      }
+
       function handleTechSubmit(e) {
         e.preventDefault();
+        if (document.querySelector(".tech-demande-row")) {
+          const rows = Array.from(document.querySelectorAll(".tech-demande-row"));
+          const items = rows
+            .map((r) => ({
+              op: normalizeOperatorKey(r.querySelector(".art-op")?.value),
+              label: String(r.querySelector(".art-l")?.value || "").toUpperCase().trim(),
+              qty: parseInt(r.querySelector(".art-q")?.value, 10) || 0,
+            }))
+            .filter((item) => item.op && item.label && item.qty > 0);
+          const ops = [...new Set(items.map((item) => item.op))];
+          if (!items.length || !ops.length) {
+            alert("Ajoutez au moins un article avec son operateur.");
+            return;
+          }
+          if (ops.length > 2) {
+            alert("Vous pouvez choisir au maximum deux operateurs pour une demande.");
+            return;
+          }
+          const coordSelect = document.getElementById("t-coordinateur");
+          const assignedCoordinateurId = coordSelect ? parseInt(coordSelect.value, 10) : 7;
+          const assignedCoordinateurName =
+            (appData.users || []).find((u) => parseInt(u.id) === assignedCoordinateurId)?.name ||
+            "COORDINATION / SUPERVISION";
+          const now = new Date().toLocaleString();
+          const d = {
+            id: "BS-" + Date.now().toString().slice(-4),
+            workflow: "TECH_BON_SORTIE",
+            demandeurOriginalId: currentUser.id,
+            demandeurName: document.getElementById("t-nom").value.toUpperCase(),
+            technicienId: currentUser.id,
+            technicienNom: document.getElementById("t-nom").value.toUpperCase(),
+            receptionnaireRole: document.getElementById("t-role").value.toUpperCase(),
+            coordinateurId: assignedCoordinateurId,
+            coordinateurNom: assignedCoordinateurName,
+            emetteur: assignedCoordinateurName,
+            op: ops.join(" / "),
+            ops,
+            items,
+            motif: document.getElementById("t-objectif").value.toUpperCase(),
+            ref: document.getElementById("t-objectif").value.toUpperCase(),
+            status: "EN ATTENTE COORDINATION",
+            statut: "EN ATTENTE COORDINATION",
+            technicianSignatureText: String(document.getElementById("t-signature").value || "").toUpperCase().trim(),
+            technicianSignedAt: now,
+            date: new Date().toLocaleDateString(),
+          };
+          if (!appData.demandes) appData.demandes = [];
+          appData.demandes.unshift(d);
+          addNotification(assignedCoordinateurId, `DEMANDE A SIGNER : ${d.id} - ${d.demandeurName}`);
+          save();
+          alert("DEMANDE TRANSMISE AU COORDINATEUR / SUPERVISEUR.");
+          showSection("cockpit");
+          return;
+        }
         const d = {
           id: "T-" + Date.now().toString().slice(-4),
           technicienId: currentUser.id, // Garde l'ID du compte pour l'archivage
@@ -7675,9 +8075,16 @@
           appData && appData.techDemandes ? appData.techDemandes : [];
 
         // 2. FILTRAGE SÉCURISÉ
-        const data = sourceData.filter(
-          (d) => d.statut === "EN ATTENTE COORDINATION",
+        const workflowDemandes = ((appData && appData.demandes) || []).filter(
+          (d) =>
+            d.workflow === "TECH_BON_SORTIE" &&
+            d.status === "EN ATTENTE COORDINATION" &&
+            (!d.coordinateurId || parseInt(d.coordinateurId) === parseInt(currentUser?.id)),
         );
+        const data = [
+          ...workflowDemandes,
+          ...sourceData.filter((d) => d.statut === "EN ATTENTE COORDINATION"),
+        ];
 
         const totalTeams = new Set(
           data.map((d) => String(d.equipe || "").toUpperCase()).filter(Boolean),
@@ -7747,7 +8154,79 @@
                   </div>
               </div>`;
       }
+      function openCoordWorkflowDemande(id) {
+        const d = (appData.demandes || []).find((x) => x.id === id);
+        if (!d) return alert("Demande introuvable.");
+        const gestionnaires = getGestionnaireUsers();
+        const gestOptions = gestionnaires
+          .map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`)
+          .join("");
+        const container = document.getElementById("app-container");
+        container.innerHTML = `
+          <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
+            <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-orange-700 via-amber-600 to-yellow-500 text-white">
+              <p class="text-[8px] tracking-[0.2em] opacity-80">VALIDATION COORDINATION</p>
+              <h3 class="mt-1 uppercase text-xl font-black"><i class="fas fa-file-signature mr-2"></i>${escapeHtml(d.id)} - Bon de sortie</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-5 rounded-2xl border">
+              <p class="text-[9px] uppercase"><b>Receptionnaire :</b> ${escapeHtml(d.demandeurName || "")}</p>
+              <p class="text-[9px] uppercase"><b>Role :</b> ${escapeHtml(d.receptionnaireRole || "TECHNICIEN")}</p>
+              <p class="text-[9px] uppercase"><b>Operateur(s) :</b> ${escapeHtml(formatDemandeOps(d))}</p>
+              <p class="text-[9px] uppercase"><b>Motif :</b> ${escapeHtml(d.motif || "")}</p>
+            </div>
+            <div class="mt-5 border rounded-2xl overflow-hidden">
+              <table class="w-full text-[9px] uppercase">
+                <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Operateur</th><th class="p-2 text-left">Designation</th><th class="p-2 text-right">Qte</th></tr></thead>
+                <tbody>
+                  ${(d.items || []).map((item) => `<tr class="border-t"><td class="p-2">${escapeHtml(getOperatorMeta(getDemandItemOperator(item, d)).label)}</td><td class="p-2">${escapeHtml(item.label)}</td><td class="p-2 text-right font-black">${parseInt(item.qty) || 0}</td></tr>`).join("")}
+                </tbody>
+              </table>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+              <div>
+                <label class="text-[8px] text-slate-400 uppercase">Gestionnaire destinataire</label>
+                <select id="coord-assign-gestionnaire" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required>${gestOptions}</select>
+              </div>
+              <div>
+                <label class="text-[8px] text-slate-400 uppercase">Signature electronique coordination</label>
+                <textarea id="coord-signature" class="w-full border-2 p-3 rounded-xl text-xs h-24 uppercase bg-slate-50" placeholder="ECRIVEZ VOTRE NOM COMPLET POUR SIGNER" required>${escapeHtml(currentUser?.name || "")}</textarea>
+              </div>
+            </div>
+            <button onclick="coordSignAndSendDemande('${d.id}')" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] mt-6 uppercase font-black shadow-lg hover:bg-black transition inline-flex items-center justify-center gap-2">
+              <i class="fas fa-paper-plane"></i> Envoyer au gestionnaire
+            </button>
+          </div>`;
+      }
+
+      function coordSignAndSendDemande(id) {
+        const d = (appData.demandes || []).find((x) => x.id === id);
+        if (!d) return alert("Demande introuvable.");
+        const managerSelect = document.getElementById("coord-assign-gestionnaire");
+        const managerId = managerSelect ? parseInt(managerSelect.value, 10) : null;
+        const signature = String(document.getElementById("coord-signature")?.value || "").trim().toUpperCase();
+        if (!managerId || !signature) return alert("Choisissez un gestionnaire et signez le bon.");
+        d.assignedGestionnaireId = managerId;
+        d.assignedGestionnaireName = gestionnaireNameById(managerId) || "";
+        d.coordinationSignatureText = signature;
+        d.coordinationSignedAt = new Date().toLocaleString();
+        d.coordinationBy = currentUser ? currentUser.name : "COORDINATION";
+        d.status = "EN ATTENTE GESTIONNAIRE";
+        d.statut = "EN ATTENTE GESTIONNAIRE";
+        addNotification(managerId, `BON A VALIDER : ${d.id} signe par ${currentUser?.name || "COORDINATION"}`);
+        addNotification(d.demandeurOriginalId, `VOTRE BON ${d.id} A ETE SIGNE PAR LA COORDINATION.`);
+        save();
+        alert("BON ENVOYE AU GESTIONNAIRE.");
+        showSection("cockpit");
+      }
+
       function preparerCmd(id) {
+        const workflowDemande = (appData.demandes || []).find(
+          (x) => x.id === id && x.workflow === "TECH_BON_SORTIE",
+        );
+        if (workflowDemande) {
+          openCoordWorkflowDemande(id);
+          return;
+        }
         const tech = appData.techDemandes.find((x) => x.id === id);
         window._currentTechProcess = tech;
         const container = document.getElementById("app-container");
@@ -8105,7 +8584,11 @@
 
         // 2. FILTRAGE : On récupère uniquement les bons en attente
         const data = toutesLesDemandes.filter(
-          (d) => d.status === "EN ATTENTE GESTIONNAIRE",
+          (d) =>
+            d.status === "EN ATTENTE GESTIONNAIRE" &&
+            (d.workflow !== "TECH_BON_SORTIE" ||
+              !d.assignedGestionnaireId ||
+              parseInt(d.assignedGestionnaireId) === parseInt(currentUser?.id)),
         );
 
         const statsByOp = {};
@@ -8175,9 +8658,68 @@
 
       function prepSortie(id) {
         const d = appData.demandes.find((x) => x.id === id);
+        if (d?.workflow === "TECH_BON_SORTIE") {
+          openGestionnaireWorkflowDemande(id);
+          return;
+        }
         d.status = "PRET";
         save();
         showSection("livraison");
+      }
+
+      function openGestionnaireWorkflowDemande(id) {
+        const d = (appData.demandes || []).find((x) => x.id === id);
+        if (!d) return alert("Demande introuvable.");
+        const container = document.getElementById("app-container");
+        container.innerHTML = `
+          <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
+            <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-amber-700 via-orange-600 to-amber-500 text-white">
+              <p class="text-[8px] tracking-[0.2em] opacity-80">VALIDATION GESTIONNAIRE</p>
+              <h3 class="mt-1 uppercase text-xl font-black"><i class="fas fa-clipboard-check mr-2"></i>${escapeHtml(d.id)} - Bon de sortie</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-5 rounded-2xl border">
+              <p class="text-[9px] uppercase"><b>Receptionnaire :</b> ${escapeHtml(d.demandeurName || "")}</p>
+              <p class="text-[9px] uppercase"><b>Role :</b> ${escapeHtml(d.receptionnaireRole || "TECHNICIEN")}</p>
+              <p class="text-[9px] uppercase"><b>Emetteur :</b> ${escapeHtml(d.emetteur || d.coordinateurNom || "")}</p>
+              <p class="text-[9px] uppercase"><b>Operateur(s) :</b> ${escapeHtml(formatDemandeOps(d))}</p>
+              <p class="text-[9px] uppercase md:col-span-2"><b>Motif :</b> ${escapeHtml(d.motif || "")}</p>
+            </div>
+            <div class="mt-5 border rounded-2xl overflow-hidden">
+              <table class="w-full text-[9px] uppercase">
+                <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Operateur</th><th class="p-2 text-left">Designation</th><th class="p-2 text-right">Qte</th></tr></thead>
+                <tbody>
+                  ${(d.items || []).map((item) => `<tr class="border-t"><td class="p-2">${escapeHtml(getOperatorMeta(getDemandItemOperator(item, d)).label)}</td><td class="p-2">${escapeHtml(item.label)}</td><td class="p-2 text-right font-black">${parseInt(item.qty) || 0}</td></tr>`).join("")}
+                </tbody>
+              </table>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5">
+              <div class="border rounded-2xl p-3 bg-slate-50">
+                <p class="text-[8px] text-slate-400 uppercase">Signature technicien</p>
+                <p class="text-[9px] uppercase whitespace-pre-line">${escapeHtml(getSortieTechnicianSignatureText(d))}</p>
+              </div>
+              <div class="border rounded-2xl p-3 bg-slate-50">
+                <p class="text-[8px] text-slate-400 uppercase">Signature coordination</p>
+                <p class="text-[9px] uppercase whitespace-pre-line">${escapeHtml(getSortieCoordinationSignatureText(d))}</p>
+              </div>
+              <div>
+                <label class="text-[8px] text-slate-400 uppercase">Signature electronique gestionnaire</label>
+                <textarea id="manager-signature" class="w-full border-2 p-3 rounded-xl text-xs h-28 uppercase bg-slate-50" placeholder="ECRIVEZ VOTRE NOM COMPLET POUR SIGNER" required>${escapeHtml(currentUser?.name || "")}</textarea>
+              </div>
+            </div>
+            <button onclick="managerSignAndValidateDemande('${d.id}')" class="w-full bg-green-600 text-white py-4 rounded-2xl text-[10px] mt-6 uppercase font-black shadow-lg hover:bg-green-700 transition inline-flex items-center justify-center gap-2">
+              <i class="fas fa-check-circle"></i> Valider la sortie et debiter le stock
+            </button>
+          </div>`;
+      }
+
+      function managerSignAndValidateDemande(id) {
+        const d = (appData.demandes || []).find((x) => x.id === id);
+        if (!d) return alert("Demande introuvable.");
+        const signature = String(document.getElementById("manager-signature")?.value || "").trim().toUpperCase();
+        if (!signature) return alert("Signature obligatoire avant validation.");
+        d.managerSignatureText = signature;
+        d.managerSignedAt = new Date().toLocaleString();
+        finalSortie(id);
       }
 
       function renderLivraisonForm(container) {
@@ -8231,6 +8773,63 @@
 
       function finalSortie(id) {
         const d = appData.demandes.find((x) => x.id === id);
+        if (d?.workflow === "TECH_BON_SORTIE") {
+          let stockInsuffisant = false;
+          (d.items || []).forEach((i) => {
+            const itemOp = getDemandItemOperator(i, d);
+            const s = (appData.stock || []).find(
+              (st) =>
+                normalizeOperatorKey(st.op) === itemOp &&
+                String(st.label || "").toUpperCase().trim() ===
+                  String(i.label || "").toUpperCase().trim(),
+            );
+            if (!s || (parseInt(s.qty, 10) || 0) < (parseInt(i.qty, 10) || 0)) {
+              stockInsuffisant = true;
+            }
+          });
+          if (stockInsuffisant) return alert("STOCK INSUFFISANT !");
+          (d.items || []).forEach((i) => {
+            const itemOp = getDemandItemOperator(i, d);
+            const s = (appData.stock || []).find(
+              (st) =>
+                normalizeOperatorKey(st.op) === itemOp &&
+                String(st.label || "").toUpperCase().trim() ===
+                  String(i.label || "").toUpperCase().trim(),
+            );
+            if (s) s.qty = (parseInt(s.qty, 10) || 0) - (parseInt(i.qty, 10) || 0);
+          });
+          d.status = "LIVREE";
+          d.statut = "LIVREE";
+          d.dateLivraison = new Date().toLocaleDateString();
+          d.validatedBy = currentUser ? currentUser.name : "GESTIONNAIRE";
+          d.validatedById = currentUser ? currentUser.id : null;
+          d.validatedAt = new Date().toLocaleString();
+          if (!d.managerSignatureText) {
+            d.managerSignatureText = formatAutomaticSignature(d.validatedBy, d.validatedAt);
+          }
+          if (!d.sortieId) {
+            if (!appData.sorties) appData.sorties = [];
+            const sortieRecord = {
+              ...d,
+              id: `SORTIE-${Date.now()}`,
+              ref: d.ref || d.motif || d.id,
+              tech: d.demandeurName,
+              date: new Date().toLocaleString(),
+              createdBy: currentUser ? currentUser.name : "GESTIONNAIRE",
+              sourceDemandeId: d.id,
+            };
+            sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
+            d.sortieId = sortieRecord.id;
+            d.pdfName = sortieRecord.pdfName;
+            appData.sorties.push(sortieRecord);
+          }
+          addNotification(1, `AUDIT : SORTIE VALIDEE (${d.id})`);
+          addNotification(d.demandeurOriginalId, `VOTRE MATERIEL EST DISPONIBLE (${d.id}).`);
+          save();
+          alert("TERMINE.");
+          showSection("cockpit");
+          return;
+        }
         let stockInsuffisant = false;
         d.items.forEach((i) => {
           const s = appData.stock.find(
@@ -9257,6 +9856,11 @@
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         const d = appData.demandes.find((x) => x.id === id);
+        if (d?.workflow === "TECH_BON_SORTIE") {
+          await drawSortieBonBesoinPdf(doc, d);
+          doc.save(`BS_ITC_${d.id}.pdf`);
+          return;
+        }
 
         // Nettoyer et générer le QR Code en mémoire
         const qrContainer = document.getElementById("qrcode-temp");
