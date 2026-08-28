@@ -92,9 +92,14 @@ async function main() {
     const data = snap.val() || {};
 
     let users = [];
-    if (Array.isArray(data.users)) users = data.users.slice();
-    else if (data.users && typeof data.users === "object")
-      users = Object.values(data.users);
+    let userKeys = [];
+    if (Array.isArray(data.users)) {
+      users = data.users.slice();
+      userKeys = users.map((_, index) => String(index));
+    } else if (data.users && typeof data.users === "object") {
+      userKeys = Object.keys(data.users);
+      users = userKeys.map((key) => data.users[key]);
+    }
 
     const maxId = users.reduce((a, u) => Math.max(a, Number(u.id) || 0), 0);
     const existingIndex = users.findIndex(
@@ -119,36 +124,39 @@ async function main() {
           : new Date().toISOString(),
     };
 
-    if (existingIndex >= 0) users[existingIndex] = newUserProfile;
-    else users.push(newUserProfile);
-
     await admin.auth().setCustomUserClaims(userRecord.uid, {
       role: argv.role,
       company_id: newUserProfile.company_id,
     });
 
-    // Write back users array
-    await ref.child("users").set(users);
+    // Write only the touched profile to avoid overwriting concurrent changes.
+    const profileKey =
+      existingIndex >= 0 ? userKeys[existingIndex] : String(users.length);
+    await ref.child(`users/${profileKey}`).set(newUserProfile);
     console.log("User profile saved to Realtime DB with id=", newUserProfile.id);
 
-    // Ensure initial stock entries exist for managedOps
-    let stock = Array.isArray(data.stock) ? data.stock.slice() : [];
-    managedOps.forEach((op) => {
-      // If there's no stock item for this op, add a placeholder
+    // Ensure initial stock entries exist for managedOps without rewriting stock.
+    const stock = Array.isArray(data.stock)
+      ? data.stock.slice()
+      : data.stock && typeof data.stock === "object"
+        ? Object.values(data.stock)
+        : [];
+    let nextStockIndex = stock.length;
+    for (const op of managedOps) {
       const existsForOp = stock.some(
         (s) => String(s.op || "").toUpperCase() === String(op).toUpperCase(),
       );
       if (!existsForOp) {
-        stock.push({
+        await ref.child(`stock/${nextStockIndex}`).set({
           op: op,
           label: `INVENTAIRE INITIAL ${op}`,
           qty: 0,
           type: "AUTO",
         });
+        nextStockIndex += 1;
       }
-    });
+    }
 
-    await ref.child("stock").set(stock);
     console.log("Stock seeded/updated for managedOps:", managedOps.join(", "));
 
     console.log("Done. Credentials created and DB updated.");
