@@ -220,6 +220,13 @@
         text-transform: none !important;
       }
 
+      body input,
+      body textarea,
+      body input.uppercase,
+      body textarea.uppercase {
+        text-transform: none !important;
+      }
+
       @media (max-width: 768px) {
         body {
           font-size: 11px;
@@ -949,6 +956,44 @@
           console.warn("Erreur clearStockFilter", e);
         }
       }
+
+      function getFormTextValue(id) {
+        const field = document.getElementById(id);
+        return field ? String(field.value || "").trim() : "";
+      }
+
+      function prepareFreeTextControls(root = document) {
+        try {
+          const fields = [];
+          if (root.matches && root.matches("input, textarea")) fields.push(root);
+          fields.push(...root.querySelectorAll("input, textarea"));
+          fields.forEach((field) => {
+            const type = String(field.getAttribute("type") || "text").toLowerCase();
+            if (["button", "checkbox", "file", "hidden", "radio", "range", "reset", "submit"].includes(type)) return;
+            field.classList.remove("uppercase");
+            field.classList.add("normal-case");
+            field.style.textTransform = "none";
+            field.setAttribute("autocapitalize", "none");
+            field.setAttribute("autocomplete", field.getAttribute("autocomplete") || "off");
+          });
+        } catch (error) {
+          console.warn("Impossible de preparer les champs texte", error);
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        prepareFreeTextControls();
+        const observer = new MutationObserver((mutations) => {
+          mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                prepareFreeTextControls(node);
+              }
+            });
+          });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      });
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
           navigator.serviceWorker
@@ -1054,7 +1099,7 @@
                 class="cursor-pointer py-3 px-6 flex items-center hover:bg-slate-800 transition italic text-cyan-300 font-black"
               >
                 <i class="fas fa-shield-halved w-6 text-cyan-400"></i>
-                <span class="ml-2">Super Admin</span>
+                <span class="ml-2">Tableau de Bord SaaS</span>
               </div>
             </div>
 
@@ -2509,7 +2554,7 @@
         if (menuSup)
           menuSup.classList.toggle(
             "hidden",
-            isSuperAdmin || r !== "SUPERVISEUR",
+            !isSuperAdmin && r !== "SUPERVISEUR",
           );
 
         // 2. Menu Technicien
@@ -2525,20 +2570,22 @@
         if (menuCoord)
           menuCoord.classList.toggle(
             "hidden",
-            isSuperAdmin ||
-              !(
-                r === "COORDINATRICE" ||
-                r === "COORDINATEUR" ||
-                r === "SUPERVISEUR TERRAIN"
-              ),
+            !(
+              isSuperAdmin ||
+              r === "COORDINATRICE" ||
+              r === "COORDINATEUR" ||
+              r === "SUPERVISEUR TERRAIN"
+            ),
           );
 
         // 4. Menu Gestionnaire (MAGASIN) - On vérifie plusieurs variantes possibles
         const menuGest = document.getElementById("menu-gestionnaire");
         if (menuGest) {
           if (
-            !isSuperAdmin &&
-            (r === "GESTIONNAIRE" || r === "MAGASINIER" || r === "GEST")
+            isSuperAdmin ||
+            r === "GESTIONNAIRE" ||
+            r === "MAGASINIER" ||
+            r === "GEST"
           ) {
             menuGest.classList.remove("hidden");
             console.log("Menu Gestionnaire affiché.");
@@ -2550,25 +2597,19 @@
         // 5. Sections Communes (Consultation Stock & Cockpit)
         const secStock = document.getElementById("section-stock-disponible");
         if (secStock)
-          secStock.classList.toggle(
-            "hidden",
-            isSuperAdmin || r === "TECHNICIEN",
-          );
+          secStock.classList.toggle("hidden", r === "TECHNICIEN");
 
         const menuCockpit = document.getElementById("menu-cockpit");
         if (menuCockpit)
-          menuCockpit.classList.toggle(
-            "hidden",
-            isSuperAdmin || r === "TECHNICIEN",
-          );
+          menuCockpit.classList.toggle("hidden", r === "TECHNICIEN");
 
-        // 6. Menu spécifique : STOCK ITC BUREAU 02 (visible seulement au superviseur
-        // ou au gestionnaire qui gère ITC-B02)
+        // 6. Menu spécifique : STOCK ITC BUREAU 02 (visible au superviseur,
+        // au super admin ou au gestionnaire qui gère ITC-B02)
         try {
           const menuItcB02 = document.getElementById("menu-stock-itc-b02");
           if (menuItcB02) {
             let showItcB02 = false;
-            if (r === "SUPERVISEUR") showItcB02 = true;
+            if (isSuperAdmin || r === "SUPERVISEUR") showItcB02 = true;
             if (isStockScopedUser(currentUser)) {
               const managedNorm = getManagedOpsNormalized(currentUser);
               showItcB02 = showItcB02 || managedNorm.includes("ITC-B02");
@@ -2579,14 +2620,14 @@
           // ignore
         }
 
-        // 7. Menu spécifique : STOCK ITC BUREAU 01 (visible seulement au superviseur
-        // ou au gestionnaire qui gère ITC-B01)
+        // 7. Menu spécifique : STOCK ITC BUREAU 01 (visible au superviseur,
+        // au super admin, à la coordinatrice ou au gestionnaire qui gère ITC-B01)
         try {
           const menuItcB01 = document.getElementById("menu-stock-itc-b01");
           if (menuItcB01) {
             let showItcB01 = false;
-            // Afficher pour le superviseur et aussi pour la coordinatrice
-            if (r === "SUPERVISEUR" || r === "COORDINATRICE") showItcB01 = true;
+            if (isSuperAdmin || r === "SUPERVISEUR" || r === "COORDINATRICE")
+              showItcB01 = true;
             if (isStockScopedUser(currentUser)) {
               const managedNorm = getManagedOpsNormalized(currentUser);
               showItcB01 = showItcB01 || managedNorm.includes("ITC-B01");
@@ -2597,13 +2638,13 @@
           // ignore
         }
 
-        // 8. Menu spécifique : STOCK MOOV (visible seulement au superviseur
-        // ou au gestionnaire qui gère MOOV, normalement bureau 02)
+        // 8. Menu spécifique : STOCK MOOV (visible au superviseur,
+        // au super admin ou au gestionnaire qui gère MOOV)
         try {
           const menuMoov = document.getElementById("menu-stock-moov");
           if (menuMoov) {
             let showMoov = false;
-            if (r === "SUPERVISEUR") showMoov = true;
+            if (isSuperAdmin || r === "SUPERVISEUR") showMoov = true;
             if (isStockScopedUser(currentUser)) {
               const managedNorm = getManagedOpsNormalized(currentUser);
               showMoov = showMoov || managedNorm.includes("MOOV");
@@ -4201,12 +4242,9 @@
           return;
         }
         const opKey = normalizeOperatorKey(op);
-        const ref = document.getElementById("s-ref").value.toUpperCase();
-        const tech = document.getElementById("s-tech").value.toUpperCase();
-        const emetteur = document
-          .getElementById("s-emetteur")
-          .value.toUpperCase()
-          .trim();
+        const ref = getFormTextValue("s-ref");
+        const tech = getFormTextValue("s-tech");
+        const emetteur = getFormTextValue("s-emetteur");
         const rows = document.querySelectorAll(".art-row-sortie");
 
         let logs = [];
@@ -4214,7 +4252,8 @@
         let updates = [];
 
         rows.forEach((row) => {
-          const label = row.querySelector(".art-l").value.toUpperCase().trim();
+          const label = String(row.querySelector(".art-l").value || "").trim();
+          const normalizedLabel = label.toUpperCase();
           const qty = parseInt(row.querySelector(".art-q").value) || 0;
 
           // Trouver l'article en stock pour cet opérateur (comparaisons normalisées)
@@ -4224,7 +4263,7 @@
                 normalizeOperatorKey(s.op) === opKey &&
                 String(s.label || "")
                   .toUpperCase()
-                  .trim() === label
+                  .trim() === normalizedLabel
               );
             } catch (e) {
               return false;
@@ -4235,7 +4274,7 @@
             const available = parseInt(itemInStock.qty) || 0;
             if (available >= qty) {
               updates.push({ itemInStock, nextQty: available - qty });
-              logs.push(`${label} (-${qty})`);
+              logs.push(`${itemInStock.label || label} (-${qty})`);
             } else {
               errors.push(
                 `Stock insuffisant pour ${label} (Dispo: ${available})`,
@@ -4294,7 +4333,7 @@
       function rowsToItems(rows) {
         const items = [];
         rows.forEach((row) => {
-          const label = row.querySelector(".art-l").value.toUpperCase().trim();
+          const label = String(row.querySelector(".art-l").value || "").trim();
           const qty = parseInt(row.querySelector(".art-q").value) || 0;
           items.push({ label, qty });
         });
@@ -4337,7 +4376,7 @@
                     !String(r[colDesc]).includes("Total")
                   ) {
                     globalResult.items.push({
-                      label: String(r[colDesc]).trim().toUpperCase() + " (F1)",
+                      label: String(r[colDesc]).trim() + " (F1)",
                       qty: parseFloat(r[colQty]),
                     });
                   }
@@ -4443,6 +4482,7 @@
           .trim()
           .toUpperCase();
         return (
+          role === "SUPER_ADMIN" ||
           role === "GESTIONNAIRE" || role === "MAGASINIER" || role === "GEST"
         );
       }
@@ -4588,14 +4628,8 @@
           alert("Action non autorisée pour cet opérateur.");
           return;
         }
-        const newTech = document
-          .getElementById("edit-sortie-tech")
-          .value.toUpperCase()
-          .trim();
-        const newRef = document
-          .getElementById("edit-sortie-ref")
-          .value.toUpperCase()
-          .trim();
+        const newTech = getFormTextValue("edit-sortie-tech");
+        const newRef = getFormTextValue("edit-sortie-ref");
 
         if (!newRef || !newTech) {
           alert("Veuillez renseigner la référence et le destinataire.");
@@ -4606,7 +4640,7 @@
           document.querySelectorAll("#edit-sortie-items-list .edit-art-row"),
         )
           .map((row) => ({
-            label: row.querySelector(".edit-art-l").value.toUpperCase().trim(),
+            label: String(row.querySelector(".edit-art-l").value || "").trim(),
             qty: parseInt(row.querySelector(".edit-art-q").value) || 0,
           }))
           .filter((item) => item.label && item.qty > 0);
@@ -4619,38 +4653,40 @@
         const oldOp = String(originalSortie.op || "ITC").toUpperCase();
         const oldItems = getSortieItems(originalSortie)
           .map((item) => ({
-            label: String(item.label || "")
-              .toUpperCase()
-              .trim(),
+            label: String(item.label || "").trim(),
+            labelKey: String(item.label || "").toUpperCase().trim(),
             qty: Number(item.qty) || 0,
           }))
           .filter((item) => item.label && item.qty > 0);
 
         const simulatedStock = (appData.stock || []).map((stockItem) => ({
           ...stockItem,
-          op: String(stockItem.op || "").toUpperCase(),
-          label: String(stockItem.label || "").toUpperCase(),
+          opKey: String(stockItem.op || "").toUpperCase(),
+          labelKey: String(stockItem.label || "").toUpperCase(),
           qty: Number(stockItem.qty) || 0,
         }));
 
         const addQtyToStock = (op, item) => {
           const existing = simulatedStock.find(
-            (s) => s.op === op && s.label === item.label,
+            (s) => s.opKey === op && s.labelKey === item.labelKey,
           );
           if (existing) {
             existing.qty += item.qty;
           } else {
             simulatedStock.push({
               op,
+              opKey: op,
               label: item.label,
+              labelKey: item.labelKey,
               qty: item.qty,
             });
           }
         };
 
         const removeQtyFromStock = (op, item, errors) => {
+          const labelKey = String(item.label || "").toUpperCase().trim();
           const existing = simulatedStock.find(
-            (s) => s.op === op && s.label === item.label,
+            (s) => s.opKey === op && s.labelKey === labelKey,
           );
           if (!existing) {
             errors.push(`Article introuvable en stock (${op}) : ${item.label}`);
@@ -4691,7 +4727,7 @@
           updatedBy: currentUser ? currentUser.name : "ANONYME",
         };
 
-        appData.stock = simulatedStock;
+        appData.stock = simulatedStock.map(({ opKey, labelKey, ...stockItem }) => stockItem);
         appData.sorties[sortieIndex] = updatedSortie;
 
         addNotification(
@@ -6004,7 +6040,7 @@
         if (id === "cockpit") {
           renderCockpit(container);
         } else if (id === "super-admin") {
-          viewTitle.innerText = "SUPER ADMIN";
+          viewTitle.innerText = "TABLEAU DE BORD SUPER ADMIN";
           renderSuperAdminDashboard(container);
         } else if (id === "company-users") {
           viewTitle.innerText = "UTILISATEURS ENTREPRISE";
@@ -6680,7 +6716,7 @@
         const items = [];
         document.querySelectorAll(".art-row-ex").forEach((r) => {
           items.push({
-            label: r.querySelector(".art-l").value.toUpperCase(),
+            label: String(r.querySelector(".art-l").value || "").trim(),
             qty: parseInt(r.querySelector(".art-q").value),
           });
         });
@@ -6691,7 +6727,7 @@
           demandeurName: "COORDINATION (AUTO)",
           op: "ITC",
           items,
-          motif: motifComplet.toUpperCase(),
+          motif: motifComplet,
           status: "EN ATTENTE GESTIONNAIRE",
           date: new Date().toLocaleDateString(),
         };
@@ -7064,9 +7100,48 @@
 
       function getPlanDefaults(planType) {
         const plan = String(planType || "starter").toLowerCase();
-        if (plan === "enterprise") return { max_users: 100, max_stores: 20 };
-        if (plan === "business") return { max_users: 30, max_stores: 8 };
-        return { max_users: 10, max_stores: 2 };
+        if (plan === "enterprise")
+          return { max_users: 100, max_stores: 20, monthly_price: 150000 };
+        if (plan === "business")
+          return { max_users: 30, max_stores: 8, monthly_price: 75000 };
+        return { max_users: 10, max_stores: 2, monthly_price: 25000 };
+      }
+
+      function formatSaasMoney(amount) {
+        try {
+          return new Intl.NumberFormat("fr-FR", {
+            style: "currency",
+            currency: "XOF",
+            maximumFractionDigits: 0,
+          }).format(Number(amount) || 0);
+        } catch (e) {
+          return `${Number(amount) || 0} FCFA`;
+        }
+      }
+
+      function getNextBillingDueDate() {
+        const date = new Date();
+        date.setMonth(date.getMonth() + 1);
+        return date.toISOString().slice(0, 10);
+      }
+
+      function getCompanyBilling(company) {
+        const defaults = getPlanDefaults(company?.plan_type);
+        const monthlyAmount =
+          Number(company?.monthly_amount) || Number(defaults.monthly_price) || 0;
+        const status = String(company?.payment_status || "pending").toLowerCase();
+        const nextDueDate = company?.next_due_date || "";
+        const lastPaymentAmount = Number(company?.last_payment_amount) || 0;
+        const isOverdue =
+          status !== "paid" &&
+          nextDueDate &&
+          new Date(`${nextDueDate}T23:59:59`).getTime() < Date.now();
+        return {
+          monthlyAmount,
+          status: isOverdue ? "overdue" : status,
+          nextDueDate,
+          lastPaymentAmount,
+        };
       }
 
       function renderSuperAdminDashboard(container) {
@@ -7097,6 +7172,22 @@
           (appData.sorties || []).length +
           (appData.demandes || []).length +
           (appData.retours || []).length;
+        const billingRows = companies.map((company) => getCompanyBilling(company));
+        const expectedMonthlyRevenue = billingRows.reduce(
+          (total, billing) => total + billing.monthlyAmount,
+          0,
+        );
+        const paidRevenue = billingRows.reduce(
+          (total, billing) =>
+            total +
+            (billing.status === "paid"
+              ? billing.lastPaymentAmount || billing.monthlyAmount
+              : billing.lastPaymentAmount),
+          0,
+        );
+        const overdueCompanies = billingRows.filter(
+          (billing) => billing.status === "overdue",
+        ).length;
 
         const companyRows = companies
           .map((company) => {
@@ -7121,6 +7212,19 @@
               status === "active"
                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                 : "bg-red-50 text-red-700 border-red-200";
+            const billing = getCompanyBilling(company);
+            const paymentStatusClass =
+              billing.status === "paid"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : billing.status === "overdue"
+                  ? "bg-red-50 text-red-700 border-red-200"
+                  : "bg-amber-50 text-amber-700 border-amber-200";
+            const paymentStatusLabel =
+              billing.status === "paid"
+                ? "Payé"
+                : billing.status === "overdue"
+                  ? "En retard"
+                  : "En attente";
             const companyLogo =
               company.logo_url ||
               (company.legacy
@@ -7135,10 +7239,17 @@
                   </div>
                 </td>
                 <td class="py-3 text-slate-500">${escapeHtml(company.email || "-")}</td>
-                <td class="py-3">${escapeHtml(company.plan_type || "starter")}</td>
+                <td class="py-3">
+                  <span class="font-black uppercase">${escapeHtml(company.plan_type || "starter")}</span>
+                  <p class="text-[8px] text-slate-400">${formatSaasMoney(billing.monthlyAmount)}/mois</p>
+                </td>
                 <td class="py-3 text-center">${activeCompanyUsers.length}/${Number(company.max_users) || 0}</td>
                 <td class="py-3 text-center">
                   <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${statusClass}">${escapeHtml(status)}</span>
+                </td>
+                <td class="py-3 text-center">
+                  <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${paymentStatusClass}">${paymentStatusLabel}</span>
+                  <p class="text-[8px] text-slate-400">${escapeHtml(billing.nextDueDate || "Echeance non definie")}</p>
                 </td>
                 <td class="py-3 text-right">
                   <button onclick="toggleCompanyStatus('${escapeHtml(company.id)}')" class="bg-slate-900 text-white px-3 py-2 rounded-xl text-[8px] font-black uppercase">
@@ -7147,7 +7258,7 @@
                 </td>
               </tr>
               <tr class="border-b border-slate-100">
-                <td colspan="6" class="pb-3 text-[8px] text-slate-400">
+                <td colspan="7" class="pb-3 text-[8px] text-slate-400">
                   ${usersPreview || "Aucun compte actif"}
                   ${
                     activeCompanyUsers.length > 4
@@ -7157,6 +7268,17 @@
                   <div class="mt-2 flex items-center gap-2">
                     <span class="font-black text-slate-500">Lien connexion:</span>
                     <input readonly value="${escapeHtml(loginUrl)}" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-2 py-1 text-[8px] text-slate-500 bg-slate-50" onclick="this.select()" />
+                  </div>
+                  <div class="mt-3 grid grid-cols-1 md:grid-cols-[120px_120px_1fr_120px_auto] gap-2 items-center saas-billing-row" data-company-id="${escapeHtml(company.id)}">
+                    <input class="saas-monthly-amount border border-slate-200 rounded-lg px-2 py-2 text-[8px] text-slate-600" type="number" min="0" value="${billing.monthlyAmount}" placeholder="Forfait mensuel" />
+                    <select class="saas-payment-status border border-slate-200 rounded-lg px-2 py-2 text-[8px] text-slate-600">
+                      <option value="pending" ${billing.status === "pending" ? "selected" : ""}>En attente</option>
+                      <option value="paid" ${billing.status === "paid" ? "selected" : ""}>Payé</option>
+                      <option value="overdue" ${billing.status === "overdue" ? "selected" : ""}>En retard</option>
+                    </select>
+                    <input class="saas-next-due-date border border-slate-200 rounded-lg px-2 py-2 text-[8px] text-slate-600" type="date" value="${escapeHtml(billing.nextDueDate)}" />
+                    <input class="saas-last-payment-amount border border-slate-200 rounded-lg px-2 py-2 text-[8px] text-slate-600" type="number" min="0" value="${billing.lastPaymentAmount}" placeholder="Payé" />
+                    <button type="button" onclick="saveCompanyBilling(this)" class="bg-cyan-600 text-white rounded-lg px-3 py-2 text-[8px] font-black uppercase">Maj compta</button>
                   </div>
                 </td>
               </tr>`;
@@ -7170,9 +7292,12 @@
                 <img src="assets/saas-logo.svg" alt="Logo StockFlow SaaS" class="h-16 w-40 object-contain rounded-2xl bg-white/5 p-2 border border-white/10" />
                 <div>
                   <p class="text-[9px] uppercase tracking-[0.22em] text-cyan-300">Administration plateforme</p>
-                  <h2 class="text-2xl font-black uppercase mt-1">Super Admin SaaS</h2>
+                  <h2 class="text-2xl font-black uppercase mt-1">Tableau de Bord Super Admin</h2>
                   <p class="text-[10px] text-slate-300 mt-2">Gestion globale des entreprises clientes, quotas et acces.</p>
                 </div>
+                <button onclick="showSection('cockpit')" class="ml-auto bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-xl text-[8px] font-black uppercase border border-white/10 transition">
+                  <i class="fas fa-chart-line mr-2"></i>Dashboard operations
+                </button>
               </div>
             </div>
 
@@ -7193,6 +7318,18 @@
                 <p class="text-[8px] text-cyan-600 uppercase font-black">Operations</p>
                 <p class="text-2xl font-black text-cyan-700">${operationsVolume}</p>
               </div>
+              <div class="bg-white border border-blue-200 rounded-2xl p-4 shadow-sm">
+                <p class="text-[8px] text-blue-600 uppercase font-black">Forfaits mensuels</p>
+                <p class="text-lg font-black text-blue-700">${formatSaasMoney(expectedMonthlyRevenue)}</p>
+              </div>
+              <div class="bg-white border border-emerald-200 rounded-2xl p-4 shadow-sm">
+                <p class="text-[8px] text-emerald-600 uppercase font-black">Encaissements</p>
+                <p class="text-lg font-black text-emerald-700">${formatSaasMoney(paidRevenue)}</p>
+              </div>
+              <div class="bg-white border border-amber-200 rounded-2xl p-4 shadow-sm">
+                <p class="text-[8px] text-amber-600 uppercase font-black">Retards paiement</p>
+                <p class="text-2xl font-black text-amber-700">${overdueCompanies}</p>
+              </div>
             </div>
 
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -7208,15 +7345,31 @@
                   <option value="enterprise">Enterprise</option>
                 </select>
                 <div class="grid grid-cols-2 gap-3">
+                  <input id="sa-company-monthly-amount" class="border rounded-xl p-3 text-xs" type="number" min="0" placeholder="Forfait mensuel FCFA" />
+                  <select id="sa-payment-status" class="border rounded-xl p-3 text-xs">
+                    <option value="pending">Paiement en attente</option>
+                    <option value="paid">Paiement reçu</option>
+                    <option value="overdue">Paiement en retard</option>
+                  </select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <input id="sa-next-due-date" class="border rounded-xl p-3 text-xs" type="date" value="${getNextBillingDueDate()}" />
+                  <input id="sa-last-payment-amount" class="border rounded-xl p-3 text-xs" type="number" min="0" placeholder="Montant encaissé" />
+                </div>
+                <div class="grid grid-cols-2 gap-3">
                   <input id="sa-company-max-users" class="border rounded-xl p-3 text-xs" type="number" min="1" placeholder="Max users" />
                   <input id="sa-company-max-stores" class="border rounded-xl p-3 text-xs" type="number" min="1" placeholder="Max magasins" />
                 </div>
                 <div class="border-t pt-3 space-y-3">
                   <input id="sa-admin-name" class="w-full border rounded-xl p-3 text-xs" placeholder="Nom superviseur entreprise" required />
                   <input id="sa-admin-email" class="w-full border rounded-xl p-3 text-xs" type="email" placeholder="Email superviseur entreprise" required />
+                  <div class="grid grid-cols-[1fr_auto] gap-2">
+                    <input id="sa-admin-password" class="w-full border rounded-xl p-3 text-xs font-black text-slate-700" readonly value="${generateTemporaryPassword()}" onclick="this.select()" />
+                    <button type="button" onclick="refreshSuperAdminCompanyPassword()" class="bg-cyan-600 text-white rounded-xl px-3 text-[8px] font-black uppercase">Generer</button>
+                  </div>
                 </div>
                 <button class="w-full bg-cyan-600 text-white rounded-xl p-3 text-[9px] font-black uppercase">Creer entreprise</button>
-                <p class="text-[8px] text-slate-400">Le profil Superviseur est cree dans la base. Le compte Auth doit etre cree cote Admin SDK/backend.</p>
+                <p class="text-[8px] text-slate-400">Le Super Admin cree l'entreprise et son Superviseur initial. Le Superviseur cree ensuite les comptes internes.</p>
               </form>
 
               <div class="xl:col-span-2 bg-white rounded-3xl border border-slate-200 shadow-xl p-5">
@@ -7233,10 +7386,11 @@
                         <th class="pb-2">Plan</th>
                         <th class="pb-2 text-center">Users</th>
                         <th class="pb-2 text-center">Statut</th>
+                        <th class="pb-2 text-center">Compta</th>
                         <th class="pb-2 text-right">Action</th>
                       </tr>
                     </thead>
-                    <tbody>${companyRows || '<tr><td colspan="6" class="py-8 text-center text-slate-400">Aucune entreprise creee.</td></tr>'}</tbody>
+                    <tbody>${companyRows || '<tr><td colspan="7" class="py-8 text-center text-slate-400">Aucune entreprise creee.</td></tr>'}</tbody>
                   </table>
                 </div>
               </div>
@@ -7250,16 +7404,61 @@
 
         const plan = document.getElementById("sa-company-plan").value;
         const defaults = getPlanDefaults(plan);
+        const companyName = getFormTextValue("sa-company-name");
+        const companyEmail = getFormTextValue("sa-company-email").toLowerCase();
+        const adminName = getFormTextValue("sa-admin-name");
+        const adminEmail = getFormTextValue("sa-admin-email").toLowerCase();
+        const temporaryPassword =
+          getFormTextValue("sa-admin-password") || generateTemporaryPassword();
+
+        appData.companies = Array.isArray(appData.companies)
+          ? appData.companies
+          : [];
+        appData.users = Array.isArray(appData.users) ? appData.users : [];
+
+        const companyExists = appData.companies.some(
+          (existingCompany) =>
+            String(existingCompany.email || "").toLowerCase() === companyEmail ||
+            String(existingCompany.name || "").trim().toLowerCase() ===
+              companyName.toLowerCase(),
+        );
+        if (companyExists) {
+          alert("Une entreprise existe deja avec ce nom ou cet email.");
+          return;
+        }
+
+        const userExists = appData.users.some(
+          (user) => String(user.email || "").toLowerCase() === adminEmail,
+        );
+        if (userExists) {
+          alert("Un compte utilisateur existe deja avec cet email superviseur.");
+          return;
+        }
+
         const company = {
           id: `COMP-${Date.now()}`,
-          name: document.getElementById("sa-company-name").value.trim(),
-          email: document.getElementById("sa-company-email").value.trim().toLowerCase(),
-          phone: document.getElementById("sa-company-phone").value.trim(),
+          name: companyName,
+          email: companyEmail,
+          phone: getFormTextValue("sa-company-phone"),
           logo_url:
-            document.getElementById("sa-company-logo").value.trim() ||
+            getFormTextValue("sa-company-logo") ||
             "assets/saas-logo.svg",
           status: "active",
           plan_type: plan,
+          monthly_amount:
+            Number(document.getElementById("sa-company-monthly-amount").value) ||
+            defaults.monthly_price,
+          payment_status: document.getElementById("sa-payment-status").value,
+          next_due_date:
+            document.getElementById("sa-next-due-date").value ||
+            getNextBillingDueDate(),
+          last_payment_amount:
+            Number(document.getElementById("sa-last-payment-amount").value) ||
+            0,
+          last_payment_at:
+            document.getElementById("sa-payment-status").value === "paid"
+              ? new Date().toISOString()
+              : "",
           max_users:
             Number(document.getElementById("sa-company-max-users").value) ||
             defaults.max_users,
@@ -7269,23 +7468,24 @@
           created_at: new Date().toISOString(),
         };
 
-        const users = Array.isArray(appData.users) ? appData.users : [];
-        const maxId = users.reduce((max, u) => Math.max(max, Number(u.id) || 0), 0);
+        const maxId = appData.users.reduce((max, u) => Math.max(max, Number(u.id) || 0), 0);
         const adminProfile = {
           id: maxId + 1,
           company_id: company.id,
+          company_name: company.name,
           company_logo_url: company.logo_url,
           role: "Superviseur",
-          name: document.getElementById("sa-admin-name").value.trim(),
-          full_name: document.getElementById("sa-admin-name").value.trim(),
-          email: document.getElementById("sa-admin-email").value.trim().toLowerCase(),
+          name: adminName,
+          full_name: adminName,
+          email: adminEmail,
+          managedOps: [],
+          temporary_password: temporaryPassword,
+          must_change_password: true,
           is_active: true,
           created_at: new Date().toISOString(),
+          created_by: currentUser.email,
         };
 
-        appData.companies = Array.isArray(appData.companies)
-          ? appData.companies
-          : [];
         appData.platformAuditLogs = Array.isArray(appData.platformAuditLogs)
           ? appData.platformAuditLogs
           : [];
@@ -7299,6 +7499,79 @@
         });
         save();
         publishTenantBranding(company);
+        const authCommand = `npm.cmd run create-user -- --email "${adminEmail}" --password "${temporaryPassword}" --name "${adminName}" --role "Superviseur" --companyId "${company.id}" --serviceAccount tools/serviceAccountKey.json`;
+        alert(
+          `Entreprise creee.\n\nEntreprise: ${company.name}\nSuperviseur: ${adminName}\nEmail: ${adminEmail}\nMot de passe temporaire: ${temporaryPassword}\n\nCommande Auth a executer:\n${authCommand}`,
+        );
+        renderSuperAdminDashboard(document.getElementById("app-container"));
+      }
+
+      function refreshSuperAdminCompanyPassword() {
+        const input = document.getElementById("sa-admin-password");
+        if (input) input.value = generateTemporaryPassword();
+      }
+
+      function saveCompanyBilling(button) {
+        if (!isCurrentSuperAdmin()) return;
+        const row = button?.closest(".saas-billing-row");
+        const companyId = row?.dataset?.companyId;
+        let company = getCompanyById(companyId);
+        if (!company && String(companyId) === "COMP-ITC-LEGACY") {
+          appData.companies = Array.isArray(appData.companies)
+            ? appData.companies
+            : [];
+          company = {
+            id: "COMP-ITC-LEGACY",
+            name: "ITC",
+            email: "contact@itc.local",
+            phone: "",
+            logo_url: "assets/nouveau-logo-itc.png",
+            status: "active",
+            plan_type: "enterprise",
+            max_users: Math.max(20, (appData.users || []).length),
+            max_stores: 6,
+            created_at: new Date().toISOString(),
+          };
+          appData.companies.unshift(company);
+        }
+        if (!company || !row) return;
+
+        const monthlyAmount = Number(
+          row.querySelector(".saas-monthly-amount")?.value,
+        ) || 0;
+        const paymentStatus =
+          row.querySelector(".saas-payment-status")?.value || "pending";
+        const nextDueDate =
+          row.querySelector(".saas-next-due-date")?.value || "";
+        const lastPaymentAmount = Number(
+          row.querySelector(".saas-last-payment-amount")?.value,
+        ) || 0;
+
+        company.monthly_amount = monthlyAmount;
+        company.payment_status = paymentStatus;
+        company.next_due_date = nextDueDate;
+        company.last_payment_amount = lastPaymentAmount;
+        company.last_payment_at =
+          paymentStatus === "paid"
+            ? company.last_payment_at || new Date().toISOString()
+            : "";
+        company.billing_updated_at = new Date().toISOString();
+        company.billing_updated_by = currentUser.email;
+
+        appData.platformAuditLogs = Array.isArray(appData.platformAuditLogs)
+          ? appData.platformAuditLogs
+          : [];
+        appData.platformAuditLogs.unshift({
+          action: "UPDATE_COMPANY_BILLING",
+          company_id: company.id,
+          payment_status: paymentStatus,
+          monthly_amount: monthlyAmount,
+          last_payment_amount: lastPaymentAmount,
+          by: currentUser.email,
+          date: new Date().toLocaleString("fr-FR"),
+        });
+
+        save();
         renderSuperAdminDashboard(document.getElementById("app-container"));
       }
 
@@ -7358,7 +7631,8 @@
       }
 
       function isCurrentCompanySupervisor() {
-        return String(currentUser?.role || "").toUpperCase() === "SUPERVISEUR";
+        const role = String(currentUser?.role || "").toUpperCase();
+        return role === "SUPERVISEUR" || role === "SUPER_ADMIN";
       }
 
       function getDefaultManagedOpsForRole(role) {
@@ -7455,17 +7729,50 @@
           return;
         }
 
-        const companyId = getUserCompanyIdForSuperAdmin(currentUser);
-        const company = getCompanyForUser(currentUser);
+        const isSuperAdmin = isCurrentSuperAdmin();
+        const companyId = isSuperAdmin
+          ? null
+          : getUserCompanyIdForSuperAdmin(currentUser);
+        const company = isSuperAdmin
+          ? {
+              id: "ALL-COMPANIES",
+              name: "Tous les comptes",
+              logo_url: "assets/saas-logo.svg",
+            }
+          : getCompanyForUser(currentUser);
         const users = Array.isArray(appData.users) ? appData.users : [];
-        const companyUsers = users.filter(
-          (user) => getUserCompanyIdForSuperAdmin(user) === companyId,
-        );
+        const companyUsers = isSuperAdmin
+          ? users.filter(
+              (user) => String(user.role || "").toUpperCase() !== "SUPER_ADMIN",
+            )
+          : users.filter(
+              (user) => getUserCompanyIdForSuperAdmin(user) === companyId,
+            );
+        const selectableCompanies = isSuperAdmin
+          ? getCompaniesForSuperAdminView(users)
+          : [];
+        const companySelector = isSuperAdmin
+          ? `
+                <select id="cu-company-id" class="w-full border rounded-xl p-3 text-xs" required>
+                  <option value="">Choisir l'entreprise</option>
+                  ${selectableCompanies
+                    .map(
+                      (company) =>
+                        `<option value="${escapeHtml(company.id)}">${escapeHtml(company.name || company.id)} - ${escapeHtml(company.id)}</option>`,
+                    )
+                    .join("")}
+                </select>`
+          : "";
 
         const rows = companyUsers
           .filter((user) => String(user.role || "").toUpperCase() !== "SUPER_ADMIN")
           .map((user) => {
             const role = String(user.role || "").toUpperCase();
+            const userCompanyId = getUserCompanyIdForSuperAdmin(user);
+            const userCompany = getCompanyById(userCompanyId) ||
+              (userCompanyId === "COMP-ITC-LEGACY"
+                ? { name: "ITC" }
+                : null);
             const badge =
               role === "SUPERVISEUR"
                 ? "bg-indigo-50 text-indigo-700 border-indigo-200"
@@ -7480,6 +7787,14 @@
               <tr class="border-b border-slate-100">
                 <td class="py-3 font-black">${escapeHtml(user.name || user.full_name || "-")}</td>
                 <td class="py-3 text-slate-500">${escapeHtml(user.email || "-")}</td>
+                ${
+                  isSuperAdmin
+                    ? `<td class="py-3">
+                        <div class="font-black text-slate-700">${escapeHtml(userCompany?.name || user.company_name || "Entreprise inconnue")}</div>
+                        <div class="text-[8px] text-slate-400">${escapeHtml(userCompanyId || "-")}</div>
+                      </td>`
+                    : ""
+                }
                 <td class="py-3">
                   <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${badge}">${escapeHtml(user.role || "-")}</span>
                 </td>
@@ -7531,6 +7846,7 @@
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
               <form onsubmit="createCompanyUserFromSupervisor(event)" class="bg-white rounded-3xl border border-slate-200 shadow-xl p-5 space-y-3">
                 <h3 class="text-[11px] font-black uppercase text-slate-800">Nouveau compte</h3>
+                ${companySelector}
                 <input id="cu-user-name" class="w-full border rounded-xl p-3 text-xs" placeholder="Nom complet" required />
                 <input id="cu-user-email" class="w-full border rounded-xl p-3 text-xs" type="email" placeholder="Email" required />
                 <select id="cu-user-role" class="w-full border rounded-xl p-3 text-xs">
@@ -7560,6 +7876,7 @@
                       <tr>
                         <th class="pb-2">Nom</th>
                         <th class="pb-2">Email</th>
+                        ${isSuperAdmin ? '<th class="pb-2">Entreprise</th>' : ""}
                         <th class="pb-2">Role</th>
                         <th class="pb-2">Acces</th>
                         <th class="pb-2">Statut</th>
@@ -7567,7 +7884,7 @@
                         <th class="pb-2">Actions</th>
                       </tr>
                     </thead>
-                    <tbody>${rows || '<tr><td colspan="7" class="py-8 text-center text-slate-400">Aucun utilisateur cree.</td></tr>'}</tbody>
+                    <tbody>${rows || `<tr><td colspan="${isSuperAdmin ? 8 : 7}" class="py-8 text-center text-slate-400">Aucun utilisateur cree.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
@@ -7579,8 +7896,22 @@
         event.preventDefault();
         if (!isCurrentCompanySupervisor()) return;
 
-        const companyId = getUserCompanyIdForSuperAdmin(currentUser);
-        const company = getCompanyForUser(currentUser);
+        const isSuperAdmin = isCurrentSuperAdmin();
+        const companyId = isSuperAdmin
+          ? getFormTextValue("cu-company-id")
+          : getUserCompanyIdForSuperAdmin(currentUser);
+        const company = getCompanyById(companyId) ||
+          (companyId === "COMP-ITC-LEGACY"
+            ? {
+              id: "COMP-ITC-LEGACY",
+              name: "ITC",
+              logo_url: "assets/nouveau-logo-itc.png",
+            }
+            : null);
+        if (!companyId || !company) {
+          alert("Choisissez une entreprise valide avant de creer ce compte.");
+          return;
+        }
         const role = document.getElementById("cu-user-role").value;
         const manualOps = document
           .getElementById("cu-managed-ops")
@@ -7624,6 +7955,7 @@
         appData.users.push({
           id: maxId + 1,
           company_id: companyId,
+          company_name: company.name,
           company_logo_url: company?.logo_url || "assets/saas-logo.svg",
           role,
           name: document.getElementById("cu-user-name").value.trim(),
@@ -8261,7 +8593,7 @@
           const items = rows
             .map((r) => ({
               op: normalizeOperatorKey(r.querySelector(".art-op")?.value),
-              label: String(r.querySelector(".art-l")?.value || "").toUpperCase().trim(),
+              label: String(r.querySelector(".art-l")?.value || "").trim(),
               qty: parseInt(r.querySelector(".art-q")?.value, 10) || 0,
             }))
             .filter((item) => item.op && item.label && item.qty > 0);
@@ -8288,21 +8620,21 @@
             id: "BS-" + Date.now().toString().slice(-4),
             workflow: "TECH_BON_SORTIE",
             demandeurOriginalId: currentUser.id,
-            demandeurName: document.getElementById("t-nom").value.toUpperCase(),
+            demandeurName: getFormTextValue("t-nom"),
             technicienId: currentUser.id,
-            technicienNom: document.getElementById("t-nom").value.toUpperCase(),
-            receptionnaireRole: document.getElementById("t-role").value.toUpperCase(),
+            technicienNom: getFormTextValue("t-nom"),
+            receptionnaireRole: getFormTextValue("t-role"),
             coordinateurId: assignedCoordinateurId,
             coordinateurNom: assignedCoordinateurName,
             emetteur: assignedCoordinateurName,
             op: ops.join(" / "),
             ops,
             items,
-            motif: document.getElementById("t-objectif").value.toUpperCase(),
-            ref: document.getElementById("t-objectif").value.toUpperCase(),
+            motif: getFormTextValue("t-objectif"),
+            ref: getFormTextValue("t-objectif"),
             status: "EN ATTENTE COORDINATION",
             statut: "EN ATTENTE COORDINATION",
-            technicianSignatureText: String(document.getElementById("t-signature").value || "").toUpperCase().trim(),
+            technicianSignatureText: getFormTextValue("t-signature"),
             technicianSignedAt: now,
             date: new Date().toLocaleDateString(),
           };
@@ -8317,10 +8649,10 @@
         const d = {
           id: "T-" + Date.now().toString().slice(-4),
           technicienId: currentUser.id, // Garde l'ID du compte pour l'archivage
-          technicienNom: document.getElementById("t-nom").value.toUpperCase(), // Récupère le nom saisi
-          equipe: document.getElementById("t-equipe").value.toUpperCase(),
-          besoin: document.getElementById("t-besoin").value.toUpperCase(),
-          objectif: document.getElementById("t-objectif").value.toUpperCase(),
+          technicienNom: getFormTextValue("t-nom"), // Récupère le nom saisi
+          equipe: getFormTextValue("t-equipe"),
+          besoin: getFormTextValue("t-besoin"),
+          objectif: getFormTextValue("t-objectif"),
           statut: "EN ATTENTE COORDINATION",
           date: new Date().toLocaleDateString(),
         };
@@ -8465,7 +8797,7 @@
         if (!d) return alert("Demande introuvable.");
         const managerSelect = document.getElementById("coord-assign-gestionnaire");
         const managerId = managerSelect ? parseInt(managerSelect.value, 10) : null;
-        const signature = String(document.getElementById("coord-signature")?.value || "").trim().toUpperCase();
+        const signature = getFormTextValue("coord-signature");
         if (!managerId || !signature) return alert("Choisissez un gestionnaire et signez le bon.");
         d.assignedGestionnaireId = managerId;
         d.assignedGestionnaireName = gestionnaireNameById(managerId) || "";
@@ -8540,9 +8872,9 @@
           prestataire: "ITC / " + (tech.equipe || "TERRAIN"),
           op: "ITC",
           items,
-          motif: (
-            document.getElementById("c-motif-2")?.value || tech.objectif
-          ).toUpperCase(),
+          motif: String(
+            document.getElementById("c-motif-2")?.value || tech.objectif || "",
+          ).trim(),
           // Assigned gestionnaire (if selected)
           assignedGestionnaireId: (function () {
             try {
@@ -8745,7 +9077,7 @@
           demandeurName: "COORDINATION",
           op: document.getElementById("d-op").value,
           items,
-          motif: document.getElementById("d-motif").value.toUpperCase(),
+          motif: getFormTextValue("d-motif"),
           // assigned gestionnaire if chosen
           assignedGestionnaireId: (function () {
             try {
@@ -8824,10 +9156,10 @@
         const r = {
           id: "RET-" + Date.now().toString().slice(-4),
           techName: currentUser.name,
-          label: document.getElementById("ret-label").value.toUpperCase(),
+          label: getFormTextValue("ret-label"),
           qty: parseInt(document.getElementById("ret-qty").value),
           etat: document.getElementById("ret-etat").value,
-          motif: document.getElementById("ret-motif").value.toUpperCase(),
+          motif: getFormTextValue("ret-motif"),
           date: new Date().toLocaleDateString(),
           status: "EN ATTENTE",
         };
@@ -8845,10 +9177,12 @@
         const toutesLesDemandes = appData.demandes || [];
 
         // 2. FILTRAGE : On récupère uniquement les bons en attente
+        const isSuperAdmin = String(currentUser?.role || "").toUpperCase() === "SUPER_ADMIN";
         const data = toutesLesDemandes.filter(
           (d) =>
             d.status === "EN ATTENTE GESTIONNAIRE" &&
-            (d.workflow !== "TECH_BON_SORTIE" ||
+            (isSuperAdmin ||
+              d.workflow !== "TECH_BON_SORTIE" ||
               !d.assignedGestionnaireId ||
               parseInt(d.assignedGestionnaireId) === parseInt(currentUser?.id)),
         );
@@ -8977,7 +9311,7 @@
       function managerSignAndValidateDemande(id) {
         const d = (appData.demandes || []).find((x) => x.id === id);
         if (!d) return alert("Demande introuvable.");
-        const signature = String(document.getElementById("manager-signature")?.value || "").trim().toUpperCase();
+        const signature = getFormTextValue("manager-signature");
         if (!signature) return alert("Signature obligatoire avant validation.");
         d.managerSignatureText = signature;
         d.managerSignedAt = new Date().toLocaleString();
@@ -9248,7 +9582,7 @@
 
         const matInput = document.getElementById("r-mat");
         if (matInput) {
-          matInput.value = String(saved.mat || "").toUpperCase();
+          matInput.value = String(saved.mat || "");
         }
 
         // Allow managers to add a new material type from the select
@@ -9265,9 +9599,8 @@
                     typeSelect.value = "";
                     return;
                   }
-                  const newType = String(v || "")
-                    .trim()
-                    .toUpperCase();
+                  const newType = String(v || "").trim();
+                  const newTypeKey = newType.toUpperCase();
                   if (!newType) {
                     typeSelect.value = "";
                     return;
@@ -9283,7 +9616,7 @@
                       (t) =>
                         String(t || "")
                           .trim()
-                          .toUpperCase() === newType,
+                          .toUpperCase() === newTypeKey,
                     )
                   ) {
                     appData.materialTypes.push(newType);
@@ -9293,7 +9626,7 @@
 
                   // Add option to select if not present and select it
                   const exists = Array.from(typeSelect.options).some(
-                    (o) => String(o.value || "").toUpperCase() === newType,
+                    (o) => String(o.value || "").toUpperCase() === newTypeKey,
                   );
                   if (!exists) {
                     const opt = document.createElement("option");
@@ -9332,9 +9665,9 @@
 
         const mat = {
           op: document.getElementById("r-op").value,
-          label: document.getElementById("r-mat").value.toUpperCase().trim(),
+          label: getFormTextValue("r-mat"),
           qty: parseInt(document.getElementById("r-qty").value) || 0,
-          type: document.getElementById("r-type").value.toUpperCase(),
+          type: document.getElementById("r-type").value,
         };
         if (!mat.type || mat.type === "__ADD_NEW__") {
           alert("Veuillez choisir un type de matériel valide.");
@@ -9347,7 +9680,7 @@
             (t) =>
               String(t || "")
                 .trim()
-                .toUpperCase() === mat.type,
+                .toUpperCase() === String(mat.type || "").toUpperCase(),
           )
         ) {
           appData.materialTypes.push(mat.type);
@@ -11260,9 +11593,9 @@
 
             aiNavigateToSection("tech-nouvelle-demande", () => {
               const fields = {};
-              if (equipe) { fields["t-equipe"]  = equipe.toUpperCase(); }
-              if (site)   { fields["t-objectif"] = site.toUpperCase();  }
-              if (besoin) { fields["t-besoin"]   = besoin.toUpperCase();}
+              if (equipe) { fields["t-equipe"] = equipe; }
+              if (site) { fields["t-objectif"] = site; }
+              if (besoin) { fields["t-besoin"] = besoin; }
               Object.entries(fields).forEach(([id, val]) => {
                 const el = document.getElementById(id);
                 if (el) el.value = val;
@@ -11289,11 +11622,11 @@
             const motif = aiExtractParam(q, /(?:motif|raison|car|parce que|suite)[:\s]+(.+)$/i);
 
             aiNavigateToSection("tech-retour-materiel", () => {
-              if (label) { const el = document.getElementById("ret-label"); if (el) el.value = label.toUpperCase(); }
+              if (label) { const el = document.getElementById("ret-label"); if (el) el.value = label; }
               if (qty)   { const el = document.getElementById("ret-qty");   if (el) el.value = qty; }
               const etatEl = document.getElementById("ret-etat");
               if (etatEl) etatEl.value = etat;
-              if (motif) { const el = document.getElementById("ret-motif"); if (el) el.value = motif.toUpperCase(); }
+              if (motif) { const el = document.getElementById("ret-motif"); if (el) el.value = motif; }
               aiHighlightFilledFields(["ret-label","ret-qty","ret-etat","ret-motif"]);
             });
 
@@ -11312,7 +11645,7 @@
                 const el = document.getElementById("r-op");
                 if (el) el.value = (op === "OCI" || op === "CIC") ? "OCI-CIC" : op;
               }
-              if (mat) { const el = document.getElementById("r-mat"); if (el) el.value = mat.toUpperCase(); }
+              if (mat) { const el = document.getElementById("r-mat"); if (el) el.value = mat; }
               if (qty) { const el = document.getElementById("r-qty"); if (el) el.value = qty; }
               aiHighlightFilledFields(["r-op","r-mat","r-qty"]);
             });
@@ -11336,13 +11669,13 @@
             const itemRe = /(\d+)\s+([a-zàâçéèêëîïôûùüÿ][a-zàâçéèêëîïôûùüÿ0-9 _-]+?)(?:,|et|$)/gi;
             let m;
             while ((m = itemRe.exec(q)) !== null) {
-              itemsRaw.push({ qty: m[1], label: m[2].trim().toUpperCase() });
+              itemsRaw.push({ qty: m[1], label: m[2].trim() });
             }
 
             aiNavigateToSection("sortie-physique", () => {
               if (op)   { const el = document.getElementById("s-op");   if (el) el.value = op; }
-              if (tech) { const el = document.getElementById("s-tech"); if (el) el.value = tech.toUpperCase(); }
-              if (ref)  { const el = document.getElementById("s-ref");  if (el) el.value = ref.toUpperCase(); }
+              if (tech) { const el = document.getElementById("s-tech"); if (el) el.value = tech; }
+              if (ref)  { const el = document.getElementById("s-ref");  if (el) el.value = ref; }
               aiHighlightFilledFields(["s-op","s-tech","s-ref"]);
 
               // Remplissage des lignes d'articles si détectés
@@ -11389,7 +11722,7 @@
                 const el = document.getElementById("d-op");
                 if (el) { el.value = (op === "OCI" || op === "CIC") ? "OCI-CIC" : op; el.dispatchEvent(new Event("change")); }
               }
-              if (motif) { const el = document.getElementById("d-motif"); if (el) el.value = motif.toUpperCase(); }
+              if (motif) { const el = document.getElementById("d-motif"); if (el) el.value = motif; }
               aiHighlightFilledFields(["d-op","d-motif"]);
             });
 
