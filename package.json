@@ -7,6 +7,9 @@
     "create-super-admin": "node scripts/create_super_admin.js",
     "seed-demo-company": "node scripts/seed_demo_company.js",
     "sync-security-profiles": "node scripts/sync_security_profiles.js",
+    "check-security-profiles": "node scripts/check_security_profiles.js",
+    "deploy-database-rules": "node scripts/deploy_database_rules.js",
+    "test-security-login": "node scripts/test_security_login.js",
     "migrate-itc-b01": "node scripts/migrate_itc_to_b01.js",
     "ai-backend": "node server/ai-chat-backend.js",
     "ai-backend:dev": "set PORT=8787&& node server/ai-chat-backend.js"
