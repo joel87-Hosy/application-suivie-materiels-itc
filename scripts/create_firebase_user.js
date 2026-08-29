@@ -128,6 +128,14 @@ async function main() {
       role: argv.role,
       company_id: newUserProfile.company_id,
     });
+    await db.ref(`auth_profiles/${userRecord.uid}`).set({
+      uid: userRecord.uid,
+      email,
+      role: argv.role,
+      company_id: newUserProfile.company_id,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    });
 
     // Write only the touched profile to avoid overwriting concurrent changes.
     const profileKey =

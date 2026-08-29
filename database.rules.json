@@ -1,0 +1,23 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "auth_profiles": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('auth_profiles').child(auth.uid).child('role').val() === 'SUPER_ADMIN')",
+        ".write": "auth != null && root.child('auth_profiles').child(auth.uid).child('role').val() === 'SUPER_ADMIN'",
+        ".validate": "newData.hasChildren(['uid', 'email', 'role', 'is_active']) && newData.child('uid').val() === $uid"
+      }
+    },
+    "tenant_branding": {
+      "$companyId": {
+        ".read": "auth != null && root.child('auth_profiles').child(auth.uid).child('is_active').val() === true && (root.child('auth_profiles').child(auth.uid).child('role').val() === 'SUPER_ADMIN' || root.child('auth_profiles').child(auth.uid).child('company_id').val() === $companyId)",
+        ".write": "auth != null && root.child('auth_profiles').child(auth.uid).child('role').val() === 'SUPER_ADMIN'"
+      }
+    },
+    "itc_data": {
+      ".read": "auth != null && root.child('auth_profiles').child(auth.uid).child('is_active').val() === true",
+      ".write": "auth != null && root.child('auth_profiles').child(auth.uid).child('is_active').val() === true && (root.child('auth_profiles').child(auth.uid).child('role').val() === 'SUPER_ADMIN' || root.child('auth_profiles').child(auth.uid).child('role').val() === 'Superviseur' || root.child('auth_profiles').child(auth.uid).child('role').val() === 'Gestionnaire' || root.child('auth_profiles').child(auth.uid).child('role').val() === 'Coordinateur' || root.child('auth_profiles').child(auth.uid).child('role').val() === 'Coordinatrice' || root.child('auth_profiles').child(auth.uid).child('role').val() === 'Superviseur Terrain' || root.child('auth_profiles').child(auth.uid).child('role').val() === 'Technicien')"
+    }
+  }
+}

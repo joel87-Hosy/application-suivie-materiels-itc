@@ -86,6 +86,14 @@ async function main() {
     role: "SUPER_ADMIN",
     company_id: null,
   });
+  await db.ref(`auth_profiles/${uid}`).set({
+    uid,
+    email,
+    role: "SUPER_ADMIN",
+    company_id: null,
+    is_active: true,
+    updated_at: new Date().toISOString(),
+  });
 
   const ref = db.ref("itc_data");
   const snap = await ref.once("value");
