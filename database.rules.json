@@ -5,7 +5,7 @@
     "auth_profiles": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || root.child('auth_profiles').child(auth.uid).child('role').val() === 'SUPER_ADMIN')",
-        ".write": "auth != null && root.child('auth_profiles').child(auth.uid).child('role').val() === 'SUPER_ADMIN'",
+        ".write": "auth != null && (root.child('auth_profiles').child(auth.uid).child('role').val() === 'SUPER_ADMIN' || (root.child('auth_profiles').child(auth.uid).child('role').val() === 'Superviseur' && newData.child('role').val() !== 'SUPER_ADMIN' && (root.child('auth_profiles').child(auth.uid).child('company_id').val() === newData.child('company_id').val() || (newData.child('company_id').val() === 'COMP-ITC-LEGACY' && !root.child('auth_profiles').child(auth.uid).child('company_id').exists()))))",
         ".validate": "newData.hasChildren(['uid', 'email', 'role', 'is_active']) && newData.child('uid').val() === $uid"
       }
     },

@@ -1666,6 +1666,35 @@
       firebase.initializeApp(firebaseConfig);
       const db = firebase.database();
 
+      async function createAuthUserWithoutChangingSession({
+        email,
+        password,
+        displayName,
+      }) {
+        const appName = `user-create-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}`;
+        const secondaryApp = firebase.initializeApp(firebaseConfig, appName);
+        try {
+          const auth = secondaryApp.auth();
+          const credential = await auth.createUserWithEmailAndPassword(
+            email,
+            password,
+          );
+          if (displayName && credential.user?.updateProfile) {
+            await credential.user.updateProfile({ displayName });
+          }
+          await auth.signOut();
+          return credential.user;
+        } finally {
+          try {
+            await secondaryApp.delete();
+          } catch (error) {
+            console.warn("Nettoyage instance Auth secondaire impossible", error);
+          }
+        }
+      }
+
       function getLoginTenantId() {
         try {
           const params = new URLSearchParams(window.location.search || "");
@@ -7861,8 +7890,8 @@
                   <input id="cu-temp-password" class="w-full border rounded-xl p-3 text-xs font-black text-slate-700" readonly value="${generateTemporaryPassword()}" onclick="this.select()" />
                   <button type="button" onclick="refreshCompanyUserTempPassword()" class="bg-cyan-600 text-white rounded-xl px-3 text-[8px] font-black uppercase">Generer</button>
                 </div>
-                <button class="w-full bg-slate-900 text-white rounded-xl p-3 text-[9px] font-black uppercase">Creer le profil</button>
-                <p class="text-[8px] text-slate-400">Le mot de passe temporaire est genere automatiquement. Utilisez-le pour creer le compte Auth via le script Admin SDK.</p>
+                <button class="w-full bg-slate-900 text-white rounded-xl p-3 text-[9px] font-black uppercase">Creer le compte</button>
+                <p class="text-[8px] text-slate-400">Le mot de passe temporaire est genere automatiquement et le compte Auth est cree directement.</p>
               </form>
 
               <div class="xl:col-span-2 bg-white rounded-3xl border border-slate-200 shadow-xl p-5">
@@ -7892,100 +7921,159 @@
           </div>`;
       }
 
-      function createCompanyUserFromSupervisor(event) {
+      async function createCompanyUserFromSupervisor(event) {
         event.preventDefault();
         if (!isCurrentCompanySupervisor()) return;
-
-        const isSuperAdmin = isCurrentSuperAdmin();
-        const companyId = isSuperAdmin
-          ? getFormTextValue("cu-company-id")
-          : getUserCompanyIdForSuperAdmin(currentUser);
-        const company = getCompanyById(companyId) ||
-          (companyId === "COMP-ITC-LEGACY"
-            ? {
-              id: "COMP-ITC-LEGACY",
-              name: "ITC",
-              logo_url: "assets/nouveau-logo-itc.png",
-            }
-            : null);
-        if (!companyId || !company) {
-          alert("Choisissez une entreprise valide avant de creer ce compte.");
-          return;
+        const submitButton = event.submitter;
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = "Creation...";
         }
-        const role = document.getElementById("cu-user-role").value;
-        const manualOps = document
-          .getElementById("cu-managed-ops")
-          .value.split(",")
-          .map((op) => op.trim())
-          .filter(Boolean);
-        const roleUpper = String(role).toUpperCase();
-        let managedOps =
-          [
-            "GESTIONNAIRE",
-            "TECHNICIEN",
-            "COORDINATEUR",
-            "COORDINATRICE",
-            "SUPERVISEUR TERRAIN",
-          ].includes(roleUpper)
-            ? manualOps
+
+        try {
+          const isSuperAdmin = isCurrentSuperAdmin();
+          const companyId = isSuperAdmin
+            ? getFormTextValue("cu-company-id")
+            : getUserCompanyIdForSuperAdmin(currentUser);
+          const company = getCompanyById(companyId) ||
+            (companyId === "COMP-ITC-LEGACY"
+              ? {
+                id: "COMP-ITC-LEGACY",
+                name: "ITC",
+                logo_url: "assets/nouveau-logo-itc.png",
+              }
+              : null);
+          if (!companyId || !company) {
+            alert("Choisissez une entreprise valide avant de creer ce compte.");
+            return;
+          }
+          const role = document.getElementById("cu-user-role").value;
+          const userName = document.getElementById("cu-user-name").value.trim();
+          const manualOps = document
+            .getElementById("cu-managed-ops")
+            .value.split(",")
+            .map((op) => op.trim())
+            .filter(Boolean);
+          const roleUpper = String(role).toUpperCase();
+          let managedOps =
+            [
+              "GESTIONNAIRE",
+              "TECHNICIEN",
+              "COORDINATEUR",
+              "COORDINATRICE",
+              "SUPERVISEUR TERRAIN",
+            ].includes(roleUpper)
+              ? manualOps
+              : [];
+          if (String(role).toUpperCase() === "TECHNICIEN" && managedOps.length === 0) {
+            const fingerprint = `${userName} ${document.getElementById("cu-user-email").value}`.toUpperCase();
+            if (fingerprint.includes("B02") || fingerprint.includes("BUREAU 02")) managedOps = ["ITC-B02"];
+            else managedOps = ["ITC-B01"];
+          }
+
+          appData.users = Array.isArray(appData.users) ? appData.users : [];
+          const email = document.getElementById("cu-user-email").value.trim().toLowerCase();
+          const temporaryPassword =
+            document.getElementById("cu-temp-password").value ||
+            generateTemporaryPassword();
+          const existingIndex = appData.users.findIndex(
+            (user) => String(user.email || "").toLowerCase() === email,
+          );
+          const existingProfile =
+            existingIndex >= 0 ? appData.users[existingIndex] : null;
+          if (existingProfile?.uid) {
+            alert("Un profil existe deja avec cet email.");
+            return;
+          }
+
+          const authUser = await createAuthUserWithoutChangingSession({
+            email,
+            password: temporaryPassword,
+            displayName: userName,
+          });
+
+          const maxId = appData.users.reduce(
+            (max, user) => Math.max(max, Number(user.id) || 0),
+            0,
+          );
+          const newProfile = {
+            ...(existingProfile || {}),
+            id: maxId + 1,
+            uid: authUser.uid,
+            company_id: companyId,
+            company_name: company.name,
+            company_logo_url: company?.logo_url || "assets/saas-logo.svg",
+            role,
+            name: userName,
+            full_name: userName,
+            email,
+            managedOps,
+            temporary_password: temporaryPassword,
+            must_change_password: true,
+            is_active: true,
+            account_status: "active",
+            created_at: existingProfile?.created_at || new Date().toISOString(),
+            created_by: currentUser.email,
+          };
+          if (existingIndex >= 0) {
+            newProfile.id = existingProfile.id || maxId + 1;
+            appData.users[existingIndex] = newProfile;
+          } else {
+            appData.users.push(newProfile);
+          }
+
+          appData.platformAuditLogs = Array.isArray(appData.platformAuditLogs)
+            ? appData.platformAuditLogs
             : [];
-        if (String(role).toUpperCase() === "TECHNICIEN" && managedOps.length === 0) {
-          const fingerprint = `${document.getElementById("cu-user-name").value} ${document.getElementById("cu-user-email").value}`.toUpperCase();
-          if (fingerprint.includes("B02") || fingerprint.includes("BUREAU 02")) managedOps = ["ITC-B02"];
-          else managedOps = ["ITC-B01"];
+          appData.platformAuditLogs.unshift({
+            action: existingProfile
+              ? "ATTACH_COMPANY_USER_AUTH"
+              : "CREATE_COMPANY_USER",
+            company_id: companyId,
+            role,
+            email,
+            uid: authUser.uid,
+            by: currentUser.email,
+            date: new Date().toLocaleString("fr-FR"),
+          });
+
+          await db.ref(`auth_profiles/${authUser.uid}`).set({
+            uid: authUser.uid,
+            email,
+            role,
+            company_id: companyId,
+            is_active: true,
+            account_status: "active",
+            updated_at: new Date().toISOString(),
+          });
+          await db.ref("itc_data").set(appData);
+          try {
+            localStorage.setItem("itc_erp_v6_qr", JSON.stringify(appData));
+          } catch (e) {
+            console.warn("Impossible d'ecrire dans localStorage", e);
+          }
+
+          alert(
+            `Compte cree.\n\nEmail: ${email}\nMot de passe temporaire: ${temporaryPassword}\n\nL'utilisateur peut maintenant se connecter.`,
+          );
+          renderCompanyUsersAdmin(document.getElementById("app-container"));
+        } catch (error) {
+          const code = String(error?.code || "");
+          if (code.includes("email-already-in-use")) {
+            alert("Ce compte existe deja dans Firebase Auth. Supprimez le doublon ou utilisez le script Admin SDK pour le rattacher.");
+          } else if (code.includes("operation-not-allowed")) {
+            alert("Creation impossible : activez le fournisseur Email/Password dans Firebase Authentication.");
+          } else if (code.includes("permission-denied")) {
+            alert("Creation partielle : le compte Auth a peut-etre ete cree, mais les droits de base de donnees refusent l'ecriture du profil securite. Deployeez les nouvelles regles Firebase puis reessayez.");
+          } else {
+            alert("Erreur creation compte : " + (error?.message || error));
+          }
+        } finally {
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = "Creer le compte";
+          }
         }
-
-        appData.users = Array.isArray(appData.users) ? appData.users : [];
-        const email = document.getElementById("cu-user-email").value.trim().toLowerCase();
-        const temporaryPassword =
-          document.getElementById("cu-temp-password").value ||
-          generateTemporaryPassword();
-        const exists = appData.users.some(
-          (user) => String(user.email || "").toLowerCase() === email,
-        );
-        if (exists) {
-          alert("Un profil existe deja avec cet email.");
-          return;
-        }
-
-        const maxId = appData.users.reduce(
-          (max, user) => Math.max(max, Number(user.id) || 0),
-          0,
-        );
-        appData.users.push({
-          id: maxId + 1,
-          company_id: companyId,
-          company_name: company.name,
-          company_logo_url: company?.logo_url || "assets/saas-logo.svg",
-          role,
-          name: document.getElementById("cu-user-name").value.trim(),
-          full_name: document.getElementById("cu-user-name").value.trim(),
-          email,
-          managedOps,
-          temporary_password: temporaryPassword,
-          must_change_password: true,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          created_by: currentUser.email,
-        });
-
-        appData.platformAuditLogs = Array.isArray(appData.platformAuditLogs)
-          ? appData.platformAuditLogs
-          : [];
-        appData.platformAuditLogs.unshift({
-          action: "CREATE_COMPANY_USER",
-          company_id: companyId,
-          role,
-          email,
-          by: currentUser.email,
-          date: new Date().toLocaleString("fr-FR"),
-        });
-        save();
-        const authCommand = `npm.cmd run create-user -- --email "${email}" --password "${temporaryPassword}" --name "${document.getElementById("cu-user-name").value.trim()}" --role "${role}" --companyId "${companyId}"${managedOps.length ? ` --managedOps ${managedOps.join(",")}` : ""} --serviceAccount tools/serviceAccountKey.json`;
-        alert(
-          `Profil cree.\n\nEmail: ${email}\nMot de passe temporaire: ${temporaryPassword}\n\nCommande Auth a executer:\n${authCommand}`,
-        );
-        renderCompanyUsersAdmin(document.getElementById("app-container"));
       }
 
       function renderCockpit(container) {
