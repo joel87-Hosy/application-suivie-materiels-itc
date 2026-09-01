@@ -4121,17 +4121,178 @@
         );
       }
 
+      function getSortieDestinataires() {
+        let savedDestinataires = [];
+        try {
+          const parsed = JSON.parse(
+            localStorage.getItem("sortie_destinataires") || "[]",
+          );
+          if (Array.isArray(parsed)) savedDestinataires = parsed;
+        } catch (e) {
+          savedDestinataires = [];
+        }
+
+        const sortieDestinataires = ((appData && appData.sorties) || [])
+          .map((sortie) => sortie?.tech)
+          .filter(Boolean);
+
+        return [
+          ...new Set(
+            [...savedDestinataires, ...sortieDestinataires]
+              .map((name) =>
+                String(name || "")
+                  .trim()
+                  .toUpperCase(),
+              )
+              .filter(Boolean),
+          ),
+        ].sort();
+      }
+
+      function rememberSortieDestinataire(name) {
+        const cleanName = String(name || "")
+          .trim()
+          .toUpperCase();
+        if (!cleanName) return;
+
+        const destinataires = getSortieDestinataires();
+        if (destinataires.includes(cleanName)) return;
+        localStorage.setItem(
+          "sortie_destinataires",
+          JSON.stringify([...destinataires, cleanName].sort()),
+        );
+      }
+
+      function getAllowedSortieOperators() {
+        const knownOps = ["ITC-B01", "ITC-B02", "OCI", "CIC", "MOOV", "MTN"];
+        const stockOps = ((appData && appData.stock) || [])
+          .map((item) => normalizeOperatorKey(item.op))
+          .filter(Boolean);
+        return [
+          ...new Set([...knownOps, ...stockOps].filter((op) =>
+            isOperatorAllowedForUser(currentUser, op),
+          )),
+        ].sort((a, b) => knownOps.indexOf(a) - knownOps.indexOf(b));
+      }
+
+      function getCheckedSortieOperators() {
+        return Array.from(document.querySelectorAll(".sortie-op-check:checked"))
+          .map((input) => normalizeOperatorKey(input.value))
+          .filter(Boolean);
+      }
+
+      function getSortieMaterialRowKey(op, label) {
+        return `${normalizeOperatorKey(op)}::${String(label || "").trim().toUpperCase()}`;
+      }
+
+      function getSelectedSortieItemsFromPicker() {
+        return Array.from(document.querySelectorAll(".sortie-stock-row"))
+          .map((row) => {
+            const checked = row.querySelector(".sortie-stock-check")?.checked;
+            const qty = parseInt(row.querySelector(".sortie-stock-qty")?.value) || 0;
+            return {
+              op: row.dataset.op || "",
+              label: row.dataset.label || "",
+              qty,
+              checked,
+            };
+          })
+          .filter((item) => item.checked && item.op && item.label && item.qty > 0)
+          .map(({ checked, ...item }) => item);
+      }
+
+      function updateSortieOperatorSummary() {
+        const selectedOps = getCheckedSortieOperators();
+        const summary = document.getElementById("sortie-op-summary");
+        if (summary) {
+          summary.innerText = selectedOps.length
+            ? selectedOps.map((op) => getOperatorMeta(op).label).join(" / ")
+            : "Cliquez pour choisir un ou plusieurs operateurs";
+        }
+        const count = document.getElementById("sortie-op-count");
+        if (count) count.innerText = `${selectedOps.length} selectionne(s)`;
+      }
+
+      function renderSortieMaterialPicker(previousItems = getSelectedSortieItemsFromPicker()) {
+        const container = document.getElementById("sortie-material-picker");
+        if (!container) return;
+
+        const selectedOps = getCheckedSortieOperators();
+        const previousByKey = new Map(
+          (previousItems || []).map((item) => [
+            getSortieMaterialRowKey(item.op, item.label),
+            Number(item.qty) || "",
+          ]),
+        );
+        const stockRows = ((appData && appData.stock) || [])
+          .filter((item) => selectedOps.includes(normalizeOperatorKey(item.op)))
+          .filter((item) => (Number(item.qty) || 0) > 0)
+          .sort((a, b) => {
+            const opCompare = normalizeOperatorKey(a.op).localeCompare(normalizeOperatorKey(b.op));
+            if (opCompare !== 0) return opCompare;
+            return String(a.label || "").localeCompare(String(b.label || ""));
+          });
+
+        if (selectedOps.length === 0) {
+          container.innerHTML = `
+            <div class="p-6 text-center text-[10px] uppercase text-slate-400 bg-slate-50 border rounded-2xl">
+              Choisissez au moins un operateur pour afficher le stock disponible.
+            </div>`;
+          updateSortieOperatorSummary();
+          saveSortieDraft();
+          return;
+        }
+
+        container.innerHTML = `
+          <div class="grid grid-cols-1 gap-2 max-h-[420px] overflow-y-auto pr-1">
+            ${
+              stockRows.length
+                ? stockRows.map((item) => {
+                    const op = normalizeOperatorKey(item.op);
+                    const label = String(item.label || "").trim();
+                    const key = getSortieMaterialRowKey(op, label);
+                    const previousQty = previousByKey.get(key);
+                    const checked = previousByKey.has(key);
+                    const available = Number(item.qty) || 0;
+                    return `
+                      <div class="sortie-stock-row grid grid-cols-[auto_1fr_92px] gap-3 items-center bg-white border border-slate-200 rounded-xl p-3" data-op="${escapeHtml(op)}" data-label="${escapeHtml(label)}">
+                        <input type="checkbox" class="sortie-stock-check h-4 w-4 accent-red-600" ${checked ? "checked" : ""} onchange="const qtyInput = this.closest('.sortie-stock-row').querySelector('.sortie-stock-qty'); if (this.checked && !qtyInput.value) qtyInput.value = 1; saveSortieDraft();" />
+                        <div class="min-w-0">
+                          <p class="text-[9px] font-black uppercase text-slate-800 truncate">${escapeHtml(label)}</p>
+                          <p class="text-[7px] uppercase text-slate-400">${escapeHtml(getOperatorMeta(op).label)} | disponible: ${available}</p>
+                        </div>
+                        <input type="number" class="sortie-stock-qty border-2 rounded-lg p-2 text-[9px] font-black text-center" min="1" max="${available}" value="${previousQty || ""}" placeholder="QTE" oninput="this.closest('.sortie-stock-row').querySelector('.sortie-stock-check').checked = Number(this.value) > 0; saveSortieDraft();" />
+                      </div>`;
+                  }).join("")
+                : `<div class="p-6 text-center text-[10px] uppercase text-slate-400 bg-slate-50 border rounded-2xl">Aucun materiel disponible dans les stocks selectionnes.</div>`
+            }
+          </div>`;
+        updateSortieOperatorSummary();
+        saveSortieDraft();
+      }
+
+      function onSortieOperatorSelectionChange() {
+        updateSortieOperatorSummary();
+        renderSortieMaterialPicker();
+      }
+
       function renderSortiePhysiqueForm() {
         const saved = getSortieDraft();
         const savedItems =
           Array.isArray(saved.items) && saved.items.length > 0
             ? saved.items
             : [{ label: "", qty: "" }];
-        const itcDesignations = getCurrentUserDesignationLabels();
         const sortieEmetteurs = getSortieEmetteurs();
+        const allowedOps = getAllowedSortieOperators();
+        const savedOps = Array.isArray(saved.ops) && saved.ops.length > 0
+          ? saved.ops.map((op) => normalizeOperatorKey(op))
+          : saved.op
+            ? [normalizeOperatorKey(saved.op)]
+            : allowedOps.slice(0, 1);
+        const sortieDestinataires = getSortieDestinataires();
         const container = document.getElementById("app-container");
         container.innerHTML = `
-              <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
+              <div class="max-w-5xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
                   <div class="mb-8 rounded-2xl p-5 bg-gradient-to-r from-red-700 via-rose-700 to-orange-600 text-white">
                       <div class="flex items-center justify-between gap-4 flex-wrap">
                         <div>
@@ -4148,19 +4309,29 @@
                   </div>
                   <form onsubmit="handleSortiePhysique(event)" class="space-y-6">
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border-2">
-                          <div>
-                              <label class="text-[8px] text-slate-400 uppercase">Opérateur</label>
-                              <select id="s-op" class="w-full border-2 p-3 rounded-xl text-xs font-black uppercase bg-white">
-                                  <option value="ITC-B01" ${normalizeOperatorKey(saved.op || "") === "ITC-B01" ? "selected" : ""}>STOCK ITC BUREAU 01</option>
-                                  <option value="ITC-B02" ${normalizeOperatorKey(saved.op || "") === "ITC-B02" ? "selected" : ""}>STOCK ITC BUREAU 02</option>
-                                  <option value="ORANGE" ${String(saved.op || "").toUpperCase() === "ORANGE" ? "selected" : ""}>ORANGE</option>
-                                  <option value="MOOV" ${String(saved.op || "").toUpperCase() === "MOOV" ? "selected" : ""}>MOOV</option>
-                                  <option value="MTN" ${String(saved.op || "").toUpperCase() === "MTN" ? "selected" : ""}>MTN</option>
-                              </select>
+                          <div class="md:col-span-2">
+                              <label class="text-[8px] text-slate-400 uppercase">Operateur(s)</label>
+                              <details class="bg-white border-2 rounded-xl">
+                                <summary class="cursor-pointer list-none p-3 flex items-center justify-between gap-3">
+                                  <span id="sortie-op-summary" class="text-xs font-black uppercase text-slate-700">Cliquez pour choisir un ou plusieurs operateurs</span>
+                                  <span id="sortie-op-count" class="text-[8px] uppercase text-red-600 font-black">0 selectionne(s)</span>
+                                </summary>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-3 border-t bg-slate-50">
+                                  ${allowedOps.map((op) => `
+                                    <label class="flex items-center gap-2 bg-white border rounded-xl p-3 text-[9px] uppercase font-black text-slate-700">
+                                      <input type="checkbox" class="sortie-op-check accent-red-600" value="${escapeHtml(op)}" ${savedOps.includes(op) ? "checked" : ""} onchange="onSortieOperatorSelectionChange()" />
+                                      <span>${escapeHtml(getOperatorMeta(op).label)}</span>
+                                    </label>
+                                  `).join("")}
+                                </div>
+                              </details>
                           </div>
                           <div>
                               <label class="text-[8px] text-slate-400 uppercase">Destinataire (Chef d'équipe/Technicien)</label>
-                              <input id="s-tech" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="NOM DU RÉCEPTIONNAIRE" required />
+                              <input id="s-tech" type="text" list="sortie-destinataires-list" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="NOM DU RÉCEPTIONNAIRE" required />
+                              <datalist id="sortie-destinataires-list">
+                                ${buildDatalistOptions(sortieDestinataires)}
+                              </datalist>
                           </div>
                           <div class="md:col-span-2">
                               <label class="text-[8px] text-slate-400 uppercase">Emetteur</label>
@@ -4175,44 +4346,33 @@
                           </div>
                       </div>
 
-                      <div class="space-y-3" id="sortie-items-list">
-                          <p class="text-[9px] text-red-600 mb-2 uppercase font-black">Articles à déduire du stock :</p>
-                        <datalist id="sortie-itc-designations-list">
-                          ${buildDatalistOptions(itcDesignations)}
-                        </datalist>
-                          <div class="flex gap-2 items-center art-row-sortie bg-slate-50 p-2 rounded-xl border">
-                          <input type="text" list="sortie-itc-designations-list" placeholder="DÉSIGNATION" class="w-3/4 border p-2 rounded-lg text-[9px] art-l uppercase bg-white" required />
-                              <input type="number" placeholder="QTÉ" class="w-1/4 border p-2 rounded-lg text-[9px] art-q" required min="1" />
-                              <button type="button" onclick="this.parentElement.remove()" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>
+                      <div class="space-y-3 bg-slate-50 border-2 rounded-2xl p-5" id="sortie-items-list">
+                          <div class="flex items-center justify-between gap-3 flex-wrap">
+                            <div>
+                              <p class="text-[9px] text-red-600 uppercase font-black">Materiels à deduire du stock</p>
+                              <p class="text-[7px] text-slate-400 uppercase">Cochez les lignes voulues, indiquez la quantite, puis validez la sortie.</p>
+                            </div>
+                            <button type="button" onclick="renderSortieMaterialPicker()" class="bg-white border-2 border-slate-200 text-slate-700 px-4 py-2 rounded-xl text-[8px] uppercase font-black inline-flex items-center gap-2">
+                              <i class="fas fa-list-check"></i> Choisir les materiels
+                            </button>
                           </div>
-                        <p class="text-[7px] text-slate-400 uppercase">Suggestions issues des stocks autorisés</p>
+                          <div id="sortie-material-picker"></div>
                       </div>
 
                         <div class="flex gap-4">
-                          <button type="button" onclick="addArticleRowSortie()" class="bg-slate-200 text-slate-700 px-6 py-3 rounded-xl text-[9px] uppercase font-black inline-flex items-center gap-2"><i class="fas fa-plus"></i> Ajouter un article</button>
                           <button type="submit" class="flex-1 bg-red-600 text-white py-4 rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-black transition inline-flex items-center justify-center gap-2"><i class="fas fa-check-circle"></i> Confirmer la Sortie de Stock</button>
                       </div>
                   </form>
               </div>`;
 
-        constrainOperatorSelectForCurrentUser("s-op");
-        const sortieOp = document.getElementById("s-op");
-        if (
-          saved.op &&
-          isOperatorAllowedForUser(currentUser, saved.op) &&
-          Array.from(sortieOp?.options || []).some(
-            (option) => option.value === saved.op,
-          )
-        ) {
-          sortieOp.value = saved.op;
-        }
         const sortieTech = document.getElementById("s-tech");
         if (sortieTech) sortieTech.value = saved.tech || "";
         const sortieEmetteur = document.getElementById("s-emetteur");
         if (sortieEmetteur) sortieEmetteur.value = saved.emetteur || "";
         const sortieRef = document.getElementById("s-ref");
         if (sortieRef) sortieRef.value = saved.ref || "";
-        restoreSortieDraftRows(savedItems);
+        updateSortieOperatorSummary();
+        renderSortieMaterialPicker(savedItems);
       }
 
       // Fonction pour ajouter une ligne d'article dynamiquement
@@ -4265,25 +4425,36 @@
 
         if (!appData.stock) appData.stock = [];
 
-        const op = document.getElementById("s-op").value;
-        if (!isOperatorAllowedForUser(currentUser, op)) {
+        const selectedOps = getCheckedSortieOperators();
+        if (selectedOps.length === 0) {
+          alert("Choisissez au moins un operateur.");
+          return;
+        }
+        const forbiddenOp = selectedOps.find(
+          (op) => !isOperatorAllowedForUser(currentUser, op),
+        );
+        if (forbiddenOp) {
           alert("Accès refusé pour cet opérateur.");
           return;
         }
-        const opKey = normalizeOperatorKey(op);
         const ref = getFormTextValue("s-ref");
         const tech = getFormTextValue("s-tech");
         const emetteur = getFormTextValue("s-emetteur");
-        const rows = document.querySelectorAll(".art-row-sortie");
+        const selectedItems = getSelectedSortieItemsFromPicker();
+        if (selectedItems.length === 0) {
+          alert("Cochez au moins un materiel et renseignez sa quantite.");
+          return;
+        }
 
         let logs = [];
         let errors = [];
         let updates = [];
 
-        rows.forEach((row) => {
-          const label = String(row.querySelector(".art-l").value || "").trim();
+        selectedItems.forEach((item) => {
+          const opKey = normalizeOperatorKey(item.op);
+          const label = String(item.label || "").trim();
           const normalizedLabel = label.toUpperCase();
-          const qty = parseInt(row.querySelector(".art-q").value) || 0;
+          const qty = parseInt(item.qty) || 0;
 
           // Trouver l'article en stock pour cet opérateur (comparaisons normalisées)
           const itemInStock = appData.stock.find((s) => {
@@ -4303,10 +4474,10 @@
             const available = parseInt(itemInStock.qty) || 0;
             if (available >= qty) {
               updates.push({ itemInStock, nextQty: available - qty });
-              logs.push(`${itemInStock.label || label} (-${qty})`);
+              logs.push(`${opKey} - ${itemInStock.label || label} (-${qty})`);
             } else {
               errors.push(
-                `Stock insuffisant pour ${label} (Dispo: ${available})`,
+                `Stock insuffisant pour ${label} sur ${opKey} (Dispo: ${available})`,
               );
             }
           } else {
@@ -4335,10 +4506,11 @@
         const sortieRecord = {
           id: `SORTIE-${Date.now()}`,
           ref,
-          op,
+          op: selectedOps.join("/"),
+          ops: selectedOps,
           tech,
           emetteur,
-          items: rowsToItems(rows),
+          items: selectedItems,
           logs,
           date: new Date().toLocaleString(),
           createdBy: currentUser ? currentUser.name : "ANONYME",
@@ -4347,6 +4519,7 @@
           validatedAt: new Date().toLocaleString(),
         };
         rememberSortieEmetteur(emetteur);
+        rememberSortieDestinataire(tech);
         sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
         appData.sorties.push(sortieRecord);
         save(); // Sauvegarde Firebase
@@ -4360,11 +4533,15 @@
 
       // Helper : convertir les lignes DOM en objets items
       function rowsToItems(rows) {
+        const pickedItems = getSelectedSortieItemsFromPicker();
+        if (pickedItems.length > 0) return pickedItems;
+
         const items = [];
         rows.forEach((row) => {
           const label = String(row.querySelector(".art-l").value || "").trim();
           const qty = parseInt(row.querySelector(".art-q").value) || 0;
-          items.push({ label, qty });
+          const op = row.dataset?.op || document.getElementById("s-op")?.value || "";
+          items.push({ op: normalizeOperatorKey(op), label, qty });
         });
         return items;
       }
@@ -4485,6 +4662,7 @@
             .map((item) => ({
               label: String(item.label),
               qty: Number(item.qty) || 0,
+              op: item.op ? normalizeOperatorKey(item.op) : undefined,
             }));
         }
 
@@ -6848,16 +7026,22 @@
       });
 
       function saveSortieDraft() {
-        const items = [];
-        document.querySelectorAll(".art-row-sortie").forEach((row) => {
-          items.push({
-            label: row.querySelector(".art-l").value,
-            qty: row.querySelector(".art-q").value,
+        let items = getSelectedSortieItemsFromPicker();
+        if (items.length === 0) {
+          items = [];
+          document.querySelectorAll(".art-row-sortie").forEach((row) => {
+            items.push({
+              op: normalizeOperatorKey(row.dataset?.op || document.getElementById("s-op")?.value || ""),
+              label: row.querySelector(".art-l")?.value || "",
+              qty: row.querySelector(".art-q")?.value || "",
+            });
           });
-        });
+        }
+        const selectedOps = getCheckedSortieOperators();
 
         const draft = {
-          op: document.getElementById("s-op")?.value,
+          op: selectedOps[0] || document.getElementById("s-op")?.value,
+          ops: selectedOps,
           tech: document.getElementById("s-tech")?.value,
           emetteur: document.getElementById("s-emetteur")?.value,
           ref: document.getElementById("s-ref")?.value,
