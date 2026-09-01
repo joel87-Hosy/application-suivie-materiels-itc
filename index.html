@@ -2209,7 +2209,7 @@
         const ops = Array.isArray(demande?.ops)
           ? demande.ops
           : String(demande?.op || "")
-              .split("/")
+              .split(/[\/,;|]/g)
               .map((op) => op.trim());
         return [
           ...new Set(
@@ -4121,11 +4121,31 @@
         );
       }
 
-      function getSortieDestinataires() {
+      function getSortieBureauKeyFromOps(ops) {
+        const normalizedOps = (ops || [])
+          .map((op) => normalizeOperatorKey(op))
+          .filter(Boolean);
+        const hasB02 = normalizedOps.some((op) => ["ITC-B02", "MOOV"].includes(op));
+        const hasB01 = normalizedOps.some((op) => ["ITC-B01", "OCI", "CIC", "MTN"].includes(op));
+        if (hasB02 && !hasB01) return "B02";
+        if (hasB01 && !hasB02) return "B01";
+        if (hasB01 && hasB02) return "MULTI";
+        return "GENERAL";
+      }
+
+      function getSortieDestinataireStorageKey(ops) {
+        return `sortie_destinataires_${getSortieBureauKeyFromOps(ops).toLowerCase()}`;
+      }
+
+      function getSortieDestinataires(ops = getCheckedSortieOperators()) {
+        const selectedOps = (ops || [])
+          .map((op) => normalizeOperatorKey(op))
+          .filter(Boolean);
+        const selectedBureauKey = getSortieBureauKeyFromOps(selectedOps);
         let savedDestinataires = [];
         try {
           const parsed = JSON.parse(
-            localStorage.getItem("sortie_destinataires") || "[]",
+            localStorage.getItem(getSortieDestinataireStorageKey(selectedOps)) || "[]",
           );
           if (Array.isArray(parsed)) savedDestinataires = parsed;
         } catch (e) {
@@ -4133,6 +4153,12 @@
         }
 
         const sortieDestinataires = ((appData && appData.sorties) || [])
+          .filter((sortie) => {
+            if (selectedBureauKey === "GENERAL") return true;
+            const sortieBureauKey = getSortieBureauKeyFromOps(getDemandeOps(sortie));
+            if (selectedBureauKey === "MULTI") return true;
+            return sortieBureauKey === selectedBureauKey;
+          })
           .map((sortie) => sortie?.tech)
           .filter(Boolean);
 
@@ -4149,18 +4175,39 @@
         ].sort();
       }
 
-      function rememberSortieDestinataire(name) {
+      function rememberSortieDestinataire(name, ops = getCheckedSortieOperators()) {
         const cleanName = String(name || "")
           .trim()
           .toUpperCase();
         if (!cleanName) return;
 
-        const destinataires = getSortieDestinataires();
+        const destinataires = getSortieDestinataires(ops);
         if (destinataires.includes(cleanName)) return;
         localStorage.setItem(
-          "sortie_destinataires",
+          getSortieDestinataireStorageKey(ops),
           JSON.stringify([...destinataires, cleanName].sort()),
         );
+      }
+
+      function getTodayDateInputValue() {
+        const today = new Date();
+        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      }
+
+      function formatDateInputAsLocaleString(dateValue) {
+        const raw = String(dateValue || "").trim();
+        const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return new Date().toLocaleString();
+        const now = new Date();
+        const selectedDate = new Date(
+          Number(match[1]),
+          Number(match[2]) - 1,
+          Number(match[3]),
+          now.getHours(),
+          now.getMinutes(),
+          now.getSeconds(),
+        );
+        return selectedDate.toLocaleString();
       }
 
       function getAllowedSortieOperators() {
@@ -4168,6 +4215,14 @@
         const stockOps = ((appData && appData.stock) || [])
           .map((item) => normalizeOperatorKey(item.op))
           .filter(Boolean);
+        if (isStockScopedUser(currentUser)) {
+          const dedicatedOps = getManagedOpsNormalized(currentUser).filter((op) =>
+            knownOps.includes(op) || stockOps.includes(op),
+          );
+          return [...new Set(dedicatedOps)].sort(
+            (a, b) => knownOps.indexOf(a) - knownOps.indexOf(b),
+          );
+        }
         return [
           ...new Set([...knownOps, ...stockOps].filter((op) =>
             isOperatorAllowedForUser(currentUser, op),
@@ -4207,10 +4262,18 @@
         if (summary) {
           summary.innerText = selectedOps.length
             ? selectedOps.map((op) => getOperatorMeta(op).label).join(" / ")
-            : "Cliquez pour choisir un ou plusieurs operateurs";
+            : "Cliquez pour choisir un ou plusieurs stocks dedies";
         }
         const count = document.getElementById("sortie-op-count");
         if (count) count.innerText = `${selectedOps.length} selectionne(s)`;
+      }
+
+      function refreshSortieDestinatairesDatalist() {
+        const list = document.getElementById("sortie-destinataires-list");
+        if (!list) return;
+        list.innerHTML = buildDatalistOptions(
+          getSortieDestinataires(getCheckedSortieOperators()),
+        );
       }
 
       function renderSortieMaterialPicker(previousItems = getSelectedSortieItemsFromPicker()) {
@@ -4236,7 +4299,7 @@
         if (selectedOps.length === 0) {
           container.innerHTML = `
             <div class="p-6 text-center text-[10px] uppercase text-slate-400 bg-slate-50 border rounded-2xl">
-              Choisissez au moins un operateur pour afficher le stock disponible.
+              Choisissez au moins un stock dedie pour afficher le stock disponible.
             </div>`;
           updateSortieOperatorSummary();
           saveSortieDraft();
@@ -4273,6 +4336,7 @@
 
       function onSortieOperatorSelectionChange() {
         updateSortieOperatorSummary();
+        refreshSortieDestinatairesDatalist();
         renderSortieMaterialPicker();
       }
 
@@ -4289,7 +4353,8 @@
           : saved.op
             ? [normalizeOperatorKey(saved.op)]
             : allowedOps.slice(0, 1);
-        const sortieDestinataires = getSortieDestinataires();
+        const sortieDestinataires = getSortieDestinataires(savedOps);
+        const savedDateBon = saved.dateBon || extractIsoDateFromLocaleString(saved.date || "") || getTodayDateInputValue();
         const container = document.getElementById("app-container");
         container.innerHTML = `
               <div class="max-w-5xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
@@ -4310,10 +4375,10 @@
                   <form onsubmit="handleSortiePhysique(event)" class="space-y-6">
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border-2">
                           <div class="md:col-span-2">
-                              <label class="text-[8px] text-slate-400 uppercase">Operateur(s)</label>
+                              <label class="text-[8px] text-slate-400 uppercase">Stocks dedies</label>
                               <details class="bg-white border-2 rounded-xl">
                                 <summary class="cursor-pointer list-none p-3 flex items-center justify-between gap-3">
-                                  <span id="sortie-op-summary" class="text-xs font-black uppercase text-slate-700">Cliquez pour choisir un ou plusieurs operateurs</span>
+                                  <span id="sortie-op-summary" class="text-xs font-black uppercase text-slate-700">Cliquez pour choisir un ou plusieurs stocks dedies</span>
                                   <span id="sortie-op-count" class="text-[8px] uppercase text-red-600 font-black">0 selectionne(s)</span>
                                 </summary>
                                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-3 border-t bg-slate-50">
@@ -4329,6 +4394,7 @@
                           <div>
                               <label class="text-[8px] text-slate-400 uppercase">Destinataire (Chef d'équipe/Technicien)</label>
                               <input id="s-tech" type="text" list="sortie-destinataires-list" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="NOM DU RÉCEPTIONNAIRE" required />
+                              <p class="mt-1 text-[7px] text-slate-400 uppercase">Liste filtree selon les stocks dedies selectionnes</p>
                               <datalist id="sortie-destinataires-list">
                                 ${buildDatalistOptions(sortieDestinataires)}
                               </datalist>
@@ -4343,6 +4409,10 @@
                           <div class="md:col-span-2">
                               <label class="text-[8px] text-slate-400 uppercase">Référence du Bon Physique / Motif</label>
                               <input id="s-ref" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="EX: BON N°123 - CHANTIER ABOBO" required />
+                          </div>
+                          <div class="md:col-span-2">
+                              <label class="text-[8px] text-slate-400 uppercase">Date du bon physique</label>
+                              <input id="s-date-bon" type="date" value="${escapeHtml(savedDateBon)}" max="${getTodayDateInputValue()}" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" required />
                           </div>
                       </div>
 
@@ -4371,7 +4441,10 @@
         if (sortieEmetteur) sortieEmetteur.value = saved.emetteur || "";
         const sortieRef = document.getElementById("s-ref");
         if (sortieRef) sortieRef.value = saved.ref || "";
+        const sortieDateBon = document.getElementById("s-date-bon");
+        if (sortieDateBon) sortieDateBon.value = savedDateBon;
         updateSortieOperatorSummary();
+        refreshSortieDestinatairesDatalist();
         renderSortieMaterialPicker(savedItems);
       }
 
@@ -4440,6 +4513,9 @@
         const ref = getFormTextValue("s-ref");
         const tech = getFormTextValue("s-tech");
         const emetteur = getFormTextValue("s-emetteur");
+        const dateBonValue = document.getElementById("s-date-bon")?.value || getTodayDateInputValue();
+        const sortieDate = formatDateInputAsLocaleString(dateBonValue);
+        const enteredAt = new Date().toLocaleString();
         const selectedItems = getSelectedSortieItemsFromPicker();
         if (selectedItems.length === 0) {
           alert("Cochez au moins un materiel et renseignez sa quantite.");
@@ -4512,14 +4588,16 @@
           emetteur,
           items: selectedItems,
           logs,
-          date: new Date().toLocaleString(),
+          date: sortieDate,
+          dateBon: dateBonValue,
+          enteredAt,
           createdBy: currentUser ? currentUser.name : "ANONYME",
           validatedBy: currentUser ? currentUser.name : "GESTIONNAIRE",
           validatedById: currentUser ? currentUser.id : null,
-          validatedAt: new Date().toLocaleString(),
+          validatedAt: enteredAt,
         };
         rememberSortieEmetteur(emetteur);
-        rememberSortieDestinataire(tech);
+        rememberSortieDestinataire(tech, selectedOps);
         sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
         appData.sorties.push(sortieRecord);
         save(); // Sauvegarde Firebase
@@ -5492,10 +5570,17 @@
               parts.push(
                 '<div class="text-[9px] text-slate-500 mt-1">Cree par: ' +
                   escapeHtml(String(s.createdBy || "-")) +
-                  " | Le: " +
+                  " | Date bon: " +
                   escapeHtml(String(s.date || "-")) +
                   "</div>",
               );
+              if (s.enteredAt && String(s.enteredAt) !== String(s.date)) {
+                parts.push(
+                  '<div class="text-[8px] text-slate-400 mt-1">Saisi le: ' +
+                    escapeHtml(String(s.enteredAt)) +
+                    "</div>",
+                );
+              }
               if (s.updatedAt) {
                 parts.push(
                   '<div class="text-[8px] text-amber-600">Modifie le ' +
@@ -7045,6 +7130,7 @@
           tech: document.getElementById("s-tech")?.value,
           emetteur: document.getElementById("s-emetteur")?.value,
           ref: document.getElementById("s-ref")?.value,
+          dateBon: document.getElementById("s-date-bon")?.value,
           items: items,
         };
         localStorage.setItem("draft_sortie", JSON.stringify(draft));
