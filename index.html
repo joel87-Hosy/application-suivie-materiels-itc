@@ -4772,6 +4772,101 @@
         );
       }
 
+      function canCurrentUserManageSortie(sortie) {
+        if (!canCurrentUserEditSorties()) return false;
+        if (!isStockScopedUser(currentUser)) return true;
+
+        const allowedOps = new Set(getManagedOpsNormalized(currentUser));
+        const sortieOps = getDemandeOps(sortie);
+        if (sortieOps.length === 0) return false;
+        return sortieOps.every((op) => allowedOps.has(normalizeOperatorKey(op)));
+      }
+
+      function deleteSortieAndRestoreStock(id) {
+        if (!canCurrentUserEditSorties()) {
+          alert("Action non autorisée pour votre profil.");
+          return;
+        }
+
+        appData.sorties = Array.isArray(appData.sorties) ? appData.sorties : [];
+        appData.stock = Array.isArray(appData.stock) ? appData.stock : [];
+
+        const sortieIndex = appData.sorties.findIndex(
+          (sortie) => String(sortie.id) === String(id),
+        );
+        if (sortieIndex < 0) {
+          alert("Bon de sortie introuvable.");
+          return;
+        }
+
+        const sortie = appData.sorties[sortieIndex];
+        if (!canCurrentUserManageSortie(sortie)) {
+          alert("Action non autorisée pour ce bon.");
+          return;
+        }
+
+        const items = getSortieItems(sortie).filter(
+          (item) => String(item.label || "").trim() && (Number(item.qty) || 0) > 0,
+        );
+        if (items.length === 0) {
+          alert("Impossible de supprimer ce bon : aucun matériel lisible à remettre en stock.");
+          return;
+        }
+
+        if (
+          !window.confirm(
+            `Supprimer le bon ${sortie.ref || sortie.id} et remettre ${items.length} article(s) en stock ?`,
+          )
+        ) {
+          return;
+        }
+
+        const restoredLogs = [];
+        items.forEach((item) => {
+          const opKey = normalizeOperatorKey(getDemandItemOperator(item, sortie));
+          const labelKey = String(item.label || "").trim().toUpperCase();
+          const qty = Number(item.qty) || 0;
+          const stockItem = appData.stock.find(
+            (stock) =>
+              normalizeOperatorKey(stock.op) === opKey &&
+              String(stock.label || "").trim().toUpperCase() === labelKey,
+          );
+
+          if (stockItem) {
+            stockItem.qty = (Number(stockItem.qty) || 0) + qty;
+          } else {
+            appData.stock.push({
+              op: opKey,
+              label: String(item.label || "").trim(),
+              qty,
+              type: "RETOUR BON SUPPRIME",
+            });
+          }
+          restoredLogs.push(`${opKey} - ${item.label} (+${qty})`);
+        });
+
+        const deletedSortie = appData.sorties.splice(sortieIndex, 1)[0];
+        appData.platformAuditLogs = Array.isArray(appData.platformAuditLogs)
+          ? appData.platformAuditLogs
+          : [];
+        appData.platformAuditLogs.unshift({
+          action: "DELETE_SORTIE_RESTORE_STOCK",
+          sortie_id: deletedSortie.id,
+          ref: deletedSortie.ref || "",
+          restored: restoredLogs,
+          by: currentUser ? currentUser.email || currentUser.name : "ANONYME",
+          date: new Date().toLocaleString("fr-FR"),
+        });
+
+        addNotification(
+          1,
+          `BON SORTIE SUPPRIME : ${deletedSortie.ref || deletedSortie.id}. Retour stock : ${restoredLogs.join(", ")}`,
+        );
+        save();
+        renderRapportsSorties(document.getElementById("app-container"));
+        alert("Bon supprimé et matériel remis en stock.");
+      }
+
       let currentEditingSortieId = null;
       let currentEditingSortieRefKey = null;
 
@@ -5380,8 +5475,11 @@
 
             visibleSorties = sorties.filter((s) => {
               try {
-                const opNorm = normalizeOperatorKey(s.op);
-                return allowed.has(opNorm);
+                const sortieOps = getDemandeOps(s);
+                return (
+                  sortieOps.length > 0 &&
+                  sortieOps.every((op) => allowed.has(normalizeOperatorKey(op)))
+                );
               } catch (e) {
                 return false;
               }
@@ -5627,6 +5725,13 @@
                     escapeHtml(String(s.id || "")) +
                     '\')">Modifier</button>',
                 );
+                if (canCurrentUserManageSortie(s)) {
+                  parts.push(
+                    '<button class="bg-slate-900 text-white px-3 py-2 rounded-lg text-[9px] font-black" onclick="deleteSortieAndRestoreStock(\'' +
+                      escapeHtml(String(s.id || "")) +
+                      '\')"><i class="fas fa-trash mr-1"></i>Supprimer</button>',
+                  );
+                }
               }
               parts.push("</div>");
               parts.push("</div>");
