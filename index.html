@@ -4137,6 +4137,10 @@
         return `sortie_destinataires_${getSortieBureauKeyFromOps(ops).toLowerCase()}`;
       }
 
+      function getSortieReferenceStorageKey(ops) {
+        return `sortie_references_${getSortieBureauKeyFromOps(ops).toLowerCase()}`;
+      }
+
       function getSortieDestinataires(ops = getCheckedSortieOperators()) {
         const selectedOps = (ops || [])
           .map((op) => normalizeOperatorKey(op))
@@ -4186,6 +4190,58 @@
         localStorage.setItem(
           getSortieDestinataireStorageKey(ops),
           JSON.stringify([...destinataires, cleanName].sort()),
+        );
+      }
+
+      function getSortieReferences(ops = getCheckedSortieOperators()) {
+        const selectedOps = (ops || [])
+          .map((op) => normalizeOperatorKey(op))
+          .filter(Boolean);
+        const selectedBureauKey = getSortieBureauKeyFromOps(selectedOps);
+        let savedReferences = [];
+        try {
+          const parsed = JSON.parse(
+            localStorage.getItem(getSortieReferenceStorageKey(selectedOps)) || "[]",
+          );
+          if (Array.isArray(parsed)) savedReferences = parsed;
+        } catch (e) {
+          savedReferences = [];
+        }
+
+        const sortieReferences = ((appData && appData.sorties) || [])
+          .filter((sortie) => {
+            if (selectedBureauKey === "GENERAL") return true;
+            const sortieBureauKey = getSortieBureauKeyFromOps(getDemandeOps(sortie));
+            if (selectedBureauKey === "MULTI") return true;
+            return sortieBureauKey === selectedBureauKey;
+          })
+          .map((sortie) => sortie?.ref || sortie?.reference || sortie?.motif)
+          .filter(Boolean);
+
+        return [
+          ...new Set(
+            [...savedReferences, ...sortieReferences]
+              .map((reference) =>
+                String(reference || "")
+                  .trim()
+                  .toUpperCase(),
+              )
+              .filter(Boolean),
+          ),
+        ].sort();
+      }
+
+      function rememberSortieReference(reference, ops = getCheckedSortieOperators()) {
+        const cleanReference = String(reference || "")
+          .trim()
+          .toUpperCase();
+        if (!cleanReference) return;
+
+        const references = getSortieReferences(ops);
+        if (references.includes(cleanReference)) return;
+        localStorage.setItem(
+          getSortieReferenceStorageKey(ops),
+          JSON.stringify([...references, cleanReference].sort()),
         );
       }
 
@@ -4276,6 +4332,14 @@
         );
       }
 
+      function refreshSortieReferencesDatalist() {
+        const list = document.getElementById("sortie-references-list");
+        if (!list) return;
+        list.innerHTML = buildDatalistOptions(
+          getSortieReferences(getCheckedSortieOperators()),
+        );
+      }
+
       function renderSortieMaterialPicker(previousItems = getSelectedSortieItemsFromPicker()) {
         const container = document.getElementById("sortie-material-picker");
         if (!container) return;
@@ -4337,6 +4401,7 @@
       function onSortieOperatorSelectionChange() {
         updateSortieOperatorSummary();
         refreshSortieDestinatairesDatalist();
+        refreshSortieReferencesDatalist();
         renderSortieMaterialPicker();
       }
 
@@ -4354,6 +4419,7 @@
             ? [normalizeOperatorKey(saved.op)]
             : allowedOps.slice(0, 1);
         const sortieDestinataires = getSortieDestinataires(savedOps);
+        const sortieReferences = getSortieReferences(savedOps);
         const savedDateBon = saved.dateBon || extractIsoDateFromLocaleString(saved.date || "") || getTodayDateInputValue();
         const container = document.getElementById("app-container");
         container.innerHTML = `
@@ -4408,7 +4474,11 @@
                           </div>
                           <div class="md:col-span-2">
                               <label class="text-[8px] text-slate-400 uppercase">Référence du Bon Physique / Motif</label>
-                              <input id="s-ref" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="EX: BON N°123 - CHANTIER ABOBO" required />
+                              <input id="s-ref" type="text" list="sortie-references-list" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="EX: BON N°123 - CHANTIER ABOBO" required />
+                              <p class="mt-1 text-[7px] text-slate-400 uppercase">Liste filtree selon les stocks dedies selectionnes</p>
+                              <datalist id="sortie-references-list">
+                                ${buildDatalistOptions(sortieReferences)}
+                              </datalist>
                           </div>
                           <div class="md:col-span-2">
                               <label class="text-[8px] text-slate-400 uppercase">Date du bon physique</label>
@@ -4445,6 +4515,7 @@
         if (sortieDateBon) sortieDateBon.value = savedDateBon;
         updateSortieOperatorSummary();
         refreshSortieDestinatairesDatalist();
+        refreshSortieReferencesDatalist();
         renderSortieMaterialPicker(savedItems);
       }
 
@@ -4598,6 +4669,7 @@
         };
         rememberSortieEmetteur(emetteur);
         rememberSortieDestinataire(tech, selectedOps);
+        rememberSortieReference(ref, selectedOps);
         sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
         appData.sorties.push(sortieRecord);
         save(); // Sauvegarde Firebase
