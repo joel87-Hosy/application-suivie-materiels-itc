@@ -4079,11 +4079,19 @@
         "COORDINATRICE NICOLE",
       ];
 
-      function getSortieEmetteurs() {
+      function getSortieEmetteurStorageKey(ops) {
+        return `sortie_emetteurs_${getSortieBureauKeyFromOps(ops).toLowerCase()}`;
+      }
+
+      function getSortieEmetteurs(ops = getCheckedSortieOperators()) {
+        const selectedOps = (ops || [])
+          .map((op) => normalizeOperatorKey(op))
+          .filter(Boolean);
+        const selectedBureauKey = getSortieBureauKeyFromOps(selectedOps);
         let savedEmetteurs = [];
         try {
           const parsed = JSON.parse(
-            localStorage.getItem("sortie_emetteurs") || "[]",
+            localStorage.getItem(getSortieEmetteurStorageKey(selectedOps)) || "[]",
           );
           if (Array.isArray(parsed)) savedEmetteurs = parsed;
         } catch (e) {
@@ -4091,12 +4099,21 @@
         }
 
         const sortieEmetteurs = ((appData && appData.sorties) || [])
+          .filter((sortie) => {
+            if (selectedBureauKey === "GENERAL") return true;
+            const sortieBureauKey = getSortieBureauKeyFromOps(getDemandeOps(sortie));
+            if (selectedBureauKey === "MULTI") return true;
+            return sortieBureauKey === selectedBureauKey;
+          })
           .map((sortie) => sortie?.emetteur)
           .filter(Boolean);
+        const defaultEmetteurs = ["GENERAL", "MULTI"].includes(selectedBureauKey)
+          ? DEFAULT_SORTIE_EMETTEURS
+          : [];
 
         return [
           ...new Set(
-            [...DEFAULT_SORTIE_EMETTEURS, ...savedEmetteurs, ...sortieEmetteurs]
+            [...defaultEmetteurs, ...savedEmetteurs, ...sortieEmetteurs]
               .map((name) =>
                 String(name || "")
                   .trim()
@@ -4107,16 +4124,16 @@
         ].sort();
       }
 
-      function rememberSortieEmetteur(name) {
+      function rememberSortieEmetteur(name, ops = getCheckedSortieOperators()) {
         const cleanName = String(name || "")
           .trim()
           .toUpperCase();
         if (!cleanName) return;
 
-        const emetteurs = getSortieEmetteurs();
+        const emetteurs = getSortieEmetteurs(ops);
         if (emetteurs.includes(cleanName)) return;
         localStorage.setItem(
-          "sortie_emetteurs",
+          getSortieEmetteurStorageKey(ops),
           JSON.stringify([...emetteurs, cleanName].sort()),
         );
       }
@@ -4332,6 +4349,14 @@
         );
       }
 
+      function refreshSortieEmetteursDatalist() {
+        const list = document.getElementById("sortie-emetteurs-list");
+        if (!list) return;
+        list.innerHTML = buildDatalistOptions(
+          getSortieEmetteurs(getCheckedSortieOperators()),
+        );
+      }
+
       function refreshSortieReferencesDatalist() {
         const list = document.getElementById("sortie-references-list");
         if (!list) return;
@@ -4401,6 +4426,7 @@
       function onSortieOperatorSelectionChange() {
         updateSortieOperatorSummary();
         refreshSortieDestinatairesDatalist();
+        refreshSortieEmetteursDatalist();
         refreshSortieReferencesDatalist();
         renderSortieMaterialPicker();
       }
@@ -4411,13 +4437,13 @@
           Array.isArray(saved.items) && saved.items.length > 0
             ? saved.items
             : [{ label: "", qty: "" }];
-        const sortieEmetteurs = getSortieEmetteurs();
         const allowedOps = getAllowedSortieOperators();
         const savedOps = Array.isArray(saved.ops) && saved.ops.length > 0
           ? saved.ops.map((op) => normalizeOperatorKey(op))
           : saved.op
             ? [normalizeOperatorKey(saved.op)]
             : allowedOps.slice(0, 1);
+        const sortieEmetteurs = getSortieEmetteurs(savedOps);
         const sortieDestinataires = getSortieDestinataires(savedOps);
         const sortieReferences = getSortieReferences(savedOps);
         const savedDateBon = saved.dateBon || extractIsoDateFromLocaleString(saved.date || "") || getTodayDateInputValue();
@@ -4515,6 +4541,7 @@
         if (sortieDateBon) sortieDateBon.value = savedDateBon;
         updateSortieOperatorSummary();
         refreshSortieDestinatairesDatalist();
+        refreshSortieEmetteursDatalist();
         refreshSortieReferencesDatalist();
         renderSortieMaterialPicker(savedItems);
       }
@@ -4667,7 +4694,7 @@
           validatedById: currentUser ? currentUser.id : null,
           validatedAt: enteredAt,
         };
-        rememberSortieEmetteur(emetteur);
+        rememberSortieEmetteur(emetteur, selectedOps);
         rememberSortieDestinataire(tech, selectedOps);
         rememberSortieReference(ref, selectedOps);
         sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
