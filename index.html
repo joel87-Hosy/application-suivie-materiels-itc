@@ -1843,14 +1843,14 @@
             name: "TECHNICIEN BUREAU 01",
             role: "Technicien",
             email: "tech@itc.ci",
-            managedOps: ["ITC-B01"],
+            managedOps: ["ITC-B01", "OCI", "CIC", "MTN"],
           },
           {
             id: 10,
             name: "TECHNICIEN BUREAU 02",
             role: "Technicien",
             email: "tech_b02@itc.ci",
-            managedOps: ["ITC-B02"],
+            managedOps: ["ITC-B02", "MOOV"],
           },
         ],
       };
@@ -2907,15 +2907,15 @@
           normalized.push("ITC-B02", "MOOV");
         }
 
-        // Règle métier stricte : le gestionnaire Bureau 01 ne doit jamais gérer MOOV.
+        // Règle métier stricte : le Bureau 01 ne doit jamais gérer les stocks Bureau 02.
         // Si des droits hérités/anciens existent dans managedOps, on les retire.
         if (isBureau01 && !isBureau02) {
           for (let i = normalized.length - 1; i >= 0; i--) {
-            if (normalized[i] === "MOOV") normalized.splice(i, 1);
+            if (["ITC-B02", "MOOV"].includes(normalized[i])) normalized.splice(i, 1);
           }
         }
 
-        // Règle métier stricte : le gestionnaire Bureau 02 ne doit jamais gérer
+        // Règle métier stricte : le Bureau 02 ne doit jamais gérer
         // ITC-B01, OCI, CIC, MTN. Si des droits hérités existent, on les retire.
         if (isBureau02 && !isBureau01) {
           const forbidden = new Set(["ITC-B01", "OCI", "CIC", "MTN"]);
@@ -8441,8 +8441,11 @@
               : [];
           if (String(role).toUpperCase() === "TECHNICIEN" && managedOps.length === 0) {
             const fingerprint = `${userName} ${document.getElementById("cu-user-email").value}`.toUpperCase();
-            if (fingerprint.includes("B02") || fingerprint.includes("BUREAU 02")) managedOps = ["ITC-B02"];
-            else managedOps = ["ITC-B01"];
+            if (fingerprint.includes("B02") || fingerprint.includes("BUREAU 02")) {
+              managedOps = ["ITC-B02", "MOOV"];
+            } else {
+              managedOps = ["ITC-B01", "OCI", "CIC", "MTN"];
+            }
           }
 
           appData.users = Array.isArray(appData.users) ? appData.users : [];
@@ -8973,8 +8976,9 @@
           </div>`;
       }
       function renderTechDemandeForm(container) {
-        const designations = getCurrentUserDesignationLabels();
         const coordinators = getCoordinatorUsers();
+        const allowedOps = getAllowedTechDemandeOperators();
+        const defaultOps = allowedOps.slice(0, 1);
         const coordinatorOptions = coordinators.length
           ? coordinators
               .map(
@@ -9001,9 +9005,22 @@
                   </div>
                   <form onsubmit="handleTechSubmit(event)" class="space-y-6">
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border-2">
-                          <div>
+                          <div class="md:col-span-2">
                               <label class="text-[8px] text-slate-400 uppercase">Operateur(s)</label>
-                              <input id="t-op" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="AUTO" readonly required />
+                              <details class="bg-white border-2 rounded-xl">
+                                <summary class="cursor-pointer list-none p-3 flex items-center justify-between gap-3">
+                                  <span id="tech-op-summary" class="text-xs font-black uppercase text-slate-700">Cliquez pour choisir un ou plusieurs stocks dedies</span>
+                                  <span id="tech-op-count" class="text-[8px] uppercase text-indigo-600 font-black">0 selectionne(s)</span>
+                                </summary>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-3 border-t bg-slate-50">
+                                  ${allowedOps.map((op) => `
+                                    <label class="flex items-center gap-2 bg-white border rounded-xl p-3 text-[9px] uppercase font-black text-slate-700">
+                                      <input type="checkbox" class="tech-op-check accent-indigo-600" value="${escapeHtml(op)}" ${defaultOps.includes(op) ? "checked" : ""} onchange="onTechOperatorSelectionChange()" />
+                                      <span>${escapeHtml(getOperatorMeta(op).label)}</span>
+                                    </label>
+                                  `).join("")}
+                                </div>
+                              </details>
                           </div>
                           <div>
                               <label class="text-[8px] text-slate-400 uppercase">Receptionnaire</label>
@@ -9025,16 +9042,18 @@
                           </div>
                       </div>
 
-                      <div class="space-y-3" id="tech-items-list">
-                          <p class="text-[9px] text-indigo-600 mb-2 uppercase font-black">Articles demandes par operateur :</p>
-                          <datalist id="tech-designations-list">${buildDatalistOptions(designations)}</datalist>
+                      <div class="space-y-3 bg-slate-50 border-2 rounded-2xl p-5" id="tech-items-list">
+                          <div class="flex items-center justify-between gap-3 flex-wrap">
+                            <div>
+                              <p class="text-[9px] text-indigo-600 uppercase font-black">Materiels disponibles a demander</p>
+                              <p class="text-[7px] text-slate-400 uppercase">Cochez les lignes voulues, indiquez la quantite, puis envoyez la demande.</p>
+                            </div>
+                            <button type="button" onclick="renderTechMaterialPicker()" class="bg-white border-2 border-slate-200 text-slate-700 px-4 py-2 rounded-xl text-[8px] uppercase font-black inline-flex items-center gap-2">
+                              <i class="fas fa-list-check"></i> Choisir les materiels
+                            </button>
+                          </div>
+                          <div id="tech-material-picker"></div>
                       </div>
-
-                      <button type="button" onclick="addTechDemandeRow()" class="bg-slate-200 text-slate-700 px-6 py-3 rounded-xl text-[9px] uppercase font-black inline-flex items-center gap-2">
-                        <i class="fas fa-plus"></i> Ajouter un article
-                      </button>
-
-                      <div id="tech-operator-stock-view" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
 
                       <div>
                           <label class="text-[8px] text-slate-400 uppercase">Signature electronique du technicien</label>
@@ -9047,7 +9066,8 @@
                       </button>
                   </form>
               </div>`;
-        addTechDemandeRow();
+        updateTechOperatorSummary();
+        renderTechMaterialPicker();
         return;
         container.innerHTML = `
               <div class="max-w-2xl mx-auto bg-white p-8 rounded-3xl shadow-xl italic font-bold">
@@ -9110,6 +9130,142 @@
         updateTechDemandeOperators();
       }
 
+      function getAllowedTechDemandeOperators() {
+        return getAllowedSortieOperators();
+      }
+
+      function getCheckedTechOperators() {
+        return Array.from(document.querySelectorAll(".tech-op-check:checked"))
+          .map((input) => normalizeOperatorKey(input.value))
+          .filter(Boolean);
+      }
+
+      function getTechMaterialRowKey(op, label) {
+        return `${normalizeOperatorKey(op)}::${String(label || "").trim().toUpperCase()}`;
+      }
+
+      function getSelectedTechItemsFromPicker() {
+        return Array.from(document.querySelectorAll(".tech-stock-row"))
+          .map((row) => {
+            const checked = row.querySelector(".tech-stock-check")?.checked;
+            const qty = parseInt(row.querySelector(".tech-stock-qty")?.value, 10) || 0;
+            return {
+              op: row.dataset.op || "",
+              label: row.dataset.label || "",
+              qty,
+              checked,
+            };
+          })
+          .filter((item) => item.checked && item.op && item.label && item.qty > 0)
+          .map(({ checked, ...item }) => item);
+      }
+
+      function updateTechOperatorSummary() {
+        const selectedOps = getCheckedTechOperators();
+        const summary = document.getElementById("tech-op-summary");
+        if (summary) {
+          summary.innerText = selectedOps.length
+            ? selectedOps.map((op) => getOperatorMeta(op).label).join(" / ")
+            : "Cliquez pour choisir un ou plusieurs stocks dedies";
+        }
+        const count = document.getElementById("tech-selected-ops-count");
+        if (count) count.innerText = String(selectedOps.length);
+        const summaryCount = document.getElementById("tech-op-count");
+        if (summaryCount) summaryCount.innerText = `${selectedOps.length} selectionne(s)`;
+      }
+
+      function renderTechMaterialPicker(previousItems = getSelectedTechItemsFromPicker()) {
+        const container = document.getElementById("tech-material-picker");
+        if (!container) return;
+
+        const selectedOps = getCheckedTechOperators();
+        const previousByKey = new Map(
+          (previousItems || []).map((item) => [
+            getTechMaterialRowKey(item.op, item.label),
+            Number(item.qty) || "",
+          ]),
+        );
+        const stockRows = ((appData && appData.stock) || [])
+          .filter((item) => selectedOps.includes(normalizeOperatorKey(item.op)))
+          .filter((item) => (Number(item.qty) || 0) > 0)
+          .sort((a, b) => {
+            const opCompare = normalizeOperatorKey(a.op).localeCompare(normalizeOperatorKey(b.op));
+            if (opCompare !== 0) return opCompare;
+            return String(a.label || "").localeCompare(String(b.label || ""));
+          });
+
+        if (selectedOps.length === 0) {
+          container.innerHTML = `
+            <div class="p-6 text-center text-[10px] uppercase text-slate-400 bg-white border rounded-2xl">
+              Choisissez au moins un stock dedie pour afficher le materiel disponible.
+            </div>`;
+          updateTechOperatorSummary();
+          return;
+        }
+
+        container.innerHTML = `
+          <div class="grid grid-cols-1 gap-2 max-h-[420px] overflow-y-auto pr-1">
+            ${
+              stockRows.length
+                ? stockRows.map((item) => {
+                    const op = normalizeOperatorKey(item.op);
+                    const label = String(item.label || "").trim();
+                    const key = getTechMaterialRowKey(op, label);
+                    const previousQty = previousByKey.get(key);
+                    const checked = previousByKey.has(key);
+                    const available = Number(item.qty) || 0;
+                    return `
+                      <div class="tech-stock-row grid grid-cols-[auto_1fr_92px] gap-3 items-center bg-white border border-slate-200 rounded-xl p-3" data-op="${escapeHtml(op)}" data-label="${escapeHtml(label)}" data-available="${available}">
+                        <input type="checkbox" class="tech-stock-check h-4 w-4 accent-indigo-600" ${checked ? "checked" : ""} onchange="const qtyInput = this.closest('.tech-stock-row').querySelector('.tech-stock-qty'); if (this.checked && !qtyInput.value) qtyInput.value = 1;" />
+                        <div class="min-w-0">
+                          <p class="text-[9px] font-black uppercase text-slate-800 truncate">${escapeHtml(label)}</p>
+                          <p class="text-[7px] uppercase text-slate-400">${escapeHtml(getOperatorMeta(op).label)} | disponible: ${available}</p>
+                        </div>
+                        <input type="number" class="tech-stock-qty border-2 rounded-lg p-2 text-[9px] font-black text-center" min="1" max="${available}" value="${previousQty || ""}" placeholder="QTE" oninput="this.closest('.tech-stock-row').querySelector('.tech-stock-check').checked = Number(this.value) > 0;" />
+                      </div>`;
+                  }).join("")
+                : `<div class="p-6 text-center text-[10px] uppercase text-slate-400 bg-white border rounded-2xl">Aucun materiel disponible dans les stocks selectionnes.</div>`
+            }
+          </div>`;
+        updateTechOperatorSummary();
+      }
+
+      function onTechOperatorSelectionChange() {
+        updateTechOperatorSummary();
+        renderTechMaterialPicker();
+      }
+
+      function getManualTechDemandeItems() {
+        const rows = Array.from(document.querySelectorAll(".tech-demande-row"));
+        return rows
+          .map((r) => ({
+            op: normalizeOperatorKey(r.querySelector(".art-op")?.value),
+            label: String(r.querySelector(".art-l")?.value || "").trim(),
+            qty: parseInt(r.querySelector(".art-q")?.value, 10) || 0,
+          }))
+          .filter((item) => item.op && item.label && item.qty > 0);
+      }
+
+      function validateTechRequestedQuantities(items) {
+        const errors = [];
+        (items || []).forEach((item) => {
+          const requestedQty = Number(item.qty) || 0;
+          const stockItem = ((appData && appData.stock) || []).find(
+            (stock) =>
+              normalizeOperatorKey(stock.op) === normalizeOperatorKey(item.op) &&
+              String(stock.label || "").trim().toUpperCase() ===
+                String(item.label || "").trim().toUpperCase(),
+          );
+          const available = Number(stockItem?.qty) || 0;
+          if (!stockItem) {
+            errors.push(`L'article ${item.label} n'existe pas en stock pour ${getOperatorMeta(item.op).label}`);
+          } else if (requestedQty > available) {
+            errors.push(`Stock insuffisant pour ${item.label} sur ${getOperatorMeta(item.op).label} (Dispo: ${available})`);
+          }
+        });
+        return errors;
+      }
+
       function updateTechDemandeOperators() {
         const rows = Array.from(document.querySelectorAll(".tech-demande-row"));
         const ops = [
@@ -9150,26 +9306,22 @@
 
       function handleTechSubmit(e) {
         e.preventDefault();
-        if (document.querySelector(".tech-demande-row")) {
-          const rows = Array.from(document.querySelectorAll(".tech-demande-row"));
-          const items = rows
-            .map((r) => ({
-              op: normalizeOperatorKey(r.querySelector(".art-op")?.value),
-              label: String(r.querySelector(".art-l")?.value || "").trim(),
-              qty: parseInt(r.querySelector(".art-q")?.value, 10) || 0,
-            }))
-            .filter((item) => item.op && item.label && item.qty > 0);
+        const pickedItems = getSelectedTechItemsFromPicker();
+        const manualItems = getManualTechDemandeItems();
+        const items = pickedItems.length ? pickedItems : manualItems;
+        if (items.length) {
           const ops = [...new Set(items.map((item) => item.op))];
           if (!items.length || !ops.length) {
-            alert("Ajoutez au moins un article avec son operateur.");
+            alert("Cochez au moins un materiel et renseignez sa quantite.");
             return;
           }
           if (ops.some((op) => !isOperatorAllowedForUser(currentUser, op))) {
             alert("Vous n'avez pas acces a un des operateurs selectionnes.");
             return;
           }
-          if (ops.length > 2) {
-            alert("Vous pouvez choisir au maximum deux operateurs pour une demande.");
+          const stockErrors = validateTechRequestedQuantities(items);
+          if (stockErrors.length > 0) {
+            alert("ERREURS :\n" + stockErrors.join("\n"));
             return;
           }
           const coordSelect = document.getElementById("t-coordinateur");
@@ -9208,6 +9360,8 @@
           showSection("cockpit");
           return;
         }
+        alert("Cochez au moins un materiel et renseignez sa quantite.");
+        return;
         const d = {
           id: "T-" + Date.now().toString().slice(-4),
           technicienId: currentUser.id, // Garde l'ID du compte pour l'archivage
