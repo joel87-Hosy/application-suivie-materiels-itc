@@ -8979,6 +8979,7 @@
         const coordinators = getCoordinatorUsers();
         const allowedOps = getAllowedTechDemandeOperators();
         const defaultOps = allowedOps.slice(0, 1);
+        const techReferences = getTechDemandeReferences(defaultOps);
         const coordinatorOptions = coordinators.length
           ? coordinators
               .map(
@@ -9038,7 +9039,11 @@
                           </div>
                           <div class="md:col-span-2">
                               <label class="text-[8px] text-slate-400 uppercase">Reference du bon / Motif</label>
-                              <input id="t-objectif" type="text" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="EX: BON N 123 - CHANTIER ABOBO" required />
+                              <input id="t-objectif" type="text" list="tech-references-list" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="EX: BON N 123 - CHANTIER ABOBO" required />
+                              <p class="mt-1 text-[7px] text-slate-400 uppercase">Liste filtree selon les stocks dedies selectionnes</p>
+                              <datalist id="tech-references-list">
+                                ${buildDatalistOptions(techReferences)}
+                              </datalist>
                           </div>
                       </div>
 
@@ -9132,6 +9137,74 @@
 
       function getAllowedTechDemandeOperators() {
         return getAllowedSortieOperators();
+      }
+
+      function getTechDemandeReferenceStorageKey(ops) {
+        return `tech_references_${getSortieBureauKeyFromOps(ops).toLowerCase()}`;
+      }
+
+      function getTechDemandeReferences(ops = getCheckedTechOperators()) {
+        const selectedOps = (ops || [])
+          .map((op) => normalizeOperatorKey(op))
+          .filter(Boolean);
+        const selectedBureauKey = getSortieBureauKeyFromOps(selectedOps);
+        let savedReferences = [];
+        try {
+          const parsed = JSON.parse(
+            localStorage.getItem(getTechDemandeReferenceStorageKey(selectedOps)) || "[]",
+          );
+          if (Array.isArray(parsed)) savedReferences = parsed;
+        } catch (e) {
+          savedReferences = [];
+        }
+
+        const matchesSelectedBureau = (record) => {
+          if (selectedBureauKey === "GENERAL" || selectedBureauKey === "MULTI") return true;
+          return getSortieBureauKeyFromOps(getDemandeOps(record)) === selectedBureauKey;
+        };
+        const demandeReferences = ((appData && appData.demandes) || [])
+          .filter((demande) => demande?.workflow === "TECH_BON_SORTIE")
+          .filter(matchesSelectedBureau)
+          .map((demande) => demande?.ref || demande?.motif || demande?.objectif)
+          .filter(Boolean);
+        const sortieReferences = ((appData && appData.sorties) || [])
+          .filter(matchesSelectedBureau)
+          .map((sortie) => sortie?.ref || sortie?.reference || sortie?.motif)
+          .filter(Boolean);
+
+        return [
+          ...new Set(
+            [...savedReferences, ...demandeReferences, ...sortieReferences]
+              .map((reference) =>
+                String(reference || "")
+                  .trim()
+                  .toUpperCase(),
+              )
+              .filter(Boolean),
+          ),
+        ].sort();
+      }
+
+      function rememberTechDemandeReference(reference, ops = getCheckedTechOperators()) {
+        const cleanReference = String(reference || "")
+          .trim()
+          .toUpperCase();
+        if (!cleanReference) return;
+
+        const references = getTechDemandeReferences(ops);
+        if (references.includes(cleanReference)) return;
+        localStorage.setItem(
+          getTechDemandeReferenceStorageKey(ops),
+          JSON.stringify([...references, cleanReference].sort()),
+        );
+      }
+
+      function refreshTechReferencesDatalist() {
+        const list = document.getElementById("tech-references-list");
+        if (!list) return;
+        list.innerHTML = buildDatalistOptions(
+          getTechDemandeReferences(getCheckedTechOperators()),
+        );
       }
 
       function getCheckedTechOperators() {
@@ -9232,6 +9305,7 @@
 
       function onTechOperatorSelectionChange() {
         updateTechOperatorSummary();
+        refreshTechReferencesDatalist();
         renderTechMaterialPicker();
       }
 
@@ -9330,6 +9404,7 @@
             (appData.users || []).find((u) => parseInt(u.id) === assignedCoordinateurId)?.name ||
             "COORDINATION / SUPERVISION";
           const now = new Date().toLocaleString();
+          const motif = getFormTextValue("t-objectif");
           const d = {
             id: "BS-" + Date.now().toString().slice(-4),
             workflow: "TECH_BON_SORTIE",
@@ -9344,8 +9419,8 @@
             op: ops.join(" / "),
             ops,
             items,
-            motif: getFormTextValue("t-objectif"),
-            ref: getFormTextValue("t-objectif"),
+            motif,
+            ref: motif,
             status: "EN ATTENTE COORDINATION",
             statut: "EN ATTENTE COORDINATION",
             technicianSignatureText: getFormTextValue("t-signature"),
@@ -9354,6 +9429,7 @@
           };
           if (!appData.demandes) appData.demandes = [];
           appData.demandes.unshift(d);
+          rememberTechDemandeReference(motif, ops);
           addNotification(assignedCoordinateurId, `DEMANDE A SIGNER : ${d.id} - ${d.demandeurName}`);
           save();
           alert("DEMANDE TRANSMISE AU COORDINATEUR / SUPERVISEUR.");
