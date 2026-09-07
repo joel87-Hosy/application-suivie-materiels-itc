@@ -1,0 +1,65 @@
+const fs = require('fs');
+const vm = require('vm');
+const assert = require('node:assert/strict');
+const source = fs.readFileSync('assets/profile.js', 'utf8');
+function setup(team = true) {
+  const updates = [], calls = [];
+  const inputs = {};
+  for (const id of ['profile-name', 'profile-phone', 'profile-contact-email', 'profile-status', 'profile-password-status', 'profile-current-password', 'profile-new-password', 'profile-confirm-password']) inputs[id] = {value: '', textContent: ''};
+  const user = {uid: 'team-uid', email: 'team@example.com', reauthenticateWithCredential: async () => calls.push('reauth'), updatePassword: async () => calls.push('password')};
+  const auth = () => ({currentUser: user});
+  auth.EmailAuthProvider = {credential: (email, password) => ({email, password})};
+  const profile = {uid: user.uid, name: 'Flash-Abonné', role: 'Technicien', username: team ? 'flash-abonne' : undefined};
+  const context = {firebase: {auth}, currentUser: {...profile}, document: {getElementById: id => inputs[id]}, db: {ref: path => ({once: async () => ({val: () => ({'37': profile})}), update: async changes => updates.push({path, changes})})}, updateUserInfo() {}, escapeHtml: text => String(text).replace(/</g, '&lt;')};
+  vm.createContext(context); vm.runInContext(source, context);
+  const button = {disabled: false};
+  const form = {querySelector: () => button, querySelectorAll: () => [], reset: () => calls.push('reset')};
+  const event = {preventDefault() {}, target: form};
+  return {context, inputs, updates, calls, event, user};
+}
+(async () => {
+  const team = setup();
+  team.inputs['profile-name'].value = 'Kouamé Jean';
+  await team.context.saveMonProfil(team.event);
+  assert.equal(team.context.currentUser.name, 'Flash-Abonné');
+  assert.equal(team.updates[0].changes.contact_name, 'Kouamé Jean');
+  assert.equal(team.updates[0].path, 'itc_data/users/37');
+  assert.equal(team.updates[0].changes.role, undefined);
+  const personal = setup(false);
+  personal.inputs['profile-name'].value = 'Jean';
+  await personal.context.saveMonProfil(personal.event);
+  assert.equal(personal.context.currentUser.name, 'Jean');
+  const password = setup();
+  password.inputs['profile-current-password'].value = 'old-password';
+  password.inputs['profile-new-password'].value = 'new-password';
+  password.inputs['profile-confirm-password'].value = 'mismatch';
+  await password.context.changeMonProfilPassword(password.event);
+  assert.equal(password.calls.length, 0);
+  password.inputs['profile-confirm-password'].value = 'new-password';
+  await password.context.changeMonProfilPassword(password.event);
+  assert.deepEqual(password.calls, ['reauth', 'password', 'reset']);
+  assert.equal(password.updates[0].changes.temporary_password, null);
+  assert.equal(password.updates[0].changes.must_change_password, false);
+  assert.ok(!JSON.stringify(password.updates).includes('new-password'));
+  const wrong = setup();
+  wrong.inputs['profile-current-password'].value = 'wrong';
+  wrong.inputs['profile-new-password'].value = wrong.inputs['profile-confirm-password'].value = 'new-password';
+  wrong.user.reauthenticateWithCredential = async () => {throw {code: 'auth/wrong-password'};};
+  await wrong.context.changeMonProfilPassword(wrong.event);
+  assert.equal(wrong.calls.length, 0);
+  assert.equal(wrong.updates.length, 0);
+  assert.match(wrong.inputs['profile-password-status'].textContent, /incorrect/);
+  const partial = setup();
+  partial.inputs['profile-current-password'].value = 'old-password';
+  partial.inputs['profile-new-password'].value = partial.inputs['profile-confirm-password'].value = 'new-password';
+  partial.context.db.ref = () => ({once: async () => ({val: () => ({37: {uid: 'team-uid'}})}), update: async () => {throw new Error('offline');}});
+  await partial.context.changeMonProfilPassword(partial.event);
+  assert.match(partial.inputs['profile-password-status'].textContent, /a été modifié/);
+  for (const role of ['SUPER_ADMIN', 'Superviseur', 'Gestionnaire', 'Coordinateur', 'Superviseur Terrain', 'Technicien']) {
+    const container = {};
+    team.context.currentUser.role = role;
+    team.context.renderMonProfil(container);
+    assert.match(container.innerHTML, /Changer mon mot de passe/);
+  }
+  console.log('OK: team identity, personal profile, targeted writes, password validation, reauthentication, partial failure and all roles.');
+})().catch(error => {console.error(error); process.exitCode = 1;});
