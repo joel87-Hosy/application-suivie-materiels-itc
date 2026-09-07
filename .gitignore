@@ -4,3 +4,4 @@ serviceAccountKey.json
 *.key
 .env
 .env.*
+tools/comptes-bureau-02.json

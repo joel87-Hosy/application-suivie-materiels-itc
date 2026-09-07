@@ -770,8 +770,10 @@
             <form onsubmit="handleLogin(event)" class="space-y-4 md:space-y-5">
               <input
                 id="login-email"
-                type="email"
-                placeholder="EMAIL PROFESSIONNEL"
+                type="text"
+                autocomplete="username"
+                aria-label="Email ou nom d’utilisateur"
+                placeholder="EMAIL OU NOM D’UTILISATEUR"
                 class="login-2026-input w-full p-3.5 md:p-4 rounded-2xl text-[11px] normal-case font-bold"
                 required
               />
@@ -829,7 +831,7 @@
       const TRANSLATIONS = {
         fr: {
           loginTitle: "GESTION MATERIELS",
-          emailPlaceholder: "EMAIL PROFESSIONNEL",
+          emailPlaceholder: "EMAIL OU NOM D’UTILISATEUR",
           passwordPlaceholder: "MOT DE PASSE",
           authButton: "AUTHENTIFICATION",
           forgotPassword: "Mot de passe oublié ?",
@@ -838,7 +840,7 @@
         },
         en: {
           loginTitle: "MATERIAL MANAGEMENT",
-          emailPlaceholder: "WORK EMAIL",
+          emailPlaceholder: "EMAIL OR USERNAME",
           passwordPlaceholder: "PASSWORD",
           authButton: "SIGN IN",
           forgotPassword: "Forgot password?",
@@ -2446,10 +2448,14 @@
       // --- AUTH ---
       async function handleLogin(e) {
         e.preventDefault();
-        const email = document
+        const identifier = document
           .getElementById("login-email")
           .value.toLowerCase()
           .trim();
+        const email = identifier.includes("@")
+          ? identifier
+          : identifier.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+              .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "@techniciens.itc.invalid";
         const password = document.getElementById("login-password").value.trim();
 
         try {
@@ -2539,6 +2545,11 @@
       }
       function resetPassword() {
         const email = document.getElementById("login-email").value.trim();
+
+        if (email && (!email.includes("@") || email.endsWith("@techniciens.itc.invalid"))) {
+          alert("Pour réinitialiser le mot de passe de votre équipe, contactez votre gestionnaire.");
+          return;
+        }
 
         if (!email) {
           alert(
