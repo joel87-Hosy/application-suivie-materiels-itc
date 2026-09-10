@@ -33,10 +33,9 @@ function renderMonProfil(container) {
 async function getOwnProfileRef() {
   const authUser = firebase.auth().currentUser;
   if (!authUser || !currentUser || (currentUser.uid && currentUser.uid !== authUser.uid)) throw new Error('Session expirée. Reconnectez-vous.');
-  const snapshot = await db.ref('itc_data/users').once('value');
-  const entry = Object.entries(snapshot.val() || {}).find(([, u]) => u && (u.uid === authUser.uid || (!u.uid && String(u.email || '').toLowerCase() === String(authUser.email || '').toLowerCase())));
-  if (!entry) throw new Error('Profil introuvable. Contactez votre gestionnaire.');
-  return db.ref('itc_data/users/' + entry[0]);
+  const entry = (appData.users || []).find(u => u.uid === authUser.uid);
+  if (!entry?._dbKey) throw new Error('Profil introuvable. Contactez votre gestionnaire.');
+  return db.ref('itc_data/users/' + entry._dbKey);
 }
 
 function profileErrorMessage(error) {
@@ -94,7 +93,7 @@ async function changeMonProfilPassword(event) {
     passwordChanged = true;
     form.reset();
     form.querySelectorAll('[autocomplete*=password]').forEach(input => input.type = 'password');
-    await ref.update({must_change_password: false, temporary_password: null, password_changed_at: new Date().toISOString()});
+    await ref.update({must_change_password: false, password_changed_at: new Date().toISOString()});
     currentUser.must_change_password = false;
     currentUser.temporary_password = null;
     status.textContent = 'Mot de passe modifié. Utilisez votre nouveau mot de passe à la prochaine connexion.';

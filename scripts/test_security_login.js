@@ -36,11 +36,16 @@ async function signIn(email, password) {
   if (!response.ok) {
     throw new Error(body?.error?.message || "Firebase Auth sign-in failed.");
   }
-  return body.idToken;
+  return {token:body.idToken, uid:body.localId};
 }
 
-async function databaseGet(path, token) {
-  const response = await fetch(`${databaseURL}/${path}.json?auth=${token}`);
+async function databaseGet(path, token, companyId) {
+  const params = new URLSearchParams({auth:token});
+  if (companyId) {
+    params.set('orderBy', JSON.stringify('company_id'));
+    params.set('equalTo', JSON.stringify(companyId));
+  }
+  const response = await fetch(`${databaseURL}/${path}.json?${params}`);
   const body = await response.text();
   return {
     ok: response.ok,
@@ -59,15 +64,20 @@ async function anonymousGet(path) {
 
 async function main() {
   const email = String(argv.email || "").trim().toLowerCase();
-  const token = await signIn(email, argv.password);
-  const securedRead = await databaseGet("itc_data/users", token);
+  const {token, uid} = await signIn(email, argv.password);
+  const own = await databaseGet(`auth_profiles/${uid}`, token);
+  if (!own.ok) throw new Error('Security profile read denied.');
+  const profile = JSON.parse(own.body);
+  if (!profile?.is_active || !profile.company_id) throw new Error('Inactive or missing security profile.');
+  const securedRead = await databaseGet("itc_data/users", token, profile.role === 'SUPER_ADMIN' ? null : profile.company_id);
   const anonymousRead = await anonymousGet("itc_data/users");
+  const rootRead = await databaseGet('itc_data',token);
 
   if (!securedRead.ok) {
     throw new Error(`Authenticated database read failed with HTTP ${securedRead.status}`);
   }
-  if (anonymousRead.ok) {
-    throw new Error("Anonymous database read was allowed.");
+  if (![401,403].includes(anonymousRead.status) || ![401,403].includes(rootRead.status)) {
+    throw new Error("Expected permission denied for anonymous and global reads.");
   }
 
   console.log("Login and rules test OK:", email);

@@ -69,18 +69,26 @@ async function main() {
     }
     const email = String(profile.email || "").trim().toLowerCase();
     const role = String(profile.role || "").trim();
+    const existing = (await db.ref(`auth_profiles/${uid}`).once('value')).val();
+    if (existing) {
+      // Never reactivate or promote an existing account from a business copy.
+      skipped += 1;
+      continue;
+    }
+    const companyId = profile.company_id || (role === 'SUPER_ADMIN' ? 'PLATFORM' : 'COMP-ITC-LEGACY');
     await db.ref(`auth_profiles/${uid}`).set({
       uid,
       email,
       role,
-      company_id: profile.company_id || null,
+      company_id: companyId,
+      user_id: profile.id,
       is_active: profile.is_active !== false,
       is_demo: profile.is_demo === true,
       updated_at: new Date().toISOString(),
     });
     await admin.auth().setCustomUserClaims(uid, {
       role,
-      company_id: profile.company_id || null,
+      company_id: companyId,
     });
     synced += 1;
   }

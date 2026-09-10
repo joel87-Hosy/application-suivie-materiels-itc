@@ -1651,6 +1651,7 @@
       </button>
     </div>
 
+    <script src="assets/secure-store.js"></script>
     <script>
       let currentSectionId = "cockpit"; // Par défaut on est sur le cockpit
       // CONFIGURATION FIREBASE
@@ -1765,102 +1766,20 @@
       let currentUser = null;
       // Dernier compteur local de notifications non lues (pour détecter nouvelles notifs)
       let lastNotificationCount = 0;
-      let appData = {
-        stock: [
-          // Stock initial pour Gestionnaire Bureau 02 (exemples)
-          // Stock initial pour ITC Bureau 01 (coord / gestion)
-          {
-            op: "ITC-B01",
-            label: "CÂBLE FO 2MM",
-            qty: 40,
-            type: "CONNECTIQUES",
-          },
-          {
-            op: "ITC-B01",
-            label: "PATCHCORD SC",
-            qty: 25,
-            type: "CONNECTIQUES",
-          },
-          {
-            op: "ITC-B01",
-            label: "RACK 1U",
-            qty: 10,
-            type: "HARDWARE",
-          },
-          {
-            op: "ITC-B02",
-            label: "CÂBLE FO 2MM",
-            qty: 50,
-            type: "CONNECTIQUES",
-          },
-          {
-            op: "ITC-B02",
-            label: "PATCHCORD SC",
-            qty: 30,
-            type: "CONNECTIQUES",
-          },
-          { op: "MOOV", label: "SIM MOOV", qty: 120, type: "CONNECTIQUES" },
-        ],
-        demandes: [],
-        techDemandes: [],
-        sorties: [],
-        retours: [],
-        notifications: [],
-        consumptionArchives: [],
-        companies: [],
-        platformAuditLogs: [],
-        lastConsumptionArchiveKey: null,
-        scansDuJour: [],
-        derniereDateScan: null,
-        users: [
-          {
-            id: 1,
-            name: "AHONON ROGER",
-            role: "Superviseur",
-            email: "roger.ahonon@itc.ci",
-          },
-          {
-            id: 2,
-            name: "GESTIONNAIRE BUREAU 01",
-            role: "Gestionnaire",
-            email: "gest@itc.ci",
-            // Opérateurs gérés par ce gestionnaire (bureau 01)
-            managedOps: ["ITC-B01", "MTN", "OCI", "CIC"],
-          },
-          {
-            id: 9,
-            name: "GESTIONNAIRE BUREAU 02",
-            role: "Gestionnaire",
-            email: "gest_b02@itc.ci",
-            // Gestionnaire bureau 02 gère ITC-B02 et MOOV
-            managedOps: ["ITC-B02", "MOOV"],
-          },
-          {
-            id: 7,
-            name: "COORDINATRICE",
-            role: "Coordinatrice",
-            email: "coord@itc.ci",
-          },
-          {
-            id: 8,
-            name: "TECHNICIEN BUREAU 01",
-            role: "Technicien",
-            email: "tech@itc.ci",
-            managedOps: ["ITC-B01", "OCI", "CIC", "MTN"],
-          },
-          {
-            id: 10,
-            name: "TECHNICIEN BUREAU 02",
-            role: "Technicien",
-            email: "tech_b02@itc.ci",
-            managedOps: ["ITC-B02", "MOOV"],
-          },
-        ],
-      };
+      function emptyAppData() {
+        return {stock: [], demandes: [], techDemandes: [], sorties: [], retours: [], notifications: [], consumptionArchives: [], companies: [], platformAuditLogs: [], users: [], materialTypes: [], scansDuJour: [], derniereDateScan: null, lastConsumptionArchiveKey: null};
+      }
+      let appData = emptyAppData();
+      let pendingSave = null;
+      const secureStore = new SecureStore(db, data => applyServerData({val: () => data}), error => {
+        console.error("Accès Firebase interrompu", error);
+        logout();
+        alert(error.message || "Accès refusé. Reconnectez-vous.");
+      });
 
       function normalizeAppData(data) {
         const normalized = {
-          ...appData,
+          ...emptyAppData(),
           ...(data || {}),
         };
 
@@ -1884,7 +1803,7 @@
           normalized.lastConsumptionArchiveKey || null;
 
         if (!Array.isArray(normalized.users) || normalized.users.length === 0) {
-          normalized.users = appData.users;
+          normalized.users = [];
         }
 
         return normalized;
@@ -1928,7 +1847,7 @@
 
       // Écoute en temps réel des changements sur Firebase
       // Écoute en temps réel des changements sur Firebase
-      db.ref("itc_data").on("value", (snapshot) => {
+      function applyServerData(snapshot) {
         const data = snapshot.val();
 
         if (data) {
@@ -1945,7 +1864,7 @@
               );
               if (profile) {
                 const hadUser = !!currentUser;
-                currentUser = profile;
+                currentUser = {...profile, ...secureStore.profile};
                 updateMenuVisibility();
                 updateUserInfo();
                 updateNotifications();
@@ -1980,8 +1899,8 @@
             console.warn("Erreur initialisation currentUser depuis appData", e);
           }
 
-          const migrationResult = migrateLegacySorties(appData);
-          if (migrationResult.changed && !isSavingSortiesMigration) {
+          const migrationResult = canMaintainBusinessData() ? migrateLegacySorties(appData) : {changed: false};
+          if (migrationResult.changed && canMaintainBusinessData() && !isSavingSortiesMigration) {
             isSavingSortiesMigration = true;
             save();
             isSavingSortiesMigration = false;
@@ -1990,7 +1909,7 @@
             );
           }
 
-          const archiveChanged = ensureMonthlyConsumptionArchive();
+          const archiveChanged = canMaintainBusinessData() && ensureMonthlyConsumptionArchive();
           if (archiveChanged && !isSavingConsumptionArchive) {
             isSavingConsumptionArchive = true;
             save();
@@ -2053,13 +1972,23 @@
             "Mise à jour temps réel appliquée sur : " + currentSectionId,
           );
         }
-      });
+      }
+      function canMaintainBusinessData() {
+        return ["Superviseur", "Gestionnaire", "Coordinateur", "Coordinatrice", "Superviseur Terrain"].includes(secureStore.profile?.role);
+      }
       function save() {
-        db.ref("itc_data").set(appData);
+        if (pendingSave) return pendingSave;
+        // Batch synchronous changes (business operation + notifications).
+        pendingSave = Promise.resolve().then(() => secureStore.save(appData)).then(() => true).catch(error => {
+          console.error("Sauvegarde refusée", error);
+          alert("Enregistrement impossible : " + error.message);
+          refreshAppDataFromServer().catch(() => logout());
+          return false;
+        }).finally(() => { pendingSave = null; });
 
         // Mise à jour locale immédiate et rafraîchissement des listes de désignations
         try {
-          localStorage.setItem("itc_erp_v6_qr", JSON.stringify(appData));
+          localStorage.removeItem("itc_erp_v6_qr");
         } catch (e) {
           console.warn("Impossible d'écrire dans localStorage", e);
         }
@@ -2070,16 +1999,15 @@
         } catch (e) {
           // silencieux si la fonction n'est pas encore définie au moment de l'appel
         }
+        return pendingSave;
       }
 
       // Force une lecture fraîche côté serveur pour s'assurer d'afficher
       // l'état le plus récent après un changement d'utilisateur/connexion.
       function refreshAppDataFromServer() {
-        return db
-          .ref("itc_data")
-          .once("value")
-          .then((snapshot) => {
-            const data = snapshot.val();
+        return secureStore.connect(firebase.auth().currentUser)
+          .then(() => {
+            const data = secureStore.value();
             if (!data) return;
             appData = normalizeAppData(data);
 
@@ -2405,7 +2333,7 @@
         }
       }
 
-      function addDesignationToStock(label, op) {
+      async function addDesignationToStock(label, op) {
         if (!label) return;
         try {
           if (!appData) appData = {};
@@ -2424,7 +2352,7 @@
           );
           if (exists) return;
           appData.stock.push({ op: opKey, label: lbl, qty: 0, type: "AUTO" });
-          save();
+          if (!(await save())) return;
           showTempToast(`Désignation ajoutée au stock (${opKey})`);
         } catch (e) {
           console.warn("Erreur ajoutDesignationStock", e);
@@ -2468,7 +2396,8 @@
           try {
             await refreshAppDataFromServer();
           } catch (e) {
-            console.warn("refresh après login échoué", e);
+            await firebase.auth().signOut();
+            throw e;
           }
 
           const userProfile = (appData.users || []).find(
@@ -2493,7 +2422,7 @@
               );
               return;
             }
-            currentUser = userProfile;
+            currentUser = {...userProfile, ...secureStore.profile};
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("main-app").classList.remove("hidden");
 
@@ -2522,6 +2451,11 @@
       }
 
       function logout() {
+        secureStore.stop();
+        appData = emptyAppData();
+        currentUser = null;
+        clearPrivateLocalData();
+        document.getElementById("app-container").innerHTML = "";
         // 1. Déconnexion de Firebase Auth
         firebase
           .auth()
@@ -2543,6 +2477,13 @@
           .catch((error) => {
             console.error("Erreur lors de la déconnexion :", error);
           });
+      }
+      function clearPrivateLocalData() {
+        try {
+          for (const key of Object.keys(localStorage)) {
+            if (key.startsWith("itc_") || key.startsWith("draft_") || key.startsWith("sortie_") || key.startsWith("tech_demande_")) localStorage.removeItem(key);
+          }
+        } catch (error) { console.warn("Stockage local indisponible", error); }
       }
       function resetPassword() {
         const email = document.getElementById("login-email").value.trim();
@@ -4711,7 +4652,7 @@
         rememberSortieReference(ref, selectedOps);
         sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
         appData.sorties.push(sortieRecord);
-        save(); // Sauvegarde Firebase
+        if (!(await save())) return; // Sauvegarde Firebase
         localStorage.removeItem("draft_sortie");
 
         await exportSortiePDF(sortieRecord.id);
@@ -4893,7 +4834,7 @@
         return sortieOps.every((op) => allowedOps.has(normalizeOperatorKey(op)));
       }
 
-      function deleteSortieAndRestoreStock(id) {
+      async function deleteSortieAndRestoreStock(id) {
         if (!canCurrentUserEditSorties()) {
           alert("Action non autorisée pour votre profil.");
           return;
@@ -4973,7 +4914,7 @@
           1,
           `BON SORTIE SUPPRIME : ${deletedSortie.ref || deletedSortie.id}. Retour stock : ${restoredLogs.join(", ")}`,
         );
-        save();
+        if (!(await save())) return;
         renderRapportsSorties(document.getElementById("app-container"));
         alert("Bon supprimé et matériel remis en stock.");
       }
@@ -5094,7 +5035,7 @@
         }
       }
 
-      function saveEditedSortie() {
+      async function saveEditedSortie() {
         if (!canCurrentUserEditSorties()) {
           alert("Action non autorisée pour votre profil.");
           return;
@@ -5226,7 +5167,7 @@
           `CORRECTION SORTIE : ${updatedSortie.ref} modifiée par ${updatedSortie.updatedBy}`,
         );
 
-        save();
+        if (!(await save())) return;
         closeEditSortieModal();
         showSection("rapports-sorties");
         alert("Rapport de sortie corrigé avec succès.");
@@ -5927,7 +5868,7 @@
         saveEditedSortieRefBlock();
       }
 
-      function saveEditedSortieRefBlock() {
+      async function saveEditedSortieRefBlock() {
         if (!canCurrentUserEditSorties()) {
           alert("Action non autorisée pour votre profil.");
           return;
@@ -5976,7 +5917,7 @@
           sortie.updatedBy = actor;
         });
 
-        save();
+        if (!(await save())) return;
         addNotification(
           1,
           `CORRECTION RÉF BLOC : ${currentRef} -> ${nextRef} (${targetSorties.length} sortie(s)) par ${actor}`,
@@ -6458,7 +6399,7 @@
       }
 
       // --- ENREGISTREMENT DANS FIREBASE ---
-      function confirmerImportExcel(itemsString) {
+      async function confirmerImportExcel(itemsString) {
         // Si itemsString est passé comme objet direct par JS, pas besoin de parse
         const items =
           typeof itemsString === "string"
@@ -6486,7 +6427,7 @@
         appData.demandes.push(newDemande);
 
         // Sauvegarde vers Firebase
-        save();
+        if (!(await save())) return;
 
         // Feedback
         alert("Commande importée avec succès ! Transmise au gestionnaire.");
@@ -7174,7 +7115,7 @@
         doc.save(`RAPPORT_FLUX_${monthName}.pdf`);
       }
 
-      function handleScanSuccess(id) {
+      async function handleScanSuccess(id) {
         const beep = document.getElementById("beep-sound");
         if (beep) beep.play();
         if (navigator.vibrate) navigator.vibrate(100);
@@ -7194,7 +7135,7 @@
               }),
               technicien: d.demandeurName,
             });
-            save();
+            if (!(await save())) return;
           }
 
           const resultText = document.getElementById("scan-id-text");
@@ -7225,7 +7166,7 @@
         document.getElementById("excel-items-list").appendChild(div);
       }
 
-      function handleExcelSubmit(e) {
+      async function handleExcelSubmit(e) {
         e.preventDefault();
         const items = [];
         document.querySelectorAll(".art-row-ex").forEach((r) => {
@@ -7247,7 +7188,7 @@
         };
         appData.demandes.unshift(c);
         addNotification(2, `COMMANDE VIA EXCEL : ${c.id}`);
-        save();
+        if (!(await save())) return;
         alert("COMMANDE ÉMISE.");
         showSection("cockpit");
       }
@@ -7919,7 +7860,7 @@
           </div>`;
       }
 
-      function createCompanyFromSuperAdmin(event) {
+      async function createCompanyFromSuperAdmin(event) {
         event.preventDefault();
         if (!isCurrentSuperAdmin()) return;
 
@@ -8000,7 +7941,7 @@
           full_name: adminName,
           email: adminEmail,
           managedOps: [],
-          temporary_password: temporaryPassword,
+
           must_change_password: true,
           is_active: true,
           created_at: new Date().toISOString(),
@@ -8018,8 +7959,7 @@
           by: currentUser.email,
           date: new Date().toLocaleString("fr-FR"),
         });
-        save();
-        publishTenantBranding(company);
+        if (!(await save())) return;
         const authCommand = `npm.cmd run create-user -- --email "${adminEmail}" --password "${temporaryPassword}" --name "${adminName}" --role "Superviseur" --companyId "${company.id}" --serviceAccount tools/serviceAccountKey.json`;
         alert(
           `Entreprise creee.\n\nEntreprise: ${company.name}\nSuperviseur: ${adminName}\nEmail: ${adminEmail}\nMot de passe temporaire: ${temporaryPassword}\n\nCommande Auth a executer:\n${authCommand}`,
@@ -8032,7 +7972,7 @@
         if (input) input.value = generateTemporaryPassword();
       }
 
-      function saveCompanyBilling(button) {
+      async function saveCompanyBilling(button) {
         if (!isCurrentSuperAdmin()) return;
         const row = button?.closest(".saas-billing-row");
         const companyId = row?.dataset?.companyId;
@@ -8092,7 +8032,7 @@
           date: new Date().toLocaleString("fr-FR"),
         });
 
-        save();
+        if (!(await save())) return;
         renderSuperAdminDashboard(document.getElementById("app-container"));
       }
 
@@ -8110,7 +8050,7 @@
           });
       }
 
-      function toggleCompanyStatus(companyId) {
+      async function toggleCompanyStatus(companyId) {
         if (!isCurrentSuperAdmin()) return;
         let company = getCompanyById(companyId);
         if (!company && String(companyId) === "COMP-ITC-LEGACY") {
@@ -8146,8 +8086,7 @@
           by: currentUser.email,
           date: new Date().toLocaleString("fr-FR"),
         });
-        save();
-        publishTenantBranding(company);
+        if (!(await save())) return;
         renderSuperAdminDashboard(document.getElementById("app-container"));
       }
 
@@ -8169,7 +8108,7 @@
         return "active";
       }
 
-      function manageCompanyUser(userId, action) {
+      async function manageCompanyUser(userId, action) {
         if (!isCurrentCompanySupervisor()) return;
 
         const users = Array.isArray(appData.users) ? appData.users : [];
@@ -8214,8 +8153,13 @@
           by: currentUser.email,
           date: new Date().toLocaleString("fr-FR"),
         });
-        save();
-        renderCompanyUsersAdmin(document.getElementById("app-container"));
+        try {
+          await secureStore.save(appData);
+          renderCompanyUsersAdmin(document.getElementById("app-container"));
+        } catch (error) {
+          alert("Modification du compte refusée : " + error.message);
+          await refreshAppDataFromServer();
+        }
       }
 
       function generateTemporaryPassword() {
@@ -8330,13 +8274,6 @@
                   }">${getCompanyUserStatus(user) === "active" ? "Actif" : getCompanyUserStatus(user) === "disabled" ? "Desactive" : "Suspendu"}</span>
                 </td>
                 <td class="py-3">
-                  ${
-                    user.temporary_password
-                      ? `<input readonly value="${escapeHtml(user.temporary_password)}" class="border rounded-lg px-2 py-1 text-[8px] font-black text-slate-600 bg-slate-50 w-36" onclick="this.select()" />`
-                      : '<span class="text-slate-300">-</span>'
-                  }
-                </td>
-                <td class="py-3">
                   <div class="flex flex-wrap gap-1">
                     ${
                       getCompanyUserStatus(user) === "active"
@@ -8401,11 +8338,10 @@
                         <th class="pb-2">Role</th>
                         <th class="pb-2">Acces</th>
                         <th class="pb-2">Statut</th>
-                        <th class="pb-2">Mot de passe temp.</th>
                         <th class="pb-2">Actions</th>
                       </tr>
                     </thead>
-                    <tbody>${rows || `<tr><td colspan="${isSuperAdmin ? 8 : 7}" class="py-8 text-center text-slate-400">Aucun utilisateur cree.</td></tr>`}</tbody>
+                    <tbody>${rows || `<tr><td colspan="${isSuperAdmin ? 7 : 6}" class="py-8 text-center text-slate-400">Aucun utilisateur cree.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
@@ -8493,7 +8429,7 @@
           );
           const newProfile = {
             ...(existingProfile || {}),
-            id: maxId + 1,
+            id: Math.max(maxId + 1, Date.now() * 1000 + crypto.getRandomValues(new Uint32Array(1))[0] % 1000),
             uid: authUser.uid,
             company_id: companyId,
             company_name: company.name,
@@ -8503,7 +8439,7 @@
             full_name: userName,
             email,
             managedOps,
-            temporary_password: temporaryPassword,
+
             must_change_password: true,
             is_active: true,
             account_status: "active",
@@ -8532,21 +8468,7 @@
             date: new Date().toLocaleString("fr-FR"),
           });
 
-          await db.ref(`auth_profiles/${authUser.uid}`).set({
-            uid: authUser.uid,
-            email,
-            role,
-            company_id: companyId,
-            is_active: true,
-            account_status: "active",
-            updated_at: new Date().toISOString(),
-          });
-          await db.ref("itc_data").set(appData);
-          try {
-            localStorage.setItem("itc_erp_v6_qr", JSON.stringify(appData));
-          } catch (e) {
-            console.warn("Impossible d'ecrire dans localStorage", e);
-          }
+          await secureStore.save(appData);
 
           alert(
             `Compte cree.\n\nEmail: ${email}\nMot de passe temporaire: ${temporaryPassword}\n\nL'utilisateur peut maintenant se connecter.`,
@@ -8787,7 +8709,7 @@
         container.innerHTML = parts.join("");
         renderCockpitCharts(totalsByOp, perOperatorAlerts);
       }
-      function ouvrirModifStock(op, label) {
+      async function ouvrirModifStock(op, label) {
         const item = appData.stock.find(
           (s) => s.label === label && s.op === op,
         );
@@ -8811,7 +8733,7 @@
         const messageAudit = `ALERTE MODIFICATION STOCK : L'article "${ancienNom}" (${ancienneQty}U) a été renommé en "${item.label}" avec une nouvelle quantité de (${item.qty}U) par le gestionnaire.`;
         addNotification(1, messageAudit);
 
-        save();
+        if (!(await save())) return;
         showSection("cockpit");
       }
 
@@ -9397,7 +9319,7 @@
           .join("");
       }
 
-      function handleTechSubmit(e) {
+      async function handleTechSubmit(e) {
         e.preventDefault();
         const pickedItems = getSelectedTechItemsFromPicker();
         const manualItems = getManualTechDemandeItems();
@@ -9454,7 +9376,7 @@
           appData.demandes.unshift(d);
           rememberTechDemandeReference(motif, ops);
           addNotification(assignedCoordinateurId, `DEMANDE A SIGNER : ${d.id} - ${d.demandeurName}`);
-          save();
+          if (!(await save())) return;
           alert("DEMANDE TRANSMISE AU COORDINATEUR / SUPERVISEUR.");
           showSection("cockpit");
           return;
@@ -9473,7 +9395,7 @@
         };
         appData.techDemandes.unshift(d);
         addNotification(7, `BESOIN : ${d.technicienNom} (${d.equipe})`);
-        save();
+        if (!(await save())) return;
         alert("DEMANDE TRANSMISE À LA COORDINATRICE.");
         showSection("cockpit");
       }
@@ -9607,7 +9529,7 @@
           </div>`;
       }
 
-      function coordSignAndSendDemande(id) {
+      async function coordSignAndSendDemande(id) {
         const d = (appData.demandes || []).find((x) => x.id === id);
         if (!d) return alert("Demande introuvable.");
         const managerSelect = document.getElementById("coord-assign-gestionnaire");
@@ -9623,7 +9545,7 @@
         d.statut = "EN ATTENTE GESTIONNAIRE";
         addNotification(managerId, `BON A VALIDER : ${d.id} signe par ${currentUser?.name || "COORDINATION"}`);
         addNotification(d.demandeurOriginalId, `VOTRE BON ${d.id} A ETE SIGNE PAR LA COORDINATION.`);
-        save();
+        if (!(await save())) return;
         alert("BON ENVOYE AU GESTIONNAIRE.");
         showSection("cockpit");
       }
@@ -9670,7 +9592,7 @@
         document.getElementById("cmd-list").appendChild(div);
       }
 
-      function submitCmd() {
+      async function submitCmd() {
         const tech = window._currentTechProcess;
         const items = [];
         document.querySelectorAll(".art-row").forEach((r) => {
@@ -9725,7 +9647,7 @@
             `NOUVELLE COMMANDE À TRAITER : ${c.id} (assignée par ${currentUser.name})`,
           );
         }
-        save();
+        if (!(await save())) return;
         alert(
           "COMMANDE ENVOYÉE AU MAGASIN. Gestionnaire assigné: " +
             (c.assignedGestionnaireName || "Automatique"),
@@ -9877,7 +9799,7 @@
         addDirectRow();
       }
 
-      function handleDirectSubmit(e) {
+      async function handleDirectSubmit(e) {
         e.preventDefault();
         const items = [];
         document.querySelectorAll(".direct-row").forEach((r) => {
@@ -9938,7 +9860,7 @@
           currentUser.id,
           `Votre commande ${c.id} a été envoyée et est en attente de validation.`,
         );
-        save();
+        if (!(await save())) return;
         alert(
           "TRANSMIS. Gestionnaire assigné: " +
             (c.assignedGestionnaireName || "Automatique"),
@@ -9966,7 +9888,7 @@
               </div>`;
       }
 
-      function handleRetourSubmit(e) {
+      async function handleRetourSubmit(e) {
         e.preventDefault();
         const r = {
           id: "RET-" + Date.now().toString().slice(-4),
@@ -9984,7 +9906,7 @@
         };
         appData.retours.unshift(r);
         addNotification(2, `RETOUR : ${r.techName}`);
-        save();
+        if (!(await save())) return;
         alert("RETOUR ENREGISTRÉ.");
         showSection("cockpit");
       }
@@ -10071,14 +9993,14 @@
               </div>`;
       }
 
-      function prepSortie(id) {
+      async function prepSortie(id) {
         const d = appData.demandes.find((x) => x.id === id);
         if (d?.workflow === "TECH_BON_SORTIE") {
           openGestionnaireWorkflowDemande(id);
           return;
         }
         d.status = "PRET";
-        save();
+        if (!(await save())) return;
         showSection("livraison");
       }
 
@@ -10186,7 +10108,7 @@
               </div>`;
       }
 
-      function finalSortie(id) {
+      async function finalSortie(id) {
         const d = appData.demandes.find((x) => x.id === id);
         if (d?.workflow === "TECH_BON_SORTIE") {
           let stockInsuffisant = false;
@@ -10240,7 +10162,7 @@
           }
           addNotification(1, `AUDIT : SORTIE VALIDEE (${d.id}) — Équipe : ${d.equipe || d.demandeurName || "Non renseignée"}`);
           addNotification(d.demandeurOriginalId, `VOTRE MATERIEL EST DISPONIBLE (${d.id}).`);
-          save();
+          if (!(await save())) return;
           alert("TERMINE.");
           showSection("cockpit");
           return;
@@ -10269,7 +10191,7 @@
           d.demandeurOriginalId,
           `VOTRE MATÉRIEL EST DISPONIBLE (${d.id}).`,
         );
-        save();
+        if (!(await save())) return;
         alert("TERMINÉ.");
         showSection("cockpit");
       }
@@ -10297,7 +10219,7 @@
               </div>`;
       }
 
-      function validerRetour(id) {
+      async function validerRetour(id) {
         const r = appData.retours.find((x) => x.id === id);
         if (r.etat === "NEUF") {
           const s = appData.stock.find(
@@ -10318,7 +10240,7 @@
         }
         r.status = "VALIDÉ";
         addNotification(1, `AUDIT : RETOUR RÉINTÉGRÉ (${r.label}) — Équipe : ${r.equipe || r.techName || "Non renseignée"}`);
-        save();
+        if (!(await save())) return;
         alert("STOCK À JOUR.");
         showSection("gestion-retours");
       }
@@ -10440,7 +10362,7 @@
                   ) {
                     appData.materialTypes.push(newType);
                     // Persist and refresh datalists/DOM
-                    save();
+                    if (!(await save())) return;
                   }
 
                   // Add option to select if not present and select it
@@ -10475,7 +10397,7 @@
         toggleQtyField(rOp ? rOp.value : "ITC");
       }
 
-      function handleRec(e) {
+      async function handleRec(e) {
         e.preventDefault();
 
         // 1. SÉCURITÉ : On s'assure que appData et appData.stock existent
@@ -10548,7 +10470,7 @@
           `TRAFIC : ENTRÉE STOCK (${mat.label}) - QUANTITÉ : ${mat.qty}`,
           normalizeOperatorKey(mat.op),
         );
-        save(); // Envoi vers Firebase
+        if (!(await save())) return; // Envoi vers Firebase
 
         alert("ENTRÉE EN STOCK RÉUSSIE.");
 
@@ -11035,7 +10957,7 @@
         setTimeout(() => select.focus(), 50);
       }
 
-      function transferMaterial(op, label, targetType) {
+      async function transferMaterial(op, label, targetType) {
         const item = (appData.stock || []).find(
           (s) =>
             String(s.op || "").toUpperCase() ===
@@ -11050,7 +10972,7 @@
 
         const msg = `TRANSFERT STOCK : L'article '${label}' a été déplacé de '${ancienType}' vers '${item.type}' par le gestionnaire.`;
         addNotification(1, msg, item.op);
-        save();
+        if (!(await save())) return;
         showTempToast(`Transféré vers ${item.type}`);
         // Rafraîchir la vue actuelle
         try {
@@ -11339,25 +11261,27 @@
           }
         }, 500);
       }
-      function markNotificationsAsRead() {
+      async function markNotificationsAsRead() {
         if (!appData || !appData.notifications) return; // Sécurité totale
 
         appData.notifications.forEach((n) => {
           if (n.userId === currentUser.id) n.lu = true;
         });
-        save();
+        if (!(await save())) return;
       }
-      function markNotificationsAsRead() {
+      async function markNotificationsAsRead() {
         if (!appData || !appData.notifications) return; // Sécurité totale
 
         appData.notifications.forEach((n) => {
           if (n.userId === currentUser.id) n.lu = true;
         });
-        save();
+        if (!(await save())) return;
         updateNotifications;
       }
       function addNotification(u, m, auditFlux = "ITC") {
         if (!appData.notifications) appData.notifications = [];
+        const supervisorId = (appData.users || []).find(user => user.role === 'Superviseur')?.id;
+        if (u === 1 && supervisorId) u = supervisorId;
 
         const normalizedFlux = normalizeAuditFlux(auditFlux);
         const notif = {
@@ -11384,10 +11308,10 @@
             /AUDIT|SORTIE|RETOUR|TRAFIC|ENTR[EÉ]E|COMMANDE|IMPORT/i;
           const isAuditLike =
             auditKeywords.test(String(m || "")) || normalizedFlux === "ITC";
-          if (u !== 1 && isAuditLike) {
+          if (supervisorId && u !== supervisorId && isAuditLike) {
             appData.notifications.unshift({
               ...notif,
-              userId: 1,
+              userId: supervisorId,
             });
           }
         } catch (e) {
@@ -11460,7 +11384,7 @@
         // 4. Mettre à jour le compteur local
         lastNotificationCount = count;
       }
-      function deleteMaterial(op, label) {
+      async function deleteMaterial(op, label) {
         if (
           !confirm(
             "ATTENTION : VOULEZ-VOUS SUPPRIMER DÉFINITIVEMENT CET ARTICLE DU STOCK ?",
@@ -11483,13 +11407,13 @@
         const messageAudit = `ALERTE SUPPRESSION CRITIQUE : Le gestionnaire a supprimé l'article "${label}" de l'opérateur ${op}. (Quantité au moment de la suppression : ${qteAuMomentSuppr}U)`;
         addNotification(1, messageAudit);
 
-        save();
+        if (!(await save())) return;
         showSection("cockpit");
       }
 
       // Nouvelle version robuste de la fonction d'édition de stock.
       // Accepts either (op, label) or (label) for backward compatibility.
-      function ouvrirModifStock(a, b) {
+      async function ouvrirModifStock(a, b) {
         let op = "ITC";
         let label = "";
         if (b === undefined) {
@@ -11537,7 +11461,7 @@
 
         const messageAudit = `ALERTE MODIFICATION STOCK : L'article "${ancienNom}" (${ancienneQty}U) a été renommé en "${item.label}" avec une nouvelle quantité de (${item.qty}U) par le gestionnaire.`;
         addNotification(1, messageAudit, op);
-        save();
+        if (!(await save())) return;
         alert("Modification enregistrée.");
         showSection("cockpit");
       }
@@ -11548,10 +11472,9 @@
           try {
             await refreshAppDataFromServer();
           } catch (e) {
-            console.warn(
-              "refreshAppDataFromServer failed on bottom auth state",
-              e,
-            );
+            console.error("Session non autorisée", e);
+            logout();
+            return;
           }
 
           // Un utilisateur est présent dans le cache Firebase
@@ -11561,7 +11484,7 @@
               String(user.email || "").toLowerCase(),
           );
           if (userProfile) {
-            currentUser = userProfile;
+            currentUser = {...userProfile, ...secureStore.profile};
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("main-app").classList.remove("hidden");
             updateMenuVisibility();
@@ -11580,6 +11503,10 @@
           // AUCUN utilisateur : On force l'affichage du login
           document.getElementById("login-screen").classList.remove("hidden");
           document.getElementById("main-app").classList.add("hidden");
+          secureStore.stop();
+          appData = emptyAppData();
+          clearPrivateLocalData();
+          document.getElementById("app-container").innerHTML = "";
           currentUser = null;
         }
       });

@@ -5,3 +5,9 @@ serviceAccountKey.json
 .env
 .env.*
 tools/comptes-bureau-02.json
+node_modules/
+.npm-cache/
+.tools/
+.security-backups/
+public/
+*-debug.log

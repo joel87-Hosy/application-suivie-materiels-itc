@@ -10,7 +10,7 @@ function setup(team = true) {
   const auth = () => ({currentUser: user});
   auth.EmailAuthProvider = {credential: (email, password) => ({email, password})};
   const profile = {uid: user.uid, name: 'Flash-Abonné', role: 'Technicien', username: team ? 'flash-abonne' : undefined};
-  const context = {firebase: {auth}, currentUser: {...profile}, document: {getElementById: id => inputs[id]}, db: {ref: path => ({once: async () => ({val: () => ({'37': profile})}), update: async changes => updates.push({path, changes})})}, updateUserInfo() {}, escapeHtml: text => String(text).replace(/</g, '&lt;')};
+  const context = {firebase: {auth}, currentUser: {...profile}, appData: {users: [{...profile, _dbKey: "37"}]}, document: {getElementById: id => inputs[id]}, db: {ref: path => ({once: async () => ({val: () => ({'37': profile})}), update: async changes => updates.push({path, changes})})}, updateUserInfo() {}, escapeHtml: text => String(text).replace(/</g, '&lt;')};
   vm.createContext(context); vm.runInContext(source, context);
   const button = {disabled: false};
   const form = {querySelector: () => button, querySelectorAll: () => [], reset: () => calls.push('reset')};
@@ -38,7 +38,7 @@ function setup(team = true) {
   password.inputs['profile-confirm-password'].value = 'new-password';
   await password.context.changeMonProfilPassword(password.event);
   assert.deepEqual(password.calls, ['reauth', 'password', 'reset']);
-  assert.equal(password.updates[0].changes.temporary_password, null);
+  assert.equal(password.updates[0].changes.temporary_password, undefined);
   assert.equal(password.updates[0].changes.must_change_password, false);
   assert.ok(!JSON.stringify(password.updates).includes('new-password'));
   const wrong = setup();

@@ -1,8 +1,9 @@
-const CACHE_NAME = "itc-gestion-materiels-v5";
+const CACHE_NAME = "itc-gestion-materiels-v6-security";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./assets/profile.js",
+  "./assets/secure-store.js",
   "./offline.html",
   "./privacy.html",
   "./manifest.webmanifest",
@@ -48,6 +49,9 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
+  // Never persist authenticated API responses, including Firebase REST reads.
+  if (url.origin !== self.location.origin &&
+      !['www.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'cdn.tailwindcss.com', 'fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname)) return;
 
   const updateCache = (cacheKey, response) => {
     if (response && response.ok) {

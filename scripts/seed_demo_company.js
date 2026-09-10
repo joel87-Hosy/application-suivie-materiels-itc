@@ -138,12 +138,14 @@ function toListWithKeys(value) {
 async function upsertCompany(ref, data) {
   const { keys, list } = toListWithKeys(data.companies);
   const existingIndex = list.findIndex((item) => item?.id === company.id);
-  const key = existingIndex >= 0 ? keys[existingIndex] : String(list.length);
+  const key = existingIndex >= 0 ? keys[existingIndex] : ref.child('companies').push().key;
   await ref.child(`companies/${key}`).set({
     ...(existingIndex >= 0 ? list[existingIndex] : {}),
     ...company,
+    company_id: company.id,
     updated_at: new Date().toISOString(),
   });
+  await db.ref(`tenant_branding/${company.id}`).set({id:company.id,name:company.name,logo_url:company.logo_url || 'assets/saas-logo.svg',status:company.status || 'active'});
 }
 
 async function upsertAuthUser(account, password) {
@@ -209,7 +211,7 @@ async function upsertUserProfiles(ref, data, password) {
       full_name: account.name,
       email,
       managedOps: account.managedOps,
-      temporary_password: password,
+      temporary_password: null,
       must_change_password: false,
       is_active: true,
       is_demo: true,
@@ -217,8 +219,9 @@ async function upsertUserProfiles(ref, data, password) {
       updated_at: new Date().toISOString(),
       created_by: "super_admin",
     };
-    const key = existingIndex >= 0 ? keys[existingIndex] : String(list.length);
+    const key = existingIndex >= 0 ? keys[existingIndex] : ref.child('users').push().key;
     await ref.child(`users/${key}`).set(profile);
+    await db.ref(`auth_profiles/${authUser.uid}/user_id`).set(profile.id);
     if (existingIndex >= 0) {
       list[existingIndex] = profile;
     } else {
@@ -230,7 +233,6 @@ async function upsertUserProfiles(ref, data, password) {
 
 async function seedStock(ref, data) {
   const { list } = toListWithKeys(data.stock);
-  let nextIndex = list.length;
 
   for (const item of demoStock) {
     const exists = list.some(
@@ -239,14 +241,13 @@ async function seedStock(ref, data) {
         String(stockItem?.label || "").toUpperCase() === item.label.toUpperCase(),
     );
     if (exists) continue;
-    await ref.child(`stock/${nextIndex}`).set({
+    await ref.child('stock').push().set({
       ...item,
       company_id: company.id,
       company_name: company.name,
       is_demo: true,
     });
     list.push(item);
-    nextIndex += 1;
   }
 }
 
@@ -265,17 +266,13 @@ async function main() {
   await seedStock(ref, data);
 
   const auditRef = ref.child("platformAuditLogs");
-  await auditRef.transaction((logs) => {
-    const nextLogs = Array.isArray(logs) ? logs : [];
-    nextLogs.unshift({
+  await auditRef.push().set({
       action: "SEED_DEMO_COMPANY",
       company_id: company.id,
       company_name: company.name,
       accounts: demoAccounts.map((account) => account.email),
       by: "super_admin",
       date: new Date().toLocaleString("fr-FR"),
-    });
-    return nextLogs.slice(0, 200);
   });
 
   console.log("Demo company ready:", company.id);

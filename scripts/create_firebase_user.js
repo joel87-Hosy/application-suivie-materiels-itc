@@ -110,7 +110,7 @@ async function main() {
       ...(existingIndex >= 0 ? users[existingIndex] : {}),
       id: existingIndex >= 0 ? users[existingIndex].id || maxId + 1 : maxId + 1,
       uid: userRecord.uid,
-      company_id: argv.companyId || users[existingIndex]?.company_id || null,
+      company_id: argv.companyId || users[existingIndex]?.company_id || 'COMP-ITC-LEGACY',
       name: argv.name,
       full_name: argv.name,
       role: argv.role,
@@ -135,11 +135,12 @@ async function main() {
       company_id: newUserProfile.company_id,
       is_active: true,
       updated_at: new Date().toISOString(),
+      user_id: newUserProfile.id,
     });
 
     // Write only the touched profile to avoid overwriting concurrent changes.
     const profileKey =
-      existingIndex >= 0 ? userKeys[existingIndex] : String(users.length);
+      existingIndex >= 0 ? userKeys[existingIndex] : ref.child('users').push().key;
     await ref.child(`users/${profileKey}`).set(newUserProfile);
     console.log("User profile saved to Realtime DB with id=", newUserProfile.id);
 
@@ -149,19 +150,18 @@ async function main() {
       : data.stock && typeof data.stock === "object"
         ? Object.values(data.stock)
         : [];
-    let nextStockIndex = stock.length;
     for (const op of managedOps) {
       const existsForOp = stock.some(
-        (s) => String(s.op || "").toUpperCase() === String(op).toUpperCase(),
+        (s) => s.company_id === newUserProfile.company_id && String(s.op || "").toUpperCase() === String(op).toUpperCase(),
       );
       if (!existsForOp) {
-        await ref.child(`stock/${nextStockIndex}`).set({
+        await ref.child('stock').push().set({
+          company_id: newUserProfile.company_id,
           op: op,
           label: `INVENTAIRE INITIAL ${op}`,
           qty: 0,
           type: "AUTO",
         });
-        nextStockIndex += 1;
       }
     }
 

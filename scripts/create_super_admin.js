@@ -84,13 +84,13 @@ async function main() {
 
   await admin.auth().setCustomUserClaims(uid, {
     role: "SUPER_ADMIN",
-    company_id: null,
+    company_id: "PLATFORM",
   });
   await db.ref(`auth_profiles/${uid}`).set({
     uid,
     email,
     role: "SUPER_ADMIN",
-    company_id: null,
+    company_id: "PLATFORM",
     is_active: true,
     updated_at: new Date().toISOString(),
   });
@@ -112,7 +112,7 @@ async function main() {
     ...(existingIndex >= 0 ? users[existingIndex] : {}),
     id: existingIndex >= 0 ? users[existingIndex].id || maxId + 1 : maxId + 1,
     uid,
-    company_id: null,
+    company_id: "PLATFORM",
     name: argv.name,
     full_name: argv.name,
     role: "SUPER_ADMIN",
@@ -124,10 +124,9 @@ async function main() {
         : new Date().toISOString(),
   };
 
-  if (existingIndex >= 0) users[existingIndex] = profile;
-  else users.push(profile);
-
-  await ref.child("users").set(users);
+  const key = existingIndex >= 0 ? Object.keys(data.users)[existingIndex] : ref.child("users").push().key;
+  await ref.child("users/" + key).set(profile);
+  await db.ref("auth_profiles/" + uid + "/user_id").set(profile.id);
 
   console.log("Super admin ready.");
   console.log("Email:", email);

@@ -18,6 +18,12 @@ const argv = yargs
     default: "database.rules.json",
     description: "Path to Realtime Database rules JSON",
   })
+  .option("appUrl", {
+    type: "string",
+    demandOption: true,
+    description: "Public application URL; verifies the compatible client before restricting access",
+  })
+  .option("migrate", {type:"boolean", default:false, description:"Freeze client writes and migrate existing data before publishing rules"})
   .help().argv;
 
 const serviceAccountPath = path.resolve(
@@ -61,6 +67,39 @@ admin.initializeApp({
 
 async function main() {
   const database = admin.database();
+  const base = new URL(argv.appUrl.endsWith('/') ? argv.appUrl : argv.appUrl + '/');
+  const normalized = text => text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  for (const file of ['index.html', 'assets/secure-store.js', 'assets/profile.js']) {
+    const response = await fetch(new URL(file, base), {cache:'no-store', signal:AbortSignal.timeout(20000)});
+    if (!response.ok || normalized(await response.text()) !== normalized(fs.readFileSync(path.resolve(__dirname,'..',file),'utf8'))) {
+      throw new Error('The published application is not the current secure version: ' + file);
+    }
+  }
+  if (argv.migrate) {
+    const {migrate} = require('./migrate_tenant_security');
+    // Check the data before entering maintenance, without writing anything.
+    migrate((await database.ref().once('value')).val());
+    const previousRules = await database.getRulesJSON();
+    fs.mkdirSync('.security-backups', {recursive:true});
+    const stamp = Date.now();
+    fs.writeFileSync(`.security-backups/rules-${stamp}.json`, JSON.stringify(previousRules), {flag:'wx',mode:0o600});
+    function freeze(node) {
+      return Object.fromEntries(Object.entries(node).map(([key,value]) => [key,key === '.write' ? false : value && typeof value === 'object' && !Array.isArray(value) ? freeze(value) : value]));
+    }
+    await database.setRules(freeze(previousRules));
+    console.log('Client writes paused for the security migration.');
+    try {
+      const original = (await database.ref().once('value')).val();
+      fs.writeFileSync(`.security-backups/data-${stamp}.json`, JSON.stringify(original), {flag:'wx',mode:0o600});
+      const next = migrate(original);
+      const result = await database.ref().transaction(current => JSON.stringify(current) === JSON.stringify(original) ? next : undefined, undefined, false);
+      if (!result.committed) throw new Error('Concurrent administrative write; migration aborted.');
+    } catch (error) {
+      throw new Error('Migration failed; client writes remain paused. Diagnose before restoring access. ' + error.message);
+    }
+  }
+  const schema = (await database.ref('security_schema_version').once('value')).val();
+  if (schema !== 2) throw new Error('Use --migrate for the first deployment of the tenant security rules.');
   await database.setRules(rules);
   const deployedRules = await database.getRulesJSON();
 
