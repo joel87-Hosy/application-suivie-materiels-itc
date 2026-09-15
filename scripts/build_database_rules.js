@@ -74,7 +74,9 @@ rules.itc_data.users = {
 for (const field of ['name', 'full_name', 'contact_name', 'phone', 'contact_email', 'updated_at', 'must_change_password', 'password_changed_at']) {
   rules.itc_data.users.$key[field] = {
     '.write': `${active} && data.parent().child('uid').val() === auth.uid && (${admin} || ${member})`,
-    '.validate': field === 'must_change_password' ? 'newData.isBoolean() && newData.val() === false' : 'newData.isString() && newData.val().length <= 254',
+    // Account creators can require an initial password change; self-service users
+    // can only clear this flag after the existing password-change workflow.
+    '.validate': field === 'must_change_password' ? `newData.isBoolean() && (newData.val() === false || ${admin} || (${member} && ${role} === 'Superviseur' && newData.parent().child('company_id').val() === ${company}))` : 'newData.isString() && newData.val().length <= 254',
   };
 }
 require('./control_database_rules')({rules, p, role, company, member, admin, listRead, recordRead});

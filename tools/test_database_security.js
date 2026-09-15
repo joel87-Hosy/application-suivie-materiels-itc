@@ -81,9 +81,16 @@ async function main() {
   await store.connect({uid:'supervisor'});
   let data=store.value();
   assert.ok(data.users.every(u => u.company_id === 'A'));
-  data.users.push({...profile('newTech','Technicien'),id:10,name:'New colleague'});
+  data.users.push({...profile('newTech','Technicien'),id:10,name:'New colleague',must_change_password:true});
   await store.save(data);
   assert.equal((await admin.ref('auth_profiles/newTech').once('value')).val().user_id,10);
+  assert.equal((await admin.ref('itc_data/users').orderByChild('company_id').equalTo('A').once('value')).val()[data.users.find(u=>u.uid==='newTech')._dbKey].must_change_password,true);
+  data=store.value();
+  data.users.push({...profile('newController','Contrôleur'),id:11,name:'Controller',managedOps:[],must_change_password:true});
+  await store.save(data);
+  assert.equal((await admin.ref('auth_profiles/newController').once('value')).val().role,'Contrôleur');
+  await assertFails(tech.ref('itc_data/users/tech/must_change_password').set(true));
+  await assertFails(manager.ref('itc_data/users/tech/must_change_password').set(true));
   data=store.value();
   data.users.find(u => u.uid === 'otherTech').is_active = false;
   await store.save(data);
