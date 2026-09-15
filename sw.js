@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v8-control-all-stocks";
+const CACHE_NAME = "itc-gestion-materiels-v9-privacy-navigation";
 const APP_SHELL = [
   "./",
   "./index.html",
