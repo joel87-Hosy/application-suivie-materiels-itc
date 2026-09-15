@@ -17,6 +17,8 @@
     "build:rules": "node scripts/build_database_rules.js",
     "test:security": "firebase emulators:exec --only database --project demo-itc-security \"node tools/test_database_security.js\"",
     "test:profile": "node tools/test_profile.js",
+    "test:control": "node tools/test_stock_control.js",
+    "test:control:browser": "node tools/test_control_browser.js",
     "migrate:security": "node scripts/migrate_tenant_security.js"
   },
   "dependencies": {

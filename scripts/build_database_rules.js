@@ -9,7 +9,7 @@ const member = `(${active} && ${p}.child('company_id').isString() && root.child(
 const roles = names => '(' + names.map(n => `${role} === '${n}'`).join(' || ') + ')';
 const staff = roles(['Superviseur', 'Gestionnaire', 'Coordinateur', 'Coordinatrice', 'Superviseur Terrain', 'Technicien']);
 const managers = roles(['Superviseur', 'Gestionnaire', 'Coordinateur', 'Coordinatrice', 'Superviseur Terrain']);
-const subordinate = snap => '(' + ['Gestionnaire', 'Coordinateur', 'Coordinatrice', 'Superviseur Terrain', 'Technicien'].map(r => `${snap}.child('role').val() === '${r}'`).join(' || ') + ')';
+const subordinate = snap => '(' + ['Contrôleur', 'Gestionnaire', 'Coordinateur', 'Coordinatrice', 'Superviseur Terrain', 'Technicien'].map(r => `${snap}.child('role').val() === '${r}'`).join(' || ') + ')';
 const scope = `(!data.exists() || data.child('company_id').val() === ${company}) && (!newData.exists() || newData.child('company_id').val() === ${company})`;
 const manageUser = `(${member} && ${role} === 'Superviseur' && ${scope} && (!data.exists() || ${subordinate('data')}) && (!newData.exists() || ${subordinate('newData')}))`;
 const recordRead = `${admin} || (${member} && data.child('company_id').val() === ${company})`;
@@ -20,7 +20,7 @@ rules.auth_profiles = {
     '.read': `auth != null && (auth.uid === $uid || ${admin})`,
     '.write': `${admin} || (${manageUser} && auth.uid !== $uid)`,
     '.validate': "newData.hasChildren(['uid', 'email', 'role', 'company_id', 'is_active']) && newData.child('uid').val() === $uid && newData.child('email').isString() && newData.child('company_id').isString() && newData.child('is_active').isBoolean() && (!data.exists() || newData.child('uid').val() === data.child('uid').val())",
-    role: {'.validate': "newData.val() === 'SUPER_ADMIN' || newData.val() === 'Superviseur' || newData.val() === 'Gestionnaire' || newData.val() === 'Coordinateur' || newData.val() === 'Coordinatrice' || newData.val() === 'Superviseur Terrain' || newData.val() === 'Technicien'"},
+    role: {'.validate': "newData.val() === 'SUPER_ADMIN' || newData.val() === 'Contrôleur' || newData.val() === 'Superviseur' || newData.val() === 'Gestionnaire' || newData.val() === 'Coordinateur' || newData.val() === 'Coordinatrice' || newData.val() === 'Superviseur Terrain' || newData.val() === 'Technicien'"},
     temporary_password: {'.validate': false},
   },
 };
@@ -34,7 +34,7 @@ rules.tenant_settings = {'$companyId': {
   '$field': {'.write': `${admin} || (${member} && ${company} === $companyId && ${staff})`},
 }};
 rules.itc_data = {};
-for (const name of ['stock', 'sorties', 'demandes', 'techDemandes', 'retours', 'notifications', 'consumptionArchives', 'platformAuditLogs']) {
+for (const name of ['stock', 'stockMovements', 'sorties', 'demandes', 'techDemandes', 'retours', 'notifications', 'consumptionArchives', 'platformAuditLogs']) {
   let permission = ['stock', 'sorties', 'consumptionArchives'].includes(name) ? managers : staff;
   if (['demandes', 'techDemandes'].includes(name)) {
     const ownerField = name === 'techDemandes' ? 'technicienId' : 'demandeurOriginalId';
@@ -44,6 +44,7 @@ for (const name of ['stock', 'sorties', 'demandes', 'techDemandes', 'retours', '
   if (name === 'retours') permission = `(${managers} || (${role} === 'Technicien' && !data.exists() && newData.child('technicienUid').val() === auth.uid && newData.child('status').val() === 'EN ATTENTE'))`;
   if (name === 'notifications') permission = `(${staff} && !data.exists() && newData.child('actorUid').val() === auth.uid)`;
   if (name === 'platformAuditLogs') permission = `(${managers} && !data.exists())`;
+  if (name === 'stockMovements') permission = `(${managers} && !data.exists() && newData.child('actorUid').val() === auth.uid)`;
   rules.itc_data[name] = {
     '.indexOn': ['company_id'], '.read': listRead,
     '$key': {
@@ -76,4 +77,5 @@ for (const field of ['name', 'full_name', 'contact_name', 'phone', 'contact_emai
     '.validate': field === 'must_change_password' ? 'newData.isBoolean() && newData.val() === false' : 'newData.isString() && newData.val().length <= 254',
   };
 }
+require('./control_database_rules')({rules, p, role, company, member, admin, listRead, recordRead});
 fs.writeFileSync('database.rules.json', JSON.stringify({rules}, null, 2) + '\n');

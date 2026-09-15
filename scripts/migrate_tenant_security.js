@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const {collections, settings} = require('../assets/secure-store');
 const LEGACY = 'COMP-ITC-LEGACY';
+const control = require('../assets/control-core');
 function migrate(root) {
   const result = JSON.parse(JSON.stringify(root));
   const data = result.itc_data || {};
@@ -19,6 +20,8 @@ function migrate(root) {
     if (p.role !== user.role || (user.company_id && p.company_id !== user.company_id)) throw new Error('Security profile mismatch: ' + uid);
     p.is_active = p.is_active === true && user.is_active !== false && !['suspended', 'disabled'].includes(user.account_status);
     p.user_id = user.id;
+    p.controlScopes ||= control.scopeMap(user.managedOps);
+    p.controlScopeKeys = control.scopeKeys(p.company_id, p.controlScopes);
     user.is_active = p.is_active;
     user.company_id = p.company_id;
   }
@@ -32,6 +35,10 @@ function migrate(root) {
     if (!companyIds.has(row.company_id)) throw new Error('Unknown company in ' + name);
     if (name === 'users' && !profiles[row.uid]) row.is_active = false;
     delete row.temporary_password;
+    if (control.scopedCollections.includes(name)) {
+      row.op = control.operator(row.op);
+      row.scope_key = control.scopeKey(row.company_id, row.op);
+    }
   }
   result.tenant_branding ||= {};
   result.tenant_settings ||= {};
@@ -48,6 +55,7 @@ function migrate(root) {
   }
   // Legacy scalar paths become inaccessible under the new rules.
   result.security_schema_version = 2;
+  result.stock_control_schema_version = 1;
   return result;
 }
 async function main() {

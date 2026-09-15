@@ -69,7 +69,7 @@ async function main() {
   const database = admin.database();
   const base = new URL(argv.appUrl.endsWith('/') ? argv.appUrl : argv.appUrl + '/');
   const normalized = text => text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
-  for (const file of ['index.html', 'assets/secure-store.js', 'assets/profile.js']) {
+  for (const file of ['index.html', 'assets/secure-store.js', 'assets/profile.js', 'assets/control-core.js', 'assets/stock-control.js', 'assets/stock-control.css']) {
     const response = await fetch(new URL(file, base), {cache:'no-store', signal:AbortSignal.timeout(20000)});
     if (!response.ok || normalized(await response.text()) !== normalized(fs.readFileSync(path.resolve(__dirname,'..',file),'utf8'))) {
       throw new Error('The published application is not the current secure version: ' + file);
@@ -89,17 +89,28 @@ async function main() {
     await database.setRules(freeze(previousRules));
     console.log('Client writes paused for the security migration.');
     try {
-      const original = (await database.ref().once('value')).val();
+      const migrationRef = database.ref();
+      // Keep the snapshot cached while the transaction starts. A one-shot read
+      // can be evicted, causing the first callback to receive null and abort.
+      const keepCached = () => {};
+      migrationRef.on('value', keepCached);
+      try {
+      const original = (await migrationRef.once('value')).val();
       fs.writeFileSync(`.security-backups/data-${stamp}.json`, JSON.stringify(original), {flag:'wx',mode:0o600});
       const next = migrate(original);
-      const result = await database.ref().transaction(current => JSON.stringify(current) === JSON.stringify(original) ? next : undefined, undefined, false);
+      const result = await migrationRef.transaction(current => JSON.stringify(current) === JSON.stringify(original) ? next : undefined, undefined, false);
       if (!result.committed) throw new Error('Concurrent administrative write; migration aborted.');
+      } finally {
+        migrationRef.off('value', keepCached);
+      }
     } catch (error) {
       throw new Error('Migration failed; client writes remain paused. Diagnose before restoring access. ' + error.message);
     }
   }
   const schema = (await database.ref('security_schema_version').once('value')).val();
   if (schema !== 2) throw new Error('Use --migrate for the first deployment of the tenant security rules.');
+  const controlSchema = (await database.ref('stock_control_schema_version').once('value')).val();
+  if (controlSchema !== 1) throw new Error('Use --migrate to prepare stock indexes and controller permissions before deploying these rules.');
   await database.setRules(rules);
   const deployedRules = await database.getRulesJSON();
 

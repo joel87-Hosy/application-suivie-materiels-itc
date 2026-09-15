@@ -1,9 +1,12 @@
-const CACHE_NAME = "itc-gestion-materiels-v6-security";
+const CACHE_NAME = "itc-gestion-materiels-v8-control-all-stocks";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./assets/profile.js",
   "./assets/secure-store.js",
+  "./assets/control-core.js",
+  "./assets/stock-control.js",
+  "./assets/stock-control.css",
   "./offline.html",
   "./privacy.html",
   "./manifest.webmanifest",

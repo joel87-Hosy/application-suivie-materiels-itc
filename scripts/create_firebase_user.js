@@ -16,7 +16,7 @@ const argv = yargs
   .option("role", {
     type: "string",
     default: "Gestionnaire",
-    choices: ["Superviseur", "Superviseur Terrain", "Gestionnaire", "Coordinatrice", "Coordinateur", "Technicien"],
+    choices: ["Contrôleur", "Superviseur", "Superviseur Terrain", "Gestionnaire", "Coordinatrice", "Coordinateur", "Technicien"],
   })
   .option("companyId", {
     type: "string",
@@ -32,6 +32,8 @@ const argv = yargs
     description: "Path to service account JSON (optional)",
   })
   .help().argv;
+
+const requestedScopes = argv.role === 'Contrôleur' ? [] : require('../assets/control-core').scopes(argv.managedOps);
 
 const serviceAccountPath = path.resolve(
   process.cwd(),
@@ -81,10 +83,7 @@ async function main() {
       console.log("Auth user created, uid=", userRecord.uid);
     }
 
-    const managedOps = argv.managedOps
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const managedOps = requestedScopes;
 
     // Read current itc_data/users
     const ref = db.ref("itc_data");
@@ -136,6 +135,8 @@ async function main() {
       is_active: true,
       updated_at: new Date().toISOString(),
       user_id: newUserProfile.id,
+      controlScopes: require('../assets/control-core').scopeMap(managedOps),
+      controlScopeKeys: require('../assets/control-core').scopeKeys(newUserProfile.company_id, managedOps),
     });
 
     // Write only the touched profile to avoid overwriting concurrent changes.
@@ -150,7 +151,7 @@ async function main() {
       : data.stock && typeof data.stock === "object"
         ? Object.values(data.stock)
         : [];
-    for (const op of managedOps) {
+    for (const op of argv.role === 'Contrôleur' ? [] : managedOps) {
       const existsForOp = stock.some(
         (s) => s.company_id === newUserProfile.company_id && String(s.op || "").toUpperCase() === String(op).toUpperCase(),
       );
@@ -158,6 +159,7 @@ async function main() {
         await ref.child('stock').push().set({
           company_id: newUserProfile.company_id,
           op: op,
+          scope_key: require('../assets/control-core').scopeKey(newUserProfile.company_id, op),
           label: `INVENTAIRE INITIAL ${op}`,
           qty: 0,
           type: "AUTO",

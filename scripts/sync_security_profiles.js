@@ -82,6 +82,8 @@ async function main() {
       role,
       company_id: companyId,
       user_id: profile.id,
+      controlScopes: require('../assets/control-core').scopeMap(profile.managedOps),
+      controlScopeKeys: require('../assets/control-core').scopeKeys(companyId, profile.managedOps),
       is_active: profile.is_active !== false,
       is_demo: profile.is_demo === true,
       updated_at: new Date().toISOString(),

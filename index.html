@@ -1651,7 +1651,10 @@
       </button>
     </div>
 
+    <link rel="stylesheet" href="assets/stock-control.css" />
+    <script src="assets/control-core.js"></script>
     <script src="assets/secure-store.js"></script>
+    <script src="assets/stock-control.js"></script>
     <script>
       let currentSectionId = "cockpit"; // Par défaut on est sur le cockpit
       // CONFIGURATION FIREBASE
@@ -1927,6 +1930,7 @@
 
         // On ne met à jour l'interface que si l'utilisateur est connecté
         if (currentUser) {
+          window.StockControl?.refreshStocks();
           updateNotifications(); // Met à jour les petites pastilles rouges
 
           const container = document.getElementById("app-container");
@@ -2451,6 +2455,7 @@
       }
 
       function logout() {
+        window.StockControl?.reset();
         secureStore.stop();
         appData = emptyAppData();
         currentUser = null;
@@ -2525,6 +2530,15 @@
         // On transforme le rôle en MAJUSCULES pour éviter les erreurs de saisie
         const r = currentUser.role.trim().toUpperCase();
         const isSuperAdmin = r === "SUPER_ADMIN";
+        let controlMenu = document.getElementById("menu-stock-control");
+        if (!controlMenu) {
+          controlMenu = document.createElement("div");
+          controlMenu.id = "menu-stock-control";
+          controlMenu.className = "space-y-2";
+          controlMenu.innerHTML = `<button type="button" onclick="showSection('control-dashboard')" class="w-full text-left p-3 rounded-xl bg-teal-800 text-white font-bold"><i class="fas fa-clipboard-check mr-2"></i>Contrôle des stocks</button>`;
+          document.getElementById("menu-cockpit")?.parentNode.insertBefore(controlMenu, document.getElementById("menu-cockpit"));
+        }
+        controlMenu.classList.toggle("hidden", !["CONTRÔLEUR", "SUPERVISEUR", "GESTIONNAIRE"].includes(r));
 
         const menuSuperAdmin = document.getElementById("menu-super-admin");
         if (menuSuperAdmin)
@@ -2579,11 +2593,11 @@
         // 5. Sections Communes (Consultation Stock & Cockpit)
         const secStock = document.getElementById("section-stock-disponible");
         if (secStock)
-          secStock.classList.toggle("hidden", r === "TECHNICIEN");
+          secStock.classList.toggle("hidden", r === "TECHNICIEN" || r === "CONTRÔLEUR");
 
         const menuCockpit = document.getElementById("menu-cockpit");
         if (menuCockpit)
-          menuCockpit.classList.toggle("hidden", r === "TECHNICIEN");
+          menuCockpit.classList.toggle("hidden", r === "TECHNICIEN" || r === "CONTRÔLEUR");
 
         // 6. Menu spécifique : STOCK ITC BUREAU 02 (visible au superviseur,
         // au super admin ou au gestionnaire qui gère ITC-B02)
@@ -2747,6 +2761,7 @@
 
       function isStockScopedUser(user) {
         if (!user) return false;
+        if (user.role === "Contrôleur") return false;
         if (isGestionnaireUser(user) || isTechnicienUser(user)) return true;
 
         const role = String(user.role || "")
@@ -6476,8 +6491,14 @@
       }
 
       function showSection(id) {
+        if (window.StockControl?.isBusy()) return;
+        if (secureStore.profile?.role === "Contrôleur" && !id.startsWith("control-") && id !== "mon-profil") id = "control-dashboard";
+        window.StockControl?.stop();
         currentSectionId = id;
         const container = document.getElementById("app-container");
+        container.onclick = null;
+        container.onchange = null;
+        container.onsubmit = null;
         const viewTitle = document.getElementById("view-title");
 
         // Nettoyage et préparation
@@ -6490,7 +6511,9 @@
         if (id === "stock-itc-b01") {
           viewTitle.innerText = "STOCK ITC BUREAU 01";
         }
-        if (id === "mon-profil") {
+        if (id.startsWith("control-")) {
+          window.StockControl.enter(id);
+        } else if (id === "mon-profil") {
           renderMonProfil(container);
         } else if (id === "cockpit") {
           renderCockpit(container);
@@ -8108,6 +8131,19 @@
         return "active";
       }
 
+      async function editCompanyUserStockAccess(userId) {
+        if (!isCurrentCompanySupervisor()) return;
+        const user = (appData.users || []).find(u => String(u.id) === String(userId));
+        if (!user || user.role !== "Gestionnaire") return;
+        if (!isCurrentSuperAdmin() && user.company_id !== secureStore.profile.company_id) return;
+        const value = window.prompt("Stocks autorisés, séparés par des virgules (ex. ITC-B01, ITC-B02, MOOV)", ControlCore.scopes(user.managedOps).join(", "));
+        if (value === null) return;
+        const scopes = ControlCore.scopes(value);
+        if (!scopes.length) { alert("Renseignez au moins un stock."); return; }
+        user.managedOps = scopes;
+        if (await save()) renderCompanyUsersAdmin(document.getElementById("app-container"));
+      }
+
       async function manageCompanyUser(userId, action) {
         if (!isCurrentCompanySupervisor()) return;
 
@@ -8263,7 +8299,7 @@
                 <td class="py-3">
                   <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${badge}">${escapeHtml(user.role || "-")}</span>
                 </td>
-                <td class="py-3 text-slate-400">${Array.isArray(user.managedOps) ? escapeHtml(user.managedOps.join(", ")) : "-"}</td>
+                <td class="py-3 text-slate-400">${user.role === "Contrôleur" ? "Tous les stocks de l’entreprise" : Array.isArray(user.managedOps) ? escapeHtml(user.managedOps.join(", ")) : "-"}</td>
                 <td class="py-3">
                   <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${
                     getCompanyUserStatus(user) === "active"
@@ -8275,6 +8311,7 @@
                 </td>
                 <td class="py-3">
                   <div class="flex flex-wrap gap-1">
+                    ${user.role === "Gestionnaire" ? `<button type="button" data-user-id="${escapeHtml(user.id)}" onclick="editCompanyUserStockAccess(this.dataset.userId)" class="bg-teal-100 text-teal-800 rounded-lg px-2 py-1 text-[8px] font-black uppercase">Accès stock</button>` : ""}
                     ${
                       getCompanyUserStatus(user) === "active"
                         ? `<button type="button" onclick="manageCompanyUser('${escapeHtml(user.id)}', 'suspend')" class="bg-amber-100 text-amber-800 rounded-lg px-2 py-1 text-[8px] font-black uppercase" title="Suspendre ce compte"><i class="fas fa-pause mr-1"></i>Suspendre</button>
@@ -8296,7 +8333,7 @@
                 <div>
                   <p class="text-[9px] uppercase tracking-[0.18em] text-slate-400">Administration entreprise</p>
                   <h2 class="text-xl font-black uppercase text-slate-900">${escapeHtml(company?.name || "Entreprise")}</h2>
-                  <p class="text-[10px] text-slate-500">Creation des comptes : Superviseur Terrain, Coordinateur, Gestionnaire, Technicien. Le role Superviseur reste reserve au directeur.</p>
+                  <p class="text-[10px] text-slate-500">Création des comptes : Contrôleur, Superviseur Terrain, Coordinateur, Gestionnaire, Technicien. Le rôle Superviseur reste réservé au directeur.</p>
                 </div>
               </div>
             </div>
@@ -8308,6 +8345,7 @@
                 <input id="cu-user-name" class="w-full border rounded-xl p-3 text-xs" placeholder="Nom complet" required />
                 <input id="cu-user-email" class="w-full border rounded-xl p-3 text-xs" type="email" placeholder="Email" required />
                 <select id="cu-user-role" class="w-full border rounded-xl p-3 text-xs">
+                  <option value="Contrôleur">Contrôleur</option>
                   <option value="Superviseur Terrain">Superviseur Terrain</option>
                   <option value="Coordinateur">Coordinateur</option>
                   <option value="Gestionnaire">Gestionnaire</option>
@@ -8315,6 +8353,7 @@
                   <option value="Technicien">Technicien</option>
                 </select>
                 <input id="cu-managed-ops" class="w-full border rounded-xl p-3 text-xs" placeholder="Acces stock (ex: ITC-B01 ou ITC-B02)" />
+                <p class="text-[10px] text-teal-800">Contrôleur : accès automatique à tous les stocks de l’entreprise. Aucun stock à affecter dans ce champ.</p>
                 <div class="grid grid-cols-[1fr_auto] gap-2">
                   <input id="cu-temp-password" class="w-full border rounded-xl p-3 text-xs font-black text-slate-700" readonly value="${generateTemporaryPassword()}" onclick="this.select()" />
                   <button type="button" onclick="refreshCompanyUserTempPassword()" class="bg-cyan-600 text-white rounded-xl px-3 text-[8px] font-black uppercase">Generer</button>
@@ -8385,6 +8424,7 @@
           const roleUpper = String(role).toUpperCase();
           let managedOps =
             [
+              "CONTRÔLEUR",
               "GESTIONNAIRE",
               "TECHNICIEN",
               "COORDINATEUR",
@@ -8393,6 +8433,8 @@
             ].includes(roleUpper)
               ? manualOps
               : [];
+          managedOps = ControlCore.scopes(managedOps);
+          if (role === "Contrôleur") managedOps = [];
           if (String(role).toUpperCase() === "TECHNICIEN" && managedOps.length === 0) {
             const fingerprint = `${userName} ${document.getElementById("cu-user-email").value}`.toUpperCase();
             if (fingerprint.includes("B02") || fingerprint.includes("BUREAU 02")) {

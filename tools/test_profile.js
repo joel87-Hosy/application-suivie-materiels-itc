@@ -55,7 +55,7 @@ function setup(team = true) {
   partial.context.db.ref = () => ({once: async () => ({val: () => ({37: {uid: 'team-uid'}})}), update: async () => {throw new Error('offline');}});
   await partial.context.changeMonProfilPassword(partial.event);
   assert.match(partial.inputs['profile-password-status'].textContent, /a été modifié/);
-  for (const role of ['SUPER_ADMIN', 'Superviseur', 'Gestionnaire', 'Coordinateur', 'Superviseur Terrain', 'Technicien']) {
+  for (const role of ['SUPER_ADMIN', 'Superviseur', 'Contrôleur', 'Gestionnaire', 'Coordinateur', 'Superviseur Terrain', 'Technicien']) {
     const container = {};
     team.context.currentUser.role = role;
     team.context.renderMonProfil(container);

@@ -1,6 +1,7 @@
 /* Firebase transport: tenant-filtered reads and changes addressed by stable keys. */
 (function (global) {
-  const collections = ['stock', 'sorties', 'demandes', 'techDemandes', 'retours', 'notifications', 'consumptionArchives', 'platformAuditLogs', 'companies', 'users'];
+  const control = typeof module !== 'undefined' && module.exports ? require('./control-core') : global.ControlCore;
+  const collections = ['stock', 'stockMovements', 'sorties', 'demandes', 'techDemandes', 'retours', 'notifications', 'consumptionArchives', 'platformAuditLogs', 'companies', 'users'];
   const settings = ['materialTypes', 'scansDuJour', 'derniereDateScan', 'lastConsumptionArchiveKey'];
   const clone = value => JSON.parse(JSON.stringify(value));
   const clean = value => {
@@ -40,10 +41,12 @@
       if (!profile || profile.is_active !== true || !profile.company_id) throw new Error('Compte non autorisé ou suspendu.');
       this.profile = profile;
       const isAdmin = profile.role === 'SUPER_ADMIN';
-      const refs = collections.map(name => {
+      const isController = profile.role === 'Contrôleur';
+      const refs = collections.flatMap(name => {
+        if (isController && ['techDemandes', 'consumptionArchives', 'platformAuditLogs', 'notifications'].includes(name)) return [];
         let query = this.db.ref('itc_data/' + name);
         if (!isAdmin) query = query.orderByChild('company_id').equalTo(profile.company_id);
-        return [name, query];
+        return [[name, query]];
       });
       refs.push(['settings', this.db.ref('tenant_settings/' + profile.company_id)]);
       await Promise.all(refs.map(async ([name, query]) => {
@@ -63,7 +66,7 @@
       }
       const profileChanged = snapshot => {
         const next = snapshot.val();
-        if (!next || ['role', 'company_id', 'is_active'].some(key => next[key] !== profile[key])) {
+        if (!next || ['role', 'company_id', 'is_active'].some(key => next[key] !== profile[key]) || (!isController && !equal(next.controlScopes, profile.controlScopes))) {
           this.deny(new Error('Vos droits ont changé. Veuillez vous reconnecter.'), generation);
         }
       };
@@ -83,7 +86,7 @@
     }
     value() {
       const data = {};
-      for (const name of collections) data[name] = Object.entries(this.raw[name] || {})
+      for (const name of collections) data[name] = Object.entries(Object.assign({}, this.raw[name] || {}, ...Object.entries(this.raw).filter(([k]) => k.startsWith(name + ':')).map(([, rows]) => rows)))
         .filter(([, row]) => row && typeof row === 'object')
         .map(([key, row]) => ({...clone(row), _dbKey: key}))
         .sort((a, b) => (a._order ?? (Number(a._dbKey) || 0)) - (b._order ?? (Number(b._dbKey) || 0)));
@@ -92,6 +95,7 @@
     }
     async save(data) {
       if (!this.ready || !this.profile) throw new Error('Données non chargées. Reconnectez-vous.');
+      if (this.profile.role === 'Contrôleur') throw new Error('Utilisez le module Contrôle pour enregistrer vos vérifications.');
       const updates = {};
       const profile = this.profile;
       for (const name of collections) {
@@ -107,6 +111,12 @@
           next.company_id = name === 'companies' ? next.id : (next.company_id || (profile.role === 'SUPER_ADMIN' ? 'COMP-ITC-LEGACY' : profile.company_id));
           row.company_id = next.company_id;
           const previous = before[key];
+          if (control.scopedCollections.includes(name) && !equal(previous, next)) {
+            next.op = control.operator(next.op);
+            row.op = next.op;
+            next.scope_key = control.scopeKey(next.company_id, next.op);
+            row.scope_key = next.scope_key;
+          }
           if (!previous && row._order === undefined) {
             const order = r => r?._order ?? (Number(r?._dbKey) || 0);
             const left = rows[index - 1], right = rows[index + 1];
@@ -114,16 +124,29 @@
             next._order = row._order;
           }
           if (equal(previous, next)) continue;
+          if (name === 'stock' && Number(next.qty || 0) !== Number(previous?.qty || 0)) {
+            const movementKey = this.db.ref('itc_data/stockMovements').push().key;
+            const delta = Number(next.qty || 0) - Number(previous?.qty || 0);
+            const source = ['sorties','retours','demandes'].flatMap(kind => (data[kind] || []).filter(r => !equal(this.raw[kind]?.[r._dbKey], clean(r))).map(r => ({kind,reference:r.id || r._dbKey || ''})))[0];
+            updates['itc_data/stockMovements/' + movementKey] = {
+              company_id:next.company_id,op:next.op || '',scope_key:control.scopeKey(next.company_id,next.op),
+              stockKey:key,label:next.label || '',before:Number(previous?.qty || 0),after:Number(next.qty || 0),qty:delta,
+              type:source?.kind === 'sorties' || source?.kind === 'demandes' ? 'out' : source?.kind === 'retours' ? 'return' : delta > 0 ? 'in' : 'adjustment',
+              reference:source?.reference || '',actorUid:this.uid,createdAt:new Date().toISOString(),
+            };
+          }
           const path = 'itc_data/' + name + '/' + key;
           if (!previous) updates[path] = next;
           else for (const field of new Set([...Object.keys(previous), ...Object.keys(next)])) {
             if (!equal(previous[field], next[field])) updates[path + '/' + field] = next[field] ?? null;
           }
-          if (name === 'users' && next.uid && (!previous || ['uid', 'email', 'role', 'company_id', 'is_active', 'account_status'].some(k => !equal(previous[k], next[k])))) {
+          if (name === 'users' && next.uid && (!previous || ['uid', 'email', 'role', 'company_id', 'is_active', 'account_status', 'managedOps'].some(k => !equal(previous[k], next[k])))) {
             updates['auth_profiles/' + next.uid] = {
               uid: next.uid, email: next.email, role: next.role, company_id: next.company_id,
               is_active: next.is_active === true, account_status: next.account_status || (next.is_active ? 'active' : 'suspended'),
               user_id: next.id, updated_at: new Date().toISOString(),
+              controlScopes: control.scopeMap(next.managedOps),
+              controlScopeKeys: control.scopeKeys(next.company_id, next.managedOps),
             };
             if (previous?.uid && previous.uid !== next.uid) updates['auth_profiles/' + previous.uid] = null;
           }
@@ -133,6 +156,7 @@
         }
         for (const [key, previous] of Object.entries(before)) {
           if (!previous || seen.has(key)) continue;
+          if (name === 'stockMovements') continue; // Immutable movement ledger is never removed by a stale form.
           updates['itc_data/' + name + '/' + key] = null;
           if (name === 'users' && previous.uid) updates['auth_profiles/' + previous.uid] = null;
         }
