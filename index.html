@@ -3027,15 +3027,16 @@
           });
 
         const sourceNotifications = (appData && appData.notifications) || [];
+        const supervisorIds = new Set([1, ...(appData.users || []).filter(user => user.role === "Superviseur").map(user => user.id)]);
         sourceNotifications
           .filter(
             (n) =>
-              n.userId === 1 &&
+              supervisorIds.has(n.userId) &&
               String(n.message || "").includes("TRAFIC : ENTRÉE STOCK") &&
               isDateInTargetMonth(n.date, monthIndex, year),
           )
           .forEach((n) => {
-            const op = normalizeOperatorKey(n.auditFlux || "ITC");
+            const op = normalizeOperatorKey(n.stockOp || n.auditFlux || "ITC");
             if (!operatorStats[op]) return;
 
             const labelMatch = String(n.message || "").match(/\((.*?)\)/);
@@ -6969,7 +6970,7 @@
               ts,
               date: `${day}/${mon}/${year}`,
               type: "ENTRÉE",
-              op: "ITC",
+              op: normalizeOperatorKey(n.stockOp || n.auditFlux || "ITC"),
               item: itemMatch ? itemMatch[1] : "Matériel",
               qty: qtyMatch ? parseInt(qtyMatch[1]) : 0,
               dest: "MAGASIN CENTRAL",
@@ -10351,7 +10352,7 @@
 
                       <div id="qty-container">
                           <label class="text-[8px] text-slate-400 uppercase ml-1">Quantité</label>
-                          <input id="r-qty" type="number" class="w-full border-2 p-3 rounded-xl text-xs bg-slate-50 outline-none focus:border-indigo-500" placeholder="NOMBRE D'UNITÉS" />
+                          <input id="r-qty" type="number" min="1" step="1" required class="w-full border-2 p-3 rounded-xl text-xs bg-slate-50 outline-none focus:border-indigo-500" placeholder="NOMBRE D'UNITÉS" />
                       </div>
 
                         <button type="submit" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] uppercase font-black transition hover:bg-black shadow-lg inline-flex items-center justify-center gap-2">
@@ -10439,8 +10440,14 @@
         toggleQtyField(rOp ? rOp.value : "ITC");
       }
 
+      let receptionSaving = false;
       async function handleRec(e) {
         e.preventDefault();
+        if (receptionSaving) return;
+        receptionSaving = true;
+        const submitButton = e.target?.querySelector('button[type="submit"]');
+        if (submitButton) submitButton.disabled = true;
+        try {
 
         // 1. SÉCURITÉ : On s'assure que appData et appData.stock existent
         if (!appData) appData = {};
@@ -10449,9 +10456,13 @@
         const mat = {
           op: document.getElementById("r-op").value,
           label: getFormTextValue("r-mat"),
-          qty: parseInt(document.getElementById("r-qty").value) || 0,
+          qty: Number(document.getElementById("r-qty").value),
           type: document.getElementById("r-type").value,
         };
+        if (!mat.label || !Number.isSafeInteger(mat.qty) || mat.qty <= 0) {
+          alert("Renseignez une désignation et une quantité entière strictement positive.");
+          return;
+        }
         if (!mat.type || mat.type === "__ADD_NEW__") {
           alert("Veuillez choisir un type de matériel valide.");
           return;
@@ -10488,21 +10499,26 @@
           // ignore and proceed with original mat.op
         }
 
-        // 2. RECHERCHE SÉCURISÉE : On cherche si l'article existe déjà pour cet opérateur
+        // Match within the company and stock, preserving the existing record and its history.
+        const labelKey = value => String(value || "").normalize("NFC").trim().replace(/\s+/g, " ").toUpperCase();
+        const companyId = secureStore.profile.company_id;
+        mat.op = normalizeOperatorKey(mat.op);
+        mat.company_id = companyId;
         const existing = appData.stock.find(
-          (s) => s.op === mat.op && s.label === mat.label,
+          (s) => s.company_id === companyId &&
+            normalizeOperatorKey(s.op) === mat.op &&
+            labelKey(s.label) === labelKey(mat.label),
         );
 
-        if (
-          existing &&
-          String(mat.op || "")
-            .toUpperCase()
-            .startsWith("ITC")
-        ) {
-          // Si c'est du stock ITC (variantes comme ITC-B01/ITC-B02), on additionne la quantité
-          existing.qty = (parseInt(existing.qty) || 0) + mat.qty;
+        if (existing) {
+          const total = Number(existing.qty) + mat.qty;
+          if (!Number.isFinite(total) || total > Number.MAX_SAFE_INTEGER || Number(existing.qty) < 0) {
+            alert("La quantité existante ne permet pas cette entrée. Faites vérifier la fiche matériel.");
+            return;
+          }
+          existing.qty = total;
+          mat.label = existing.label;
         } else {
-          // Sinon, on crée une nouvelle entrée dans le stock
           appData.stock.push(mat);
         }
 
@@ -10518,6 +10534,10 @@
 
         // 4. RETOUR AU COCKPIT
         showSection("cockpit");
+        } finally {
+          receptionSaving = false;
+          if (submitButton) submitButton.disabled = false;
+        }
       }
       function toggleQtyField(v) {
         const op = String(v || "").toUpperCase();
@@ -10528,7 +10548,7 @@
         // MOOV, MTN, OCI et CIC (y compris les variantes comme "OCI-CIC").
         const showFor = ["ITC", "MOOV", "MTN", "OCI", "CIC", "OCI-CIC"];
         const shouldShow =
-          showFor.includes(op) || op.includes("OCI") || op.includes("CIC");
+          showFor.includes(op) || op.startsWith("ITC-") || op.includes("OCI") || op.includes("CIC");
         el.style.display = shouldShow ? "block" : "none";
       }
 
@@ -11336,6 +11356,7 @@
           actorRole: currentUser?.role || null,
           createdAt: new Date().toISOString(),
           auditFlux: normalizedFlux,
+          stockOp: normalizeOperatorKey(auditFlux),
           lu: false,
           date: new Date().toLocaleString(),
         };
