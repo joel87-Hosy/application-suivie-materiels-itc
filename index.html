@@ -1606,9 +1606,10 @@
               id="ai-voice-btn"
               type="button"
               onclick="toggleVoiceInput()"
-              title="Note vocale"
+              title="Parler à l’agent IA"
               class="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 transition hover:bg-red-50 hover:text-red-500"
-              aria-label="Note vocale"
+              aria-label="Parler avec le microphone"
+              aria-pressed="false"
             >
               <i class="fas fa-microphone"></i>
             </button>
@@ -1621,7 +1622,10 @@
               <i class="fas fa-paper-plane"></i>
             </button>
           </div>
-          <p id="ai-voice-status" class="mt-2">
+          <button id="ai-voice-stop" type="button" onclick="stopVoiceAssistant()" hidden class="mt-2 text-xs font-semibold text-slate-600">Arrêter le mode vocal</button>
+          <button id="ai-voice-confirm" type="button" onclick="handleChatAssistantSubmit()" hidden class="mt-2 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white">Vérifier et envoyer</button>
+          <p class="mt-2 text-xs text-slate-500">Au micro : parlez, puis faites une pause. L’agent IA répond à voix haute. Rappuyez sur le micro pour continuer.</p>
+          <p id="ai-voice-status" class="mt-2" role="status" aria-live="polite">
             <i class="fas fa-circle text-[8px] align-middle mr-1"></i> Écoute en cours… Parlez maintenant
           </p>
         </form>
@@ -1657,6 +1661,7 @@
     <script src="assets/stock-control.js"></script>
     <script src="assets/assistant-knowledge.js"></script>
     <script src="assets/assistant-reports.js"></script>
+    <script src="assets/voice-assistant.js"></script>
     <script>
       let currentSectionId = "cockpit"; // Par défaut on est sur le cockpit
       // CONFIGURATION FIREBASE
@@ -2457,6 +2462,7 @@
       }
 
       function logout() {
+        stopVoiceAssistant();
         window.StockControl?.reset();
         secureStore.stop();
         appData = emptyAppData();
@@ -11737,6 +11743,10 @@
       }
 
       function openChatAssistantAgentContact() {
+        toggleVoiceInput();
+      }
+
+      function openChatAssistantEmailSupport() {
         const email = getChatAssistantSupportEmail();
         const subject = encodeURIComponent("Assistance ITC ERP");
         const lastUserMessage = [...chatAssistantState.messages]
@@ -11950,9 +11960,11 @@
         chatAssistantState.messages = chatAssistantState.messages.slice(-20);
         renderChatAssistantMessages();
         saveChatAssistantHistory();
+        if (role === 'assistant') voiceAssistant?.speak(content);
       }
 
       function resetChatAssistantConversation() {
+        stopVoiceAssistant();
         chatAssistantState.messages = [getChatAssistantGreeting()];
         try {
           localStorage.removeItem(CHATBOT_STORAGE_KEY);
@@ -11976,6 +11988,7 @@
           typeof forceState === "boolean" ? forceState : !chatAssistantState.isOpen;
 
         chatAssistantState.isOpen = shouldOpen;
+        if (!shouldOpen) stopVoiceAssistant();
         if (panel) panel.classList.toggle("hidden", !shouldOpen);
         if (toggle) toggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
 
@@ -12275,7 +12288,7 @@
             <button type="button" onclick="submitChatAssistantPrompt('Exporte un rapport en PDF')" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 font-semibold text-red-700">Rapport PDF</button>
             <button type="button" onclick="openChatAssistantAgentContact()"
               class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-100">
-              <i class="fas fa-headset mr-1"></i> Parler à un agent
+              <i class="fas fa-microphone mr-1"></i> Parler à l’agent IA
             </button>
             <button type="button" onclick="${role === 'contrôleur' ? "aiNavigateToSection('control-missions')" : 'openChatAssistantRequestFlow()'}"
               class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 font-semibold text-sky-700 transition hover:bg-sky-100">
@@ -12287,6 +12300,7 @@
 
       // Appelé après chaque connexion réussie — réinitialise et ouvre l'assistant
       function onUserLogin() {
+        stopVoiceAssistant();
         // Réinitialiser l'historique avec le message d'accueil personnalisé
         chatAssistantState.messages = [getChatAssistantGreeting()];
         chatAssistantState.isOpen = false;
@@ -12310,19 +12324,20 @@
        * après le rendu DOM (avec léger délai pour laisser le temps au render).
        */
       function aiNavigateToSection(sectionId, fillFn) {
+        const voiceNavigation = !!voiceAssistant?.enabled;
         // Étape 1 — laisser 1.4s pour que l'utilisateur lise le message de confirmation dans le chatbot
         // Étape 2 — fermer le chatbot
         // Étape 3 — naviguer dans l'application principale (300ms après la fermeture)
         // Étape 4 — remplir le formulaire si nécessaire (350ms après le rendu)
         setTimeout(() => {
-          toggleChatAssistant(false);                   // ferme le panneau IA
+          if (!voiceAssistant?.enabled) toggleChatAssistant(false);
           setTimeout(() => {
             showSection(sectionId);                     // rend la section dans #app-container
             if (typeof fillFn === "function") {
               setTimeout(fillFn, 350);                  // pré-remplit les champs après le rendu
             }
-          }, 300);
-        }, 1400);
+          }, voiceNavigation ? 0 : 300);
+        }, voiceNavigation ? 0 : 1400);
       }
 
       /**
@@ -12361,6 +12376,7 @@
         const q = String(userText || "").trim().toLowerCase();
         if (!q) return null;
         if (/^(comment|pourquoi|explique|quelles?|quels?|est.ce que)\b/.test(q)) return null;
+        if (/parler.*agent|activer.*micro|ouvre.*micro|mode vocal/.test(q)) { toggleVoiceInput(); return 'Le mode vocal est disponible dans le chat. Parlez lorsque le message « Je vous écoute » apparaît.'; }
 
         // ── Mots-clés déclencheurs ─────────────────────────────────────────
         const CLOSE_TRIGGER = /(ferme|fermer|ferm[eè]s|quitte|quitter|retour.*accueil|revenir.*accueil|retourner.*accueil|retour.*dashboard|revenir.*dashboard|revenir.*tableau|retour.*tableau|close|sortir de|sortir d'ici|annuler.*onglet|go back|revenir en arri[eè]re)/;
@@ -12639,9 +12655,9 @@
         const archives  = Array.isArray(appData?.consumptionArchives) ? appData.consumptionArchives : [];
 
         // ── Actions spéciales ──────────────────────────────────────────────
-        if (/(parler.*(agent|support)|contact support|agent humain)/.test(q)) {
-          openChatAssistantAgentContact();
-          return "Je contacte l'agent support pour vous.";
+        if (/(contact support|agent humain)/.test(q)) {
+          openChatAssistantEmailSupport();
+          return "Le contact support par email est ouvert. Vérifiez le destinataire et envoyez le message depuis votre messagerie.";
         }
         if (/(cr[ée]+r une demande|nouvelle demande|faire une demande)/.test(q)) {
           openChatAssistantRequestFlow();
@@ -12950,95 +12966,32 @@
       }
 
       // ── SAISIE VOCALE ─────────────────────────────────────────────────────────
-      let _voiceRecognition = null;
-      let _voiceRecording = false;
-
+      let voiceAssistant = null;
+      function getVoiceAssistant() {
+        if (!voiceAssistant) voiceAssistant = new VoiceAssistant({
+          host: window,
+          session: () => [secureStore.uid,secureStore.profile?.company_id,secureStore.profile?.role].join('|'),
+          isBusy: () => chatAssistantState.isThinking,
+          getInput: () => document.getElementById("ai-chatbot-input")?.value || '',
+          setInput: text => { const input=document.getElementById("ai-chatbot-input"); if(input)input.value=text; autoResizeChatAssistantInput(); },
+          onSubmit: () => handleChatAssistantSubmit(),
+          onError: message => appendChatAssistantMessage('assistant',message),
+          onState: (state,message) => {
+            const button=document.getElementById('ai-voice-btn');
+            if(button) { button.classList.toggle('recording',state==='listening');button.setAttribute('aria-pressed',String(state==='listening'));button.setAttribute('aria-label',state==='listening'?'Annuler la demande vocale':'Parler avec le microphone'); }
+            const status=document.getElementById('ai-voice-status');
+            if(status) {status.textContent=message;status.classList.add('visible');}
+            const stop=document.getElementById('ai-voice-stop');if(stop)stop.hidden=!voiceAssistant?.enabled;
+            const confirm=document.getElementById('ai-voice-confirm');if(confirm)confirm.hidden=state!=='review';
+          }
+        });
+        return voiceAssistant;
+      }
       function toggleVoiceInput() {
-        const SpeechRecognition =
-          window.SpeechRecognition || window.webkitSpeechRecognition;
-
-        if (!SpeechRecognition) {
-          appendChatAssistantMessage(
-            "assistant",
-            "⚠️ La reconnaissance vocale n'est pas supportée par votre navigateur. Utilisez Chrome ou Edge pour cette fonctionnalité.",
-          );
-          return;
-        }
-
-        if (_voiceRecording) {
-          _stopVoiceInput();
-          return;
-        }
-
-        const btn = document.getElementById("ai-voice-btn");
-        const status = document.getElementById("ai-voice-status");
-        const input = document.getElementById("ai-chatbot-input");
-
-        _voiceRecognition = new SpeechRecognition();
-        _voiceRecognition.lang = "fr-FR";
-        _voiceRecognition.interimResults = true;
-        _voiceRecognition.maxAlternatives = 1;
-        _voiceRecognition.continuous = false;
-
-        _voiceRecognition.onstart = () => {
-          _voiceRecording = true;
-          if (btn) btn.classList.add("recording");
-          if (status) status.classList.add("visible");
-          if (input) input.placeholder = "Parlez maintenant…";
-        };
-
-        _voiceRecognition.onresult = (event) => {
-          const transcript = Array.from(event.results)
-            .map((r) => r[0].transcript)
-            .join("");
-          if (input) {
-            input.value = transcript;
-            autoResizeChatAssistantInput();
-          }
-        };
-
-        _voiceRecognition.onend = () => {
-          _stopVoiceInput();
-          // Envoyer automatiquement si quelque chose a été capturé
-          const text = String(input?.value || "").trim();
-          if (text) {
-            setTimeout(() => handleChatAssistantSubmit(), 300);
-          }
-        };
-
-        _voiceRecognition.onerror = (event) => {
-          _stopVoiceInput();
-          const msgs = {
-            "not-allowed": "⚠️ Accès au microphone refusé. Autorisez-le dans les paramètres du navigateur.",
-            "no-speech": "Aucune voix détectée. Réessayez en parlant plus clairement.",
-            "network": "Erreur réseau lors de la reconnaissance vocale.",
-          };
-          appendChatAssistantMessage(
-            "assistant",
-            msgs[event.error] || `Erreur vocale : ${event.error}`,
-          );
-        };
-
-        try {
-          _voiceRecognition.start();
-        } catch (e) {
-          _stopVoiceInput();
-          console.warn("Impossible de démarrer la reconnaissance vocale", e);
-        }
+        toggleChatAssistant(true);
+        getVoiceAssistant().start();
       }
-
-      function _stopVoiceInput() {
-        _voiceRecording = false;
-        const btn = document.getElementById("ai-voice-btn");
-        const status = document.getElementById("ai-voice-status");
-        const input = document.getElementById("ai-chatbot-input");
-        if (btn) btn.classList.remove("recording");
-        if (status) status.classList.remove("visible");
-        if (input) input.placeholder = "Écrivez ou parlez…";
-        try { if (_voiceRecognition) _voiceRecognition.stop(); } catch (e) { /* ignore */ }
-        _voiceRecognition = null;
-      }
-      // ── FIN SAISIE VOCALE ──────────────────────────────────────────────────────
+      function stopVoiceAssistant() { voiceAssistant?.stop(); }
 
       async function executeAssistantReport(request) {
         if (request.error) return request.error;
@@ -13073,6 +13026,8 @@
 
         const userText = String(input.value || "").trim();
         if (!userText) return;
+        if (typeof voiceAssistant !== 'undefined' && voiceAssistant?.recognition) voiceAssistant.stop();
+        if (typeof voiceAssistant !== 'undefined' && voiceAssistant?.enabled) voiceAssistant.state('processing','Demande reçue. Traitement en cours…');
 
         appendChatAssistantMessage("user", userText);
         input.value = "";

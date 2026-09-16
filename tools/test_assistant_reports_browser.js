@@ -17,7 +17,12 @@ function aiParseAndExecuteAction(){throw new Error('Report wrongly routed to nav
 ${extract('executeAssistantReport')}
 ${extract('handleChatAssistantSubmit')}
 </script>`;
-fs.writeFileSync(path.join(root,'test.html'),html);
+fs.writeFileSync(path.join(root,'test.html'),html+`<script src="../../assets/voice-assistant.js"></script><script>
+let recognition,spoken=[],voiceStates=[];
+const voice=new VoiceAssistant({host:{isSecureContext:true,SpeechRecognition:class{constructor(){recognition=this}start(){this.onstart?.()}abort(){}},SpeechSynthesisUtterance:class{constructor(text){this.text=text}},speechSynthesis:{cancel(){},getVoices:()=>[],speak:u=>spoken.push(u.text)}},getInput:()=>document.getElementById('ai-chatbot-input').value,setInput:v=>document.getElementById('ai-chatbot-input').value=v,session:()=>secureStore.uid,isBusy:()=>chatAssistantState.isThinking,onState:state=>voiceStates.push(state),onError:message=>{throw new Error(message)},onSubmit:()=>handleChatAssistantSubmit()});
+const originalAppend=appendChatAssistantMessage;appendChatAssistantMessage=(role,text)=>{originalAppend(role,text);if(role==='assistant')voice.speak(text)};
+function voiceCommand(text,confidence=.98){voice.start();const result=[{transcript:text,confidence}];result.isFinal=true;recognition.onresult({results:[result]})}
+</script>`);
 let chrome,ws;const pending=new Map();let seq=0;
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn){for(let i=0;i<100;i++){const v=await fn();if(v)return v;await delay(100)}throw new Error('Browser timeout');}
@@ -49,6 +54,13 @@ async function main(){
   const cells=await evaluate(`(async()=>{const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(await blobs[0].arrayBuffer());return workbook.worksheets[0].getSheetValues()})()`);
   assert.ok(JSON.stringify(cells).includes('Câble réseau'));assert.ok(!JSON.stringify(cells).includes('Interdit'));
   assert.ok(cells.some(row=>row&&row.includes(15)));
-  console.log('PASS: chat execution generates real XLSX and PDF blobs, triggers downloads, reports success, rejects out-of-scope stock and preserves Excel content.');
+  await evaluate(`voiceCommand('Exporte le stock ITC-B02 en PDF')`);
+  await until(()=>evaluate('downloads.length === 3'));
+  assert.match(await evaluate('spoken.at(-1)'),/téléchargement a été déclenché/);
+  assert.match(await evaluate('messages.at(-2).content'),/Exporte le stock ITC-B02 en PDF/);
+  await evaluate(`voiceCommand('Exporte le stock ITC-B02 en PDF',.3)`);
+  await until(()=>evaluate('voiceStates.at(-1) === "review"'));
+  assert.equal(await evaluate('downloads.length'),3);
+  console.log('PASS: typed and simulated voice commands generate real XLSX/PDF downloads, spoken success, scope rejection and preserved Excel content.');
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{if(ws)ws.close();if(chrome)chrome.kill()});

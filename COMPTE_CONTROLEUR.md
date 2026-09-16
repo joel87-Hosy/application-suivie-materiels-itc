@@ -38,6 +38,18 @@ La vue des stocks de l’entreprise permet de changer de stock et affiche le der
 
 ## Exporter un rapport depuis l’assistant IA
 
+### Utilisation au microphone
+
+Cliquez sur **Parler à l’agent IA** ou sur le microphone du chat, autorisez son accès et prononcez votre demande. Après une pause, la transcription finale est envoyée au même assistant que la saisie écrite. La réponse apparaît dans le chat et est lue à voix haute lorsque la synthèse vocale du navigateur est disponible.
+
+Exemples : « Ouvre les inventaires », « Explique les graphiques », « Exporte les anomalies en PDF ». Rappuyez sur le micro pour la demande suivante. **Arrêter le mode vocal** annule l’écoute ou interrompt la lecture ; une opération déjà déclenchée n’est pas annulée. Fermer le chat, se déconnecter ou réinitialiser la conversation arrête également le mode vocal.
+
+Seules les transcriptions finales sont envoyées : un refus du micro, une erreur ou une écoute annulée n’envoie aucune commande. Les droits et les validations sont identiques à ceux du chat écrit. Le mode vocal nécessite un navigateur prenant en charge la reconnaissance et un accès HTTPS ou local. La saisie écrite reste utilisable si le micro est indisponible.
+
+L’écoute rassemble les segments d’une phrase et envoie une transcription finalisée après environ 800 ms sans nouveau résultat ni reprise de parole, sans attendre la fermeture du service vocal. Une reprise de parole relance ce délai. Si le texte reste provisoire, il bénéficie de 2,5 secondes supplémentaires avant d’être proposé à la relecture, sans exécution automatique. Une faible confiance signalée par le navigateur, des alternatives proches ou une phrase visiblement incomplète affichent **Vérifier et envoyer** : corrigez le texte avant de l’envoyer ou répétez au micro. La navigation vocale ne conserve pas le délai de lecture des commandes écrites. Ces réglages agissent sur le traitement des transcriptions, pas sur le gain physique du microphone ; la précision dépend aussi du navigateur, du matériel et de l’environnement sonore.
+
+### Commandes de rapport
+
 Les boutons **Rapport Excel** et **Rapport PDF** du chat génèrent un fichier téléchargeable. Une commande écrite fonctionne également :
 
 - « Exporte le stock ITC-B02 en Excel » : état des quantités actuelles.
