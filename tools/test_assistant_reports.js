@@ -1,0 +1,27 @@
+const assert=require('node:assert/strict');
+const reports=require('../assets/assistant-reports');
+const now=new Date('2026-09-16T12:00:00Z');
+const parse=q=>reports.parse(q,'Contrôleur','control-dashboard',now);
+const normalize=value=>value==='ITC'?'ITC-B01':value;
+const env={profile:{company_id:'A',role:'Contrôleur',is_active:true},normalizeOperator:normalize,allowedStock:()=>true,data:{stock:[{company_id:'A',op:'ITC-B01',label:'Câble',qty:10},{company_id:'A',op:'ITC-B02',label:'Pince',qty:5},{company_id:'B',op:'ITC-B02',label:'Hors entreprise',qty:999}],stockMovements:[{company_id:'A',op:'ITC-B02',createdAt:'2026-09-05T10:00:00Z',type:'in',qty:5,before:0,after:5},{company_id:'A',op:'ITC-B02',createdAt:'2026-08-05',type:'in',qty:20},{company_id:'B',op:'ITC-B02',createdAt:'2026-09-05',type:'in',qty:999}]},readControl:async()=>({anomalies:{a:{title:'Manquant',status:'open',createdAt:'2026-09-01',severity:'Critique'}},inventories:{i:{title:'Test',status:'counting',lines:{secret:{counted:999}}}}})};
+(async()=>{
+  assert.equal(parse('Comment exporter en PDF ?'),null);
+  assert.ok(parse('Exporte le rapport en Excel ou PDF').error);
+  assert.ok(parse('Exporte le stock ITC en Excel').error);
+  assert.ok(parse('Exporte le stock du 2026-09-01 au 2026-09-30 en PDF').error);
+  assert.ok(parse('Exporte les anomalies du 2026-02-30 au 2026-03-01 en PDF').error);
+  assert.ok(parse('Exporte le bon de sortie en PDF').error);
+  assert.equal(parse('Exporte les mouvements du mois dernier en PDF').from,'2026-08-01');
+  assert.equal(parse('Exporte les mouvements ce mois en PDF').to,'2026-09-30');
+  let report=await reports.build(parse('Exporte le stock ITC-B02 en Excel'),env);
+  assert.equal(report.format,'xlsx');assert.equal(report.rows.length,1);assert.equal(report.rows[0][1],'Pince');
+  report=await reports.build(parse('Exporte le stock en PDF'),env);assert.equal(report.rows.length,2);
+  report=await reports.build(parse('Exporte les entrées du 2026-09-01 au 2026-09-30 en Excel'),env);assert.equal(report.rows.length,1);assert.equal(report.rows[0][6],5);
+  report=await reports.build(parse('Exporte les inventaires ITC-B02 en PDF'),env);assert.ok(!JSON.stringify(report).includes('999'));assert.equal(report.rows.length,1);
+  await assert.rejects(()=>reports.build(parse('Exporte le stock ITC-B02 en Excel'),{...env,allowedStock:op=>op==='ITC-B01'}),/périmètre/);
+  await assert.rejects(()=>reports.build(parse('Exporte les audits en PDF'),env),/Aucune donnée/);
+  await assert.rejects(()=>reports.build(parse('Exporte les inventaires en PDF'),{...env,profile:{...env.profile,role:'Technicien'}}),/réservés/);
+  await assert.rejects(()=>reports.build(parse('Exporte le stock en PDF'),{...env,profile:{...env.profile,is_active:false}}),/actif/);
+  await assert.rejects(()=>reports.download({...report,format:'xlsx'},{}),/moteur Excel/);
+  console.log('PASS: report intent, formats, periods, company and stock scope, roles, empty data, no blind counts and missing export dependency.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

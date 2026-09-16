@@ -36,6 +36,19 @@ La conformité compare les quantités comptées et théoriques des lignes du der
 
 La vue des stocks de l’entreprise permet de changer de stock et affiche le dernier inventaire, les anomalies ouvertes et les stocks gelés. Des raccourcis permettent de créer un inventaire, un audit, une mission ou une anomalie. L’activité récente complète cette vue ; les gestionnaires et superviseurs conservent leur tableau de bord existant.
 
+## Exporter un rapport depuis l’assistant IA
+
+Les boutons **Rapport Excel** et **Rapport PDF** du chat génèrent un fichier téléchargeable. Une commande écrite fonctionne également :
+
+- « Exporte le stock ITC-B02 en Excel » : état des quantités actuelles.
+- « Exporte les anomalies en PDF » : synthèse des anomalies.
+- « Exporte les mouvements du 2026-09-01 au 2026-09-30 en Excel » : journal sur la période.
+- « Génère un rapport de contrôle en PDF » : inventaires, audits, anomalies, actions et missions.
+
+Les exports respectent l’entreprise et les stocks autorisés. Sans stock indiqué, ils couvrent tous les stocks autorisés ; sans période, toutes les dates disponibles. Les dates filtrent la création des dossiers ou la date des mouvements. Le stock est une photographie actuelle, sans reconstitution historique. Les comptages individuels et pièces jointes ne sont pas inclus dans les synthèses. Une demande vide ou hors périmètre ne génère aucun fichier. Les bons détaillés et archives conservent leurs exports dans leurs modules.
+
+La génération est locale au navigateur avec les moteurs ExcelJS et jsPDF déjà utilisés par l’application ; elle ne nécessite pas de fournisseur IA. Le téléchargement n’est annoncé qu’après génération. Les bibliothèques doivent être chargées dans la page.
+
 ## Inventaire contradictoire
 
 1. Le contrôleur crée un inventaire et sélectionne les matériels.

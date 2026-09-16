@@ -1655,6 +1655,8 @@
     <script src="assets/control-core.js"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js"></script>
+    <script src="assets/assistant-knowledge.js"></script>
+    <script src="assets/assistant-reports.js"></script>
     <script>
       let currentSectionId = "cockpit"; // Par défaut on est sur le cockpit
       // CONFIGURATION FIREBASE
@@ -11632,6 +11634,8 @@
           : "N/A";
         return [
           "Tu es ITC AI Assistant, assistant IA embarqué dans l'ERP ITC Telecom de gestion de matériels.",
+          AssistantKnowledge.facts,
+          `Contexte contrôle chargé : ${JSON.stringify(window.StockControl?.assistantContext() || {loaded:false})}`,
           "Réponds TOUJOURS en français, de façon claire, bienveillante et orientée action. Utilise des listes et étapes numérotées.",
           "Ton rôle principal : aider l'utilisateur à utiliser l'application, naviguer vers la bonne section, et réaliser ses tâches selon son rôle.",
           "Si l'utilisateur ne sait pas où aller, guide-le pas à pas. Ne dis jamais 'je ne sais pas' sans proposer une alternative.",
@@ -11678,10 +11682,10 @@
           "",
           "=== CAPACITÉS D'ACTION IA ===",
           "Tu peux ouvrir des onglets et pré-remplir des formulaires directement dans l'application.",
-          "Si l'utilisateur demande d'ouvrir une section ou de remplir un formulaire, indique-lui que tu vas le faire et donne des instructions sur quoi vérifier/compléter.",
+          "Seul le moteur de navigation local exécute les ouvertures et préremplissages. Si aucune action n'a été exécutée, donne le chemin sans affirmer avoir ouvert ou rempli un écran.",
           "Sections disponibles : cockpit (tableau de bord), tech-nouvelle-demande (demande matériel), tech-mes-demandes (mes bons), tech-retour-materiel (retour matériel), coord-demandes-tech (demandes techniciens), coord-creation-directe (commande directe), demandes-coordonnatrice (préparation commandes), sortie-physique (sortie physique), reception (réception matériel), livraison, scanner-physique, rapport-hebdo, trafic-audit, stats-consommation, archives-consommations, stock-itc-b01/b02/oci/cic/mtn/moov.",
           "Formulaires pré-remplissables : Demande technicien (équipe, site, matériel), Retour matériel (désignation, quantité, état, motif), Réception (opérateur, désignation, quantité), Sortie physique (destinataire, référence, opérateur, articles×quantités), Commande directe (opérateur, projet/motif).",
-          "Quand l'utilisateur fournit toutes les informations d'un formulaire, confirme que tu vas l'ouvrir et le pré-remplir, puis demande-lui de vérifier et valider.",
+          "Pour un formulaire, indique les champs à vérifier et laisse l'utilisateur enregistrer. Les modules de contrôle ne sont pas préremplis automatiquement.",
           "",
           "=== DONNÉES EN TEMPS RÉEL ===",
           buildFullAppContext(),
@@ -11757,6 +11761,7 @@
       }
 
       function openChatAssistantRequestFlow() {
+        if (currentUser?.role === 'Contrôleur') { aiNavigateToSection('control-missions'); return; }
         const role = String(currentUser?.role || "").toLowerCase();
         const targetSection = CHATBOT_REQUEST_MAP[role] || "cockpit";
 
@@ -11789,6 +11794,7 @@
           : "";
 
         const greetings = {
+          "contrôleur": `Bonjour${prenom ? ' '+prenom : ''} ! Votre espace Contrôle des stocks rassemble le tableau de bord, ses graphiques, les inventaires, audits, anomalies et actions correctives. Je peux expliquer les procédures, résumer les compteurs chargés et ouvrir ces modules. Les validations restent effectuées par les utilisateurs habilités.`,
           technicien: [
             `Bonjour${prenom ? " " + prenom : ""} ! Je suis votre Assistant IA ITC.`,
             `En tant que **Technicien**, voici vos actions disponibles :`,
@@ -12019,6 +12025,7 @@
       }
 
       function getRoleCapabilities() {
+        if (currentUser?.role === 'Contrôleur') return AssistantKnowledge.reply('mon rôle',{userRole:currentUser.role});
         const role = String(currentUser?.role || "").toLowerCase();
         const ops = Array.isArray(currentUser?.managedOps)
           ? currentUser.managedOps.join(", ")
@@ -12080,6 +12087,7 @@
 
       // ── CONTEXTE COMPLET DE L'APPLICATION (injecté dans le prompt IA) ─────────
       function buildFullAppContext() {
+        if (currentUser?.role === "Contrôleur") return 'Contrôle des stocks (compteurs uniquement, aucun comptage individuel) : ' + JSON.stringify(window.StockControl?.assistantContext() || {loaded:false});
         const lines = [];
 
         // ── TABLEAU DE BORD ───────────────────────────────────────────────
@@ -12220,6 +12228,12 @@
         const role = String(currentUser?.role || "").toLowerCase();
 
         const actionsByRole = {
+          "contrôleur": [
+            {label:"📊 Mon tableau de bord",prompt:"Résume mon tableau de bord contrôleur"},
+            {label:"📈 Comprendre les graphiques",prompt:"Explique les graphiques et leurs légendes"},
+            {label:"📋 Inventaire",prompt:"Comment réaliser un inventaire contradictoire ?"},
+            {label:"🔎 Audits",prompt:"Ouvre les audits de contrôle"},
+          ],
           technicien: [
             { label: "📋 Faire une demande", prompt: "Comment faire une demande de matériel ?" },
             { label: "📄 Mes bons", prompt: "Comment consulter mes bons de sortie ?" },
@@ -12251,19 +12265,21 @@
           <div class="flex flex-wrap gap-2 text-[11px] text-slate-600">
             ${actions.map((a) => `
               <button type="button"
-                onclick="submitChatAssistantPrompt(${JSON.stringify(a.prompt)})"
+                onclick="submitChatAssistantPrompt(${escapeHtml(JSON.stringify(a.prompt))})"
                 class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold transition hover:border-cyan-500 hover:text-cyan-700"
               >${a.label}</button>
             `).join("")}
           </div>
           <div class="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+            <button type="button" onclick="submitChatAssistantPrompt('Exporte un rapport en Excel')" class="rounded-xl border border-green-200 bg-green-50 px-3 py-2 font-semibold text-green-700">Rapport Excel</button>
+            <button type="button" onclick="submitChatAssistantPrompt('Exporte un rapport en PDF')" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 font-semibold text-red-700">Rapport PDF</button>
             <button type="button" onclick="openChatAssistantAgentContact()"
               class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-100">
               <i class="fas fa-headset mr-1"></i> Parler à un agent
             </button>
-            <button type="button" onclick="openChatAssistantRequestFlow()"
+            <button type="button" onclick="${role === 'contrôleur' ? "aiNavigateToSection('control-missions')" : 'openChatAssistantRequestFlow()'}"
               class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 font-semibold text-sky-700 transition hover:bg-sky-100">
-              <i class="fas fa-file-signature mr-1"></i> Créer une demande
+              <i class="fas fa-file-signature mr-1"></i> ${role === 'contrôleur' ? 'Missions de contrôle' : 'Créer une demande'}
             </button>
           </div>
         `;
@@ -12344,6 +12360,7 @@
       function aiParseAndExecuteAction(userText) {
         const q = String(userText || "").trim().toLowerCase();
         if (!q) return null;
+        if (/^(comment|pourquoi|explique|quelles?|quels?|est.ce que)\b/.test(q)) return null;
 
         // ── Mots-clés déclencheurs ─────────────────────────────────────────
         const CLOSE_TRIGGER = /(ferme|fermer|ferm[eè]s|quitte|quitter|retour.*accueil|revenir.*accueil|retourner.*accueil|retour.*dashboard|revenir.*dashboard|revenir.*tableau|retour.*tableau|close|sortir de|sortir d'ici|annuler.*onglet|go back|revenir en arri[eè]re)/;
@@ -12360,6 +12377,31 @@
         const isFill = FILL_TRIGGER.test(q);
 
         if (!isNav && !isFill) return null;
+
+        const controlRole = currentUser?.role === 'Contrôleur';
+        const controlAllowed = ['Contrôleur','Gestionnaire','Superviseur'].includes(currentUser?.role);
+        const controlSections = [
+          ['inventories','Inventaires',/inventaire|recomptage/],
+          ['anomalies','Anomalies et régularisations',/anomalie|r[eé]gularisation/],
+          ['actions','Plans d’action',/plan.*action|action.*corrective/],
+          ['audits','Audits',/audit/],
+          ['missions','Missions de contrôle',/mission/],
+          ['reports','Rapports et archives',/rapport|archive|export/],
+          ['notifications','Notifications',/notification|activit[eé]/],
+          ['flows','Flux de stocks',/flux|mouvement|transfert/],
+          ['stock','Stocks et matériels',/stock|mat[eé]riel/],
+          ['dashboard','Tableau de bord',/tableau|dashboard|graphique|contr[oô]le|accueil/],
+        ];
+        const controlMatch = controlSections.find(([, ,pattern])=>pattern.test(q));
+        if (controlAllowed && controlMatch && (controlRole || /inventaire|recomptage|anomalie|plan.*action|action.*corrective|mission.*contr[oô]le|audit.*contr[oô]le|tableau.*contr[oô]leur/.test(q))) {
+          if (controlRole && /entr[eé]e|r[eé]ception|sortie.*stock|enregistrer.*sortie|approuv|valider.*inventaire|appliquer.*r[eé]gularisation/.test(q)) return 'Cette opération relève du gestionnaire ou du superviseur. Votre compte contrôleur peut consulter les flux et soumettre ses inventaires, mais ne modifie pas les quantités.';
+          aiNavigateToSection('control-'+controlMatch[0]);
+          return `J’ouvre **${controlMatch[1]}**. Aucun dossier n’est créé ou validé automatiquement ; utilisez les commandes disponibles pour votre rôle.`;
+        }
+        if (controlRole) {
+          if (/profil|mot de passe/.test(q)) { aiNavigateToSection('mon-profil'); return 'J’ouvre votre profil.'; }
+          return 'Votre compte utilise les modules Contrôle des stocks. Vous pouvez demander : « Ouvre les inventaires », « Ouvre les audits » ou « Ouvre mon tableau de bord ».';
+        }
 
         // ── Carte de toutes les sections ──────────────────────────────────
         const SECTIONS = [
@@ -12582,6 +12624,8 @@
       // ═══════════════════════════════════════════════════════════════════════════
 
       function getLocalAssistantReply(userText) {
+        const updatedReply = AssistantKnowledge.reply(userText,{userRole:currentUser?.role,control:window.StockControl?.assistantContext()});
+        if (updatedReply) return updatedReply;
         const q = String(userText || "").trim().toLowerCase();
         if (!q) return "Écrivez une question et je vous répondrai.";
 
@@ -12874,6 +12918,7 @@
               section: currentSectionId || "cockpit",
               userName: currentUser?.name || "inconnu",
               userRole: currentUser?.role || "inconnu",
+              control: window.StockControl?.assistantContext() || {loaded:false},
             },
           }),
         });
@@ -12995,6 +13040,32 @@
       }
       // ── FIN SAISIE VOCALE ──────────────────────────────────────────────────────
 
+      async function executeAssistantReport(request) {
+        if (request.error) return request.error;
+        const profile = secureStore.profile;
+        const sessionUid = secureStore.uid;
+        if (!secureStore.ready || !profile) throw new Error('Les données ne sont pas chargées. Reconnectez-vous.');
+        const sessionRole = profile.role, sessionCompany = profile.company_id;
+        const ensureSession = () => {
+          if (!secureStore.ready || secureStore.uid !== sessionUid || secureStore.profile?.company_id !== sessionCompany || secureStore.profile?.role !== sessionRole || secureStore.profile?.is_active !== true) throw new Error('La session a changé. Relancez la demande depuis votre compte.');
+        };
+        const data = secureStore.value();
+        const unrestricted = ['Contrôleur','Superviseur','SUPER_ADMIN'].includes(profile.role);
+        const managed = new Set((profile.role === 'Gestionnaire' ? ControlCore.scopes(profile.controlScopes) : getManagedOpsNormalized(currentUser)).map(normalizeOperatorKey));
+        const allowedStock = stock => unrestricted || managed.has(normalizeOperatorKey(stock));
+        const controlStocks = unrestricted ? data.users.filter(u=>u.company_id===sessionCompany).flatMap(u=>ControlCore.scopes(u.managedOps)).map(normalizeOperatorKey) : [...managed];
+        const report = await AssistantReports.build(request,{profile,data,normalizeOperator:normalizeOperatorKey,allowedStock,controlStocks,readControl:async stock=>{
+          ensureSession();
+          return (await db.ref(`stock_control/${sessionCompany}/${stock}`).once('value')).val() || {};
+        }});
+        const filename = await AssistantReports.download(report,{ExcelJS:window.ExcelJS,jsPDF:window.jspdf?.jsPDF,ensureSession,saveBlob:(blob,name)=>{
+          const url=URL.createObjectURL(blob);
+          const link=document.createElement('a');link.href=url;link.download=name;
+          document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+        }});
+        return `Rapport généré : ${filename}\nLe téléchargement a été déclenché (${report.rows.length} ligne(s)).\nPérimètre : ${report.scope}.\nPériode : ${report.period}.`;
+      }
+
       async function handleChatAssistantSubmit(event) {
         if (event) event.preventDefault();
         const input = document.getElementById("ai-chatbot-input");
@@ -13006,6 +13077,15 @@
         appendChatAssistantMessage("user", userText);
         input.value = "";
         autoResizeChatAssistantInput();
+
+        const reportRequest = AssistantReports.parse(userText,currentUser?.role,currentSectionId);
+        if (reportRequest) {
+          setChatAssistantBusy(true);
+          try { appendChatAssistantMessage('assistant',await executeAssistantReport(reportRequest)); }
+          catch (error) { appendChatAssistantMessage('assistant','Export impossible : '+error.message); }
+          finally { setChatAssistantBusy(false); }
+          return;
+        }
 
         // ── Vérifier d'abord si c'est une action IA (navigation / formulaire) ──
         const actionReply = aiParseAndExecuteAction(userText);

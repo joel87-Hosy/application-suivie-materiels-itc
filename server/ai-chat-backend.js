@@ -1,4 +1,5 @@
 const http = require("http");
+const AssistantKnowledge = require('../assets/assistant-knowledge');
 
 const PORT = Number(process.env.PORT || 8787);
 const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || "").trim();
@@ -91,8 +92,7 @@ async function askGemini({ userText, systemPrompt, messages }) {
       parts: [
         {
           text:
-            String(systemPrompt || "").slice(0, 3000) ||
-            "Tu es un assistant ERP utile et concis.",
+            AssistantKnowledge.facts + '\n' + String(systemPrompt || "Tu es un assistant ERP utile et concis.").slice(0, 24000),
         },
       ],
     },
@@ -136,6 +136,8 @@ function isAuthorized(req) {
 }
 
 function buildLocalFallbackReply({ userText, context }) {
+  const updatedReply = AssistantKnowledge.reply(userText, context);
+  if (updatedReply) return updatedReply;
   const text = String(userText || "").trim();
   const normalized = text.toLowerCase();
   const role = String(context?.userRole || "inconnu");

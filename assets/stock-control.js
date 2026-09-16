@@ -396,5 +396,11 @@
     if (!op && available.length) { op = available[0]; subscribe(); return; }
     selector.innerHTML = available.map(value=>`<option ${value === op ? 'selected' : ''}>${e(value)}</option>`).join('');
   }
-  window.StockControl = {enter,stop,reset,refreshStocks,isBusy:()=>busy};
+  function assistantContext() {
+    if (!String(currentSectionId).startsWith('control-') || uid !== secureStore.uid || company !== secureStore.profile?.company_id || !allowed() || !Object.prototype.hasOwnProperty.call(summaries,op)) return {loaded:false};
+    const active = r => !['closed','cancelled'].includes(r.status);
+    const inv=rows('inventories'), anomalies=rows('anomalies').filter(active), actions=rows('actions').filter(active);
+    return {loaded:true,stock:op,activeInventories:inv.filter(active).length,openAnomalies:anomalies.length,criticalAnomalies:anomalies.filter(r=>r.severity==='Critique').length,actionsToVerify:actions.filter(r=>r.status==='verify'||r.response).length,overdueActions:actions.filter(r=>r.due && r.due<now().slice(0,10)).length,activeAudits:rows('audits').filter(active).length,activeMissions:rows('missions').filter(active).length,awaitingApproval:inv.filter(r=>r.status==='review').length,awaitingAdjustment:inv.filter(r=>r.status==='approved').length};
+  }
+  window.StockControl = {enter,stop,reset,refreshStocks,assistantContext,isBusy:()=>busy};
 })();

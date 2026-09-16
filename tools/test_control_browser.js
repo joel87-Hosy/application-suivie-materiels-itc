@@ -57,6 +57,10 @@ async function main(){
   await controller.evaluate('document.getElementById("ctl-message").textContent=""');
   await controller.submit('[data-mode=start]',{});
   await controller.wait('[name=count-cable]');
+  const aiContext=await controller.evaluate('StockControl.assistantContext()');
+  assert.equal(aiContext.loaded,true);assert.equal(aiContext.activeInventories,1);
+  assert.equal(aiContext.lines,undefined);assert.equal(aiContext.managerCounts,undefined);
+  assert.equal(await controller.evaluate('(()=>{const original=secureStore.uid;secureStore.uid="another-user";const result=StockControl.assistantContext();secureStore.uid=original;return result.loaded;})()'),false);
   await controller.evaluate(`(()=>{const transfer=new DataTransfer();transfer.items.add(new File(['%PDF-1.4 test fixture'], 'preuve.pdf', {type:'application/pdf'}));document.querySelector('[name=file]').files=transfer.files;document.getElementById('ctl-message').textContent='';})()`);
   await controller.submit('[data-mode=attachment]',{});
   assert.equal(await controller.evaluate('document.body.innerText.includes("preuve.pdf")'),true);
