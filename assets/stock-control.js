@@ -82,12 +82,13 @@
     container.innerHTML = `<div class="ctl-workspace"><header class="ctl-hero"><div><p>ESPACE CONTRÔLE DES STOCKS</p><h2>${e(labels[section])}</h2><p>${e(currentUser.name || currentUser.email)} · ${e(role())}</p></div><label>Stock<select id="ctl-op">${ops().map(v => `<option ${v === op ? 'selected' : ''}>${e(v)}</option>`).join('')}</select></label></header>
       <nav class="ctl-tabs" aria-label="Modules de contrôle">${Object.entries(labels).map(([key,title]) => `<button type="button" data-page="${key}" aria-current="${key === section ? 'page' : 'false'}">${e(title)}${key === 'notifications' ? ' ('+rows('events').filter(ev => ev.at > (state.preferences?.[uid]?.lastSeen || '')).length+')' : ''}</button>`).join('')}</nav>
       <p id="ctl-message" role="status" aria-live="polite">${e(message)}</p>
-      ${!op ? '<div class="ctl-card">Aucun stock affecté. Le superviseur doit renseigner les accès du compte.</div>' : `<div class="ctl-toolbar">${field('search','Recherche','search',search,false)}${field('from','Du','date',from,false)}${field('to','Au','date',to,false)}${button('filter','Filtrer')}${button('clear','Réinitialiser')}</div>${state.lock ? `<div class="ctl-warning">Inventaire en cours : les modifications du stock ${e(op)} sont gelées jusqu’à sa clôture ou son annulation.</div>` : ''}${detail ? renderDetail() : renderPage()}`}</div>`;
+      ${!op ? `<div class="ctl-card">${isController() ? 'Aucun stock disponible dans votre entreprise.' : 'Aucun stock affecté. Le superviseur doit renseigner les accès du compte.'}</div>` : `${section === 'dashboard' && isController() ? '' : `<div class="ctl-toolbar">${field('search','Recherche','search',search,false)}${field('from','Du','date',from,false)}${field('to','Au','date',to,false)}${button('filter','Filtrer')}${button('clear','Réinitialiser')}</div>`}${state.lock ? `<div class="ctl-warning">Inventaire en cours : les modifications du stock ${e(op)} sont gelées jusqu’à sa clôture ou son annulation.</div>` : ''}${detail ? renderDetail() : renderPage()}`}</div>`;
     container.onclick = event => { const b = event.target.closest('button'); if (!b) return; if (b.dataset.page) { showSection('control-' + b.dataset.page); return; } if (b.dataset.action) handle(b.dataset.action, b.dataset); };
     container.onchange = event => { if (event.target.id === 'ctl-op') { op = event.target.value; detail = null; subscribe(); } if (event.target.id === 'ctl-status') { statusFilter = event.target.value; draw(); } };
     container.onsubmit = event => { if (!event.target.matches('.ctl-editor')) return; event.preventDefault(); const data = Object.fromEntries(new FormData(event.target)); run(() => submit(data, event.target)); };
   }
   function renderPage() {
+    if (section === 'dashboard' && isController()) return renderControllerDashboard();
     if (section === 'dashboard') {
       const inventories = rows('inventories'), anomalies = rows('anomalies'), actions = rows('actions');
       const activeInv = inventories.filter(r => !['closed','cancelled'].includes(r.status));
@@ -113,6 +114,76 @@
       return card('Rapports et archives', `<div class="ctl-toolbar">${button('csv','Exporter la synthèse CSV')}${button('print','Imprimer / Enregistrer en PDF')}</div><p>Ouvrez un dossier pour exporter son détail. Les dossiers clôturés sont conservés en lecture seule.</p>${recordTable(filtered(list))}`);
     }
     return card(labels[section], `${isController() ? button('new','Créer',`data-kind="${section}"`) : ''}<label class="ctl-field">Statut<select id="ctl-status"><option value="">Tous</option>${Object.entries(statuses).map(([k,v]) => `<option value="${k}" ${statusFilter === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>${recordTable(filtered(rows(section)).map(r => ({...r,kind:section})))}`);
+  }
+  function dashboardBars(title, description, groups, page) {
+    const max = Math.max(1,...groups.map(g=>g.value));
+    const total = groups.reduce((sum,g)=>sum+g.value,0);
+    return card(title,`<figure class="ctl-chart" aria-label="${e(title)}"><figcaption>${e(description)}</figcaption>
+      <div class="ctl-chart-bars">${groups.map(g=>`<button type="button" class="ctl-chart-row" data-page="${page}" aria-label="${e(g.label)} : ${g.value}. Ouvrir ${e(labels[page])}"><span class="ctl-chart-label"><i class="ctl-chart-key" style="background:${g.color}" aria-hidden="true"></i>${e(g.label)}</span><span class="ctl-chart-track" aria-hidden="true"><span style="width:${g.value/max*100}%;background:${g.color}"></span></span><strong>${g.value}</strong></button>`).join('')}</div>
+      <p class="ctl-muted">Légende : chaque couleur correspond au libellé de sa ligne. Les barres représentent un nombre de dossiers, sur la même échelle dans ce graphique. Cliquez sur une ligne pour ouvrir le module.</p>
+      ${total ? `<p><strong>${total}</strong> dossier(s) au total.</p>` : '<p class="ctl-empty">Aucun dossier à représenter pour ce stock.</p>'}</figure>`);
+  }
+  function conformityChart(matching, counted, total) {
+    const groups = [{label:'Conformes',value:matching,color:'#0f766e'},{label:'En écart',value:counted-matching,color:'#c2410c'},{label:'Non évaluables',value:total-counted,color:'#64748b'}];
+    if (!total) return '<p class="ctl-empty">Aucune ligne à représenter dans cet inventaire.</p>';
+    let offset = 0;
+    const segments = groups.filter(g=>g.value).map(g=>{
+      const length=g.value/total*100;
+      const segment=`<circle cx="60" cy="60" r="45" fill="none" stroke="${g.color}" stroke-width="16" pathLength="100" stroke-dasharray="${length} ${100-length}" stroke-dashoffset="${-offset}" transform="rotate(-90 60 60)"/>`;
+      offset+=length;return segment;
+    }).join('');
+    return `<figure class="ctl-chart ctl-conformity-chart" aria-label="Répartition des lignes du dernier inventaire clôturé"><svg viewBox="0 0 120 120" role="img" aria-label="${groups.map(g=>`${g.value} ${g.label}`).join(', ')}">${segments}<text x="60" y="58" text-anchor="middle" fill="#183044" font-size="20" font-weight="bold">${total}</text><text x="60" y="74" text-anchor="middle" fill="#526778" font-size="10">lignes</text></svg><figcaption><ul class="ctl-chart-legend">${groups.map(g=>`<li><i class="ctl-chart-key" style="background:${g.color}" aria-hidden="true"></i><span>${g.label}</span><strong>${g.value}</strong></li>`).join('')}</ul><p class="ctl-muted">Conforme : quantité comptée égale au stock théorique. En écart : différence constatée. Non évaluable : données de comptage incomplètes.</p></figcaption></figure>`;
+  }
+  function renderControllerDashboard() {
+    if (!Object.prototype.hasOwnProperty.call(summaries, op)) return '<p class="ctl-empty" role="status">Chargement des indicateurs du stock…</p>';
+    const today = now().slice(0,10);
+    const active = r => !['closed','cancelled'].includes(r.status);
+    const inventories = rows('inventories'), anomalies = rows('anomalies').filter(active);
+    const actions = rows('actions').filter(active), audits = rows('audits').filter(active);
+    const missions = rows('missions').filter(active);
+    const late = r => !!r.due && r.due < today;
+    const pendingActions = actions.filter(r => r.status === 'verify' || r.response);
+    const latest = inventories.filter(r => r.status === 'closed').sort((a,b) => String(b.referenceAt || b.createdAt).localeCompare(String(a.referenceAt || a.createdAt)))[0];
+    const lines = Object.values(latest?.lines || {});
+    const counted = lines.filter(l => l.counted !== undefined && l.counted !== null && Number.isFinite(Number(l.counted)) && Number.isFinite(Number(l.theoretical)));
+    const matching = counted.filter(l => Number(l.counted) === Number(l.theoretical)).length;
+    const date = value => value ? e(String(value).slice(0,10)) : 'Non renseignée';
+    const link = (page,title) => `<button type="button" class="ctl-button" data-page="${page}">${e(title)}</button>`;
+    const metrics = [
+      ['Inventaires actifs',inventories.filter(active).length,'inventories','Brouillons, comptages et validations'],
+      ['Anomalies ouvertes',anomalies.length,'anomalies',`${anomalies.filter(r => r.severity === 'Critique').length} critique(s)`],
+      ['Actions à vérifier',pendingActions.length,'actions','Réponse reçue ou statut À vérifier'],
+      ['Actions en retard',actions.filter(late).length,'actions','Échéance dépassée, hors dossiers clos'],
+      ['Audits en cours',audits.length,'audits','Audits restant à clôturer'],
+      ['Missions actives',missions.length,'missions','Contrôles à préparer ou à terminer'],
+    ];
+    const priorities = [
+      ...anomalies.map(r => ({...r,kind:'anomalies',priority:r.severity === 'Critique' ? 0 : 3,reason:r.severity === 'Critique' ? 'Anomalie critique' : 'Anomalie à traiter'})),
+      ...actions.map(r => ({...r,kind:'actions',priority:late(r) ? 1 : pendingActions.includes(r) ? 2 : 5,reason:late(r) ? 'Action en retard' : pendingActions.includes(r) ? 'Réalisation à vérifier' : 'Action à suivre'})),
+      ...inventories.filter(r => ['draft','counting'].includes(r.status)).map(r => ({...r,kind:'inventories',priority:2,reason:r.status === 'counting' ? 'Comptage à terminer' : 'Inventaire à préparer'})),
+      ...[...audits.map(r=>({...r,kind:'audits'})),...missions.map(r=>({...r,kind:'missions'}))].map(r=>({...r,priority:late(r)?1:4,reason:late(r)?'Échéance dépassée':r.due === today?'À traiter aujourd’hui':'Contrôle à poursuivre'})),
+    ].sort((a,b)=>a.priority-b.priority || String(a.due || '9999').localeCompare(String(b.due || '9999')));
+    const pending = inventories.filter(r => ['review','approved'].includes(r.status));
+    const severityGroups = [['Critique','#b91c1c'],['Élevée','#c2410c'],['Moyenne','#a16207'],['Faible','#0369a1']].map(([label,color])=>({label,color,value:anomalies.filter(r=>r.severity===label).length}));
+    severityGroups.push({label:'Non renseignée',color:'#64748b',value:anomalies.filter(r=>!severityGroups.some(g=>g.label===r.severity)).length});
+    const inventoryGroups = [['draft','#64748b'],['counting','#0369a1'],['review','#a16207'],['approved','#7e22ce'],['closed','#0f766e'],['cancelled','#475569']].map(([status,color])=>({label:statuses[status],color,value:inventories.filter(r=>r.status===status).length}));
+    const otherInventories = inventories.filter(r=>!['draft','counting','review','approved','closed','cancelled'].includes(r.status)).length;
+    if(otherInventories) inventoryGroups.push({label:'Autre statut',color:'#334155',value:otherInventories});
+    const overview = ops().map(stockOp => {
+      if (!Object.prototype.hasOwnProperty.call(summaries,stockOp)) return `<tr><td>${e(stockOp)}</td><td colspan="4">Chargement…</td></tr>`;
+      const summary = summaries[stockOp];
+      const last = entries(summary.inventories).filter(r=>r.status === 'closed').sort((a,b)=>String(b.referenceAt || b.createdAt).localeCompare(String(a.referenceAt || a.createdAt)))[0];
+      return `<tr><td><strong>${e(stockOp)}</strong>${stockOp === op ? '<small>Stock sélectionné</small>' : ''}</td><td>${last ? date(last.referenceAt || last.createdAt) : 'Jamais inventorié'}</td><td>${entries(summary.anomalies).filter(active).length}</td><td>${summary.lock ? 'Gelé pour inventaire' : 'Disponible'}</td><td>${button('dashboard-stock','Consulter',`data-op="${e(stockOp)}"`)}</td></tr>`;
+    }).join('');
+    return `<section class="ctl-dashboard-intro"><div><p class="ctl-eyebrow">TABLEAU DE BORD CONTRÔLEUR</p><h3>Vos contrôles sur ${e(op)}</h3><p>Indicateurs du stock sélectionné · Tous les dossiers, y compris ceux des autres contrôleurs.</p></div><span class="ctl-badge">${stocks().length} matériels suivis</span></section>
+      <div class="ctl-metrics ctl-controller-metrics">${metrics.map(([title,value,page,hint])=>`<button type="button" class="ctl-card ctl-metric-link" data-page="${page}"><span>${e(title)}</span><strong>${value}</strong><small>${e(hint)}</small></button>`).join('')}</div>
+      <div class="ctl-toolbar" aria-label="Créer un contrôle sur le stock sélectionné">${button('new','Lancer un inventaire','data-kind="inventories"')}${button('new','Créer un audit','data-kind="audits"')}${button('new','Créer une mission','data-kind="missions"')}${button('new','Signaler une anomalie','data-kind="anomalies"')}</div>
+      <div class="ctl-dashboard-grid">${dashboardBars('Anomalies par gravité','Stock '+op+' · Anomalies ouvertes uniquement, hors dossiers clôturés ou annulés.',severityGroups,'anomalies')}${dashboardBars('Avancement des inventaires','Stock '+op+' · Répartition actuelle de tous les inventaires enregistrés, y compris clôturés et annulés.',inventoryGroups,'inventories')}</div>
+      ${card('Priorités du stock',priorities.length ? `<p>${priorities.length} dossier(s) à suivre. Les urgences sont affichées en premier (10 maximum).</p>${table(['Priorité','Dossier','Suivi','Échéance','Action'],priorities.slice(0,10).map(r=>`<tr><td><span class="ctl-badge ${r.priority < 2 ? 'ctl-badge-alert' : ''}">${e(r.reason)}</span></td><td>${e(r.title)}<small>${e(labels[r.kind])}</small></td><td>${badge(r.status)}<small>${r.createdBy === uid ? 'Votre dossier' : 'Créé par '+e(person(r.createdBy))}</small></td><td>${r.due ? date(r.due) : 'Sans échéance'}</td><td>${button('open','Ouvrir',`data-kind="${r.kind}" data-id="${e(r.id)}"`)}</td></tr>`).join(''))}` : '<p class="ctl-empty">Aucun dossier à traiter sur ce stock. Vous pouvez préparer un inventaire ou un audit.</p>')}
+      <div class="ctl-dashboard-grid">${card('Dernier inventaire clôturé',latest ? `<p><strong>${e(latest.title)}</strong> · ${date(latest.referenceAt || latest.createdAt)}</p><p class="ctl-compliance">${counted.length === lines.length && lines.length ? Math.round(matching/lines.length*100)+' %' : 'Non disponible'}</p><p>Conformité au stock théorique lors du comptage.</p>${conformityChart(matching,counted.length,lines.length)}<p>${matching} ligne(s) conforme(s) sur ${lines.length} · ${counted.length-matching} ligne(s) en écart.</p><p class="ctl-muted">Ce résultat porte uniquement sur les matériels de cet inventaire, avant régularisation.</p>${button('open','Consulter l’inventaire',`data-kind="inventories" data-id="${e(latest.id)}"`)}` : '<p>Aucun inventaire clôturé sur ce stock. La conformité sera disponible après le premier inventaire.</p>')}
+      ${card('En attente du superviseur',`<p>${pending.filter(r=>r.status === 'review').length} inventaire(s) à approuver · ${pending.filter(r=>r.status === 'approved').length} à régulariser.</p><p class="ctl-muted">Le superviseur valide les écarts et applique les corrections de quantité.</p>${pending.length ? recordTable(pending.map(r=>({...r,kind:'inventories'}))) : '<p>Aucune décision en attente.</p>'}`)}</div>
+      ${card('Vue des stocks de l’entreprise',`<p>Comparez les stocks et choisissez celui à contrôler.</p>${table(['Stock','Dernier inventaire clôturé','Anomalies ouvertes','État','Action'],overview)}`)}
+      ${card('Activité récente du stock',`${eventList(rows('events').slice(0,8))}${link('notifications','Voir toute l’activité')}`)}`;
   }
   function recordTable(list) { return table(['Dossier','Statut','Responsable','Échéance','Actions'], list.map(r => `<tr><td>${e(r.title)}<small>${e(r.id)}</small></td><td>${badge(r.status)}</td><td>${e(r.assignee || person(r.createdBy))}</td><td>${e(r.due || '—')}</td><td>${button('open','Ouvrir',`data-kind="${e(r.kind)}" data-id="${e(r.id)}"`)}</td></tr>`).join('')); }
   function eventList(list) { return `<ul class="ctl-events">${list.map(r => `<li><time>${e(r.at)}</time><p>${e(r.message)}</p><small>${e(person(r.actorUid))}</small></li>`).join('') || '<li>Aucun événement.</li>'}</ul>`; }
@@ -271,6 +342,7 @@
     for (const [,line] of lines) C.quantity(line.counted);
   }
   function handle(action, data) {
+    if (action === 'dashboard-stock') { if (!ops().includes(data.op)) return; op = data.op; state = summaries[op] || {}; detail = null; draw(); return; }
     if (action === 'back') { detail = null; draw(); return; }
     if (action === 'refresh') { draw(); return; }
     if (action === 'filter') { search = document.querySelector('[name="search"]').value; from = document.querySelector('[name="from"]').value; to = document.querySelector('[name="to"]').value; draw(); return; }

@@ -26,6 +26,16 @@ Le contrôleur arrive dans **Contrôle des stocks**. Les gestionnaires et superv
 
 Les pièces jointes PNG, JPEG et PDF sont limitées à **256 Ko par fichier**. Des références et liens vers des documents plus volumineux peuvent être renseignés dans les preuves.
 
+## Tableau de bord du contrôleur
+
+Le contrôleur dispose d’un tableau de bord dédié. Les six indicateurs portent sur le stock sélectionné : inventaires actifs, anomalies ouvertes (dont critiques), actions à vérifier, actions en retard, audits en cours et missions actives. Les cartes ouvrent les modules correspondants.
+
+Les priorités affichent jusqu’à dix dossiers, avec les anomalies critiques et les échéances dépassées en premier. Elles incluent les dossiers des autres contrôleurs et indiquent le créateur ; l’ouverture conserve les droits de modification existants. Les inventaires à approuver ou à régulariser sont regroupés dans « En attente du superviseur ».
+
+La conformité compare les quantités comptées et théoriques des lignes du dernier inventaire clôturé, avant régularisation. Elle ne représente pas une certification de tout le stock actuel. Sans inventaire terminé, aucun pourcentage n’est annoncé.
+
+La vue des stocks de l’entreprise permet de changer de stock et affiche le dernier inventaire, les anomalies ouvertes et les stocks gelés. Des raccourcis permettent de créer un inventaire, un audit, une mission ou une anomalie. L’activité récente complète cette vue ; les gestionnaires et superviseurs conservent leur tableau de bord existant.
+
 ## Inventaire contradictoire
 
 1. Le contrôleur crée un inventaire et sélectionne les matériels.

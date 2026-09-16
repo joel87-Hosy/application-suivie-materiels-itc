@@ -88,10 +88,44 @@ async function main(){
   await controller.submit('[data-mode=update]',{receivedQty:'9',status:'anomaly',description:'Une unité manquante',evidence:'Bon de réception vérifié'});
   assert.equal(await controller.evaluate('document.body.innerText.includes("Écart : -1")'),true);
   await controller.click('[data-page=dashboard]');
+  await until(()=>controller.evaluate('document.body.innerText.includes("TABLEAU DE BORD CONTRÔLEUR")'),'controller dashboard');
+  assert.equal(await controller.evaluate('document.body.innerText.includes("98")'),false); // Dashboard exposes conformity, not raw inventory quantities.
+  assert.equal(await controller.evaluate('document.body.innerText.includes("50 %")'),true);
+  assert.equal(await controller.evaluate('document.querySelectorAll(".ctl-chart-bars").length'),2);
+  assert.equal(await controller.evaluate('document.querySelector(".ctl-conformity-chart svg").getAttribute("aria-label")'),'1 Conformes, 1 En écart, 0 Non évaluables');
+  assert.equal(await controller.evaluate('document.querySelectorAll(".ctl-chart-legend li").length'),3);
+  await controller.click('.ctl-chart-row[data-page=anomalies]');
+  assert.equal(await controller.evaluate('document.getElementById("view-title").textContent'),'Anomalies et régularisations');
+  await controller.click('[data-page=dashboard]');
+  await environment.withSecurityRulesDisabled(c=>c.database().ref().update({
+    'itc_data/stock/second':{company_id:'A',op:'ITC-B02',scope_key:'A|ITC-B02',label:'Second stock',qty:4},
+    'stock_control/A/ITC-B01/anomalies/critical':{title:'Urgence magasin',status:'open',severity:'Critique',createdBy:'controller',createdAt:'2026-09-15'},
+    'stock_control/A/ITC-B01/actions/verify':{title:'Rangement à vérifier',status:'verify',createdBy:'controller',createdAt:'2026-09-15',due:'2000-01-01',response:{text:'Réalisé',by:'manager',at:'2026-09-15'}},
+    'stock_control/A/ITC-B02/missions/other':{title:'Mission second stock',status:'open',createdBy:'controller',createdAt:'2026-09-15'},
+  }));
+  await until(()=>controller.evaluate('appData.stock.some(s=>s.op==="ITC-B02")'),'second stock loaded');
+  await controller.click('[data-page=dashboard]');
+  await until(()=>controller.evaluate('document.body.innerText.includes("Urgence magasin") && !!document.querySelector("[data-action=dashboard-stock][data-op=ITC-B02]")'),'dashboard priorities');
+  assert.equal(await controller.evaluate('document.querySelector(".ctl-controller-metrics [data-page=actions] strong").textContent'),'1');
+  await controller.click('[data-action=open][data-id=critical]');
+  assert.equal(await controller.evaluate('document.body.innerText.includes("Gravité : Critique")'),true);
+  await controller.click('[data-action=back]');
+  await controller.click('[data-action=dashboard-stock][data-op=ITC-B02]');
+  assert.equal(await controller.evaluate('document.getElementById("ctl-op").value'),'ITC-B02');
+  assert.equal(await controller.evaluate('document.body.innerText.includes("Mission second stock")'),true);
+  assert.equal(await controller.evaluate('document.body.innerText.includes("Urgence magasin")'),false);
+  assert.equal(await controller.evaluate('document.body.innerText.includes("Aucun inventaire clôturé")'),true);
+  assert.equal(await controller.evaluate('document.querySelector(".ctl-conformity-chart") === null'),true);
+  await controller.click('[data-action=open][data-id=other]');
+  assert.equal(await controller.evaluate('document.body.innerText.includes("Mission second stock")'),true);
+  await controller.click('[data-action=back]');
+  await controller.click('[data-action=dashboard-stock][data-op=ITC-B01]');
+  await controller.send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+  const desktop=await controller.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync('.tools/control-dashboard-desktop.png',Buffer.from(desktop.data,'base64'));
   await controller.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await delay(250);
   assert.equal(await controller.evaluate('document.documentElement.scrollWidth <= 390'),true);
   const shot=await controller.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync('.tools/control-mobile.png',Buffer.from(shot.data,'base64'));
-  console.log('PASS: browser inventory creation, freeze, independent counts, manager response, supervisor approval, stock adjustment, closure, all tabs and mobile layout.');
+  console.log('PASS: inventory workflow, controller dashboard metrics, priorities, stock switching, dossier links, empty states, all tabs and mobile layout.');
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{for(const ws of sockets)ws.close();if(chrome)chrome.kill();if(server)server.close();if(environment)await environment.cleanup();});
