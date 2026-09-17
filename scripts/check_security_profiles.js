@@ -3,7 +3,9 @@
 // Usage:
 //   npm run check-security-profiles -- --serviceAccount tools/serviceAccountKey.json
 
-const admin = require("firebase-admin");
+const { initializeApp, cert, getApp, deleteApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getDatabase } = require('firebase-admin/database');
 const fs = require("fs");
 const path = require("path");
 const yargs = require("yargs");
@@ -29,12 +31,12 @@ if (!fs.existsSync(serviceAccountPath)) {
 
 const serviceAccount = require(serviceAccountPath);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+initializeApp({
+  credential: cert(serviceAccount),
   databaseURL: "https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app",
 });
 
-const db = admin.database();
+const db = getDatabase();
 
 function toList(value) {
   if (Array.isArray(value)) return value;
@@ -60,7 +62,7 @@ async function main() {
 
     let authUser = null;
     try {
-      authUser = await admin.auth().getUserByEmail(email);
+      authUser = await getAuth().getUserByEmail(email);
     } catch (error) {
       issues.push(`${email}: absent de Firebase Auth`);
       continue;
@@ -93,7 +95,7 @@ async function main() {
     console.log(`Security profiles OK: ${users.length} app user(s) checked.`);
   }
 
-  await admin.app().delete();
+  await deleteApp(getApp());
 }
 
 main().catch((error) => {

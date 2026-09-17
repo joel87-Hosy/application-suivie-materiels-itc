@@ -3,7 +3,9 @@
 // Usage:
 //   npm run seed-demo-company -- --serviceAccount tools/serviceAccountKey.json
 
-const admin = require("firebase-admin");
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getDatabase } = require('firebase-admin/database');
 const fs = require("fs");
 const path = require("path");
 const yargs = require("yargs");
@@ -37,12 +39,12 @@ if (!fs.existsSync(serviceAccountPath)) {
 
 const serviceAccount = require(serviceAccountPath);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+initializeApp({
+  credential: cert(serviceAccount),
   databaseURL: "https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app",
 });
 
-const db = admin.database();
+const db = getDatabase();
 
 const company = {
   id: argv.companyId,
@@ -152,8 +154,8 @@ async function upsertAuthUser(account, password) {
   const email = account.email.toLowerCase();
   let userRecord;
   try {
-    userRecord = await admin.auth().getUserByEmail(email);
-    userRecord = await admin.auth().updateUser(userRecord.uid, {
+    userRecord = await getAuth().getUserByEmail(email);
+    userRecord = await getAuth().updateUser(userRecord.uid, {
       password,
       displayName: account.name,
       disabled: false,
@@ -161,7 +163,7 @@ async function upsertAuthUser(account, password) {
     console.log("Auth user updated:", email);
   } catch (error) {
     if (error.code !== "auth/user-not-found") throw error;
-    userRecord = await admin.auth().createUser({
+    userRecord = await getAuth().createUser({
       email,
       password,
       displayName: account.name,
@@ -171,7 +173,7 @@ async function upsertAuthUser(account, password) {
     console.log("Auth user created:", email);
   }
 
-  await admin.auth().setCustomUserClaims(userRecord.uid, {
+  await getAuth().setCustomUserClaims(userRecord.uid, {
     role: account.role,
     company_id: company.id,
   });

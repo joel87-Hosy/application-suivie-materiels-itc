@@ -59,17 +59,18 @@ function migrate(root) {
   return result;
 }
 async function main() {
-  const admin = require('firebase-admin');
+  const { initializeApp, cert, getApp, deleteApp } = require('firebase-admin/app');
+  const { getDatabase } = require('firebase-admin/database');
   const argv = require('yargs/yargs')(process.argv.slice(2)).option('apply', {type:'boolean',default:false}).option('serviceAccount', {type:'string',default:'tools/serviceAccountKey.json'}).parse();
-  admin.initializeApp({credential:admin.credential.cert(require(path.resolve(argv.serviceAccount))),databaseURL:'https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app'});
+  initializeApp({credential:cert(require(path.resolve(argv.serviceAccount))),databaseURL:'https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app'});
   try {
-    const ref = admin.database().ref();
+    const ref = getDatabase().ref();
     const original = (await ref.once('value')).val();
     const next = migrate(original);
     const count = name => Object.values(next.itc_data[name] || {}).filter(Boolean).length;
     console.log(JSON.stringify({mode:argv.apply?'apply':'dry-run',records:Object.fromEntries(collections.map(name => [name,count(name)])),profiles:Object.keys(next.auth_profiles).length}));
     if (!argv.apply) return;
-    const liveRules = await admin.database().getRulesJSON();
+    const liveRules = await getDatabase().getRulesJSON();
     const permitsWrites = node => Object.entries(node).some(([key,value]) => key === '.write' ? value !== false : value && typeof value === 'object' && !Array.isArray(value) && permitsWrites(value));
     if (permitsWrites(liveRules)) throw new Error('Client writes must be paused first. Prefer deploy-database-rules --migrate --appUrl <url>.');
     fs.mkdirSync('.security-backups', {recursive:true});
@@ -81,7 +82,7 @@ async function main() {
     }, undefined, false);
     if (!transaction.committed) throw new Error('Data changed during migration. No migration applied; retry during maintenance.');
     console.log('Migration committed atomically; backup saved outside public/.');
-  } finally { await admin.app().delete(); }
+  } finally { await deleteApp(getApp()); }
 }
 if (require.main === module) main().catch(e => {console.error(e.message);process.exitCode=1;});
 module.exports = {migrate};

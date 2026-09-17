@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-const admin = require("firebase-admin");
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getDatabase } = require('firebase-admin/database');
 const yargs = require("yargs/yargs");
 const { hideBin } = require("yargs/helpers");
 
@@ -33,12 +34,12 @@ function loadServiceAccount(path) {
 async function run() {
   const serviceAccount = loadServiceAccount(argv.serviceAccount);
 
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+  initializeApp({
+    credential: cert(serviceAccount),
     databaseURL: argv.databaseURL,
   });
 
-  const db = admin.database();
+  const db = getDatabase();
   const stockRef = db.ref("itc_data/stock");
 
   console.log("Lecture du stock depuis:", "itc_data/stock");

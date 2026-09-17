@@ -3,7 +3,8 @@
 // Usage:
 //   npm run deploy-database-rules -- --serviceAccount tools/serviceAccountKey.json
 
-const admin = require("firebase-admin");
+const { initializeApp, cert, getApp, deleteApp } = require('firebase-admin/app');
+const { getDatabase } = require('firebase-admin/database');
 const fs = require("fs");
 const path = require("path");
 const yargs = require("yargs");
@@ -60,13 +61,13 @@ function stableStringify(value) {
   return JSON.stringify(value);
 }
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+initializeApp({
+  credential: cert(serviceAccount),
   databaseURL: "https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app",
 });
 
 async function main() {
-  const database = admin.database();
+  const database = getDatabase();
   const base = new URL(argv.appUrl.endsWith('/') ? argv.appUrl : argv.appUrl + '/');
   const normalized = text => text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   for (const file of ['index.html', 'assets/secure-store.js', 'assets/profile.js', 'assets/control-core.js', 'assets/stock-control.js', 'assets/stock-control.css']) {
@@ -119,7 +120,7 @@ async function main() {
   }
 
   console.log("Realtime Database rules deployed and verified.");
-  await admin.app().delete();
+  await deleteApp(getApp());
 }
 
 main().catch((error) => {

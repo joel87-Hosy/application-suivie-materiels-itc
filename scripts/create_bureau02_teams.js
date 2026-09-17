@@ -1,16 +1,18 @@
 // Creates the requested team accounts; existing accounts are never reset.
-const admin = require('firebase-admin');
+const { initializeApp, cert, getApp, getApps, deleteApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getDatabase } = require('firebase-admin/database');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const names = ['Flash-Abonné', 'Les Express', 'Équipe Top-Chrono', 'Swift-Tech', 'Alpha-Client', 'Unité Signal', 'Team PTO', 'Lien-Direct', 'Escadron Dernier-Mètre'];
 const usernameFor = name => name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 async function main() {
-  admin.initializeApp({
-    credential: admin.credential.cert(require(path.resolve(process.env.GOOGLE_APPLICATION_CREDENTIALS || 'tools/serviceAccountKey.json'))),
+  initializeApp({
+    credential: cert(require(path.resolve(process.env.GOOGLE_APPLICATION_CREDENTIALS || 'tools/serviceAccountKey.json'))),
     databaseURL: 'https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app',
   });
-  const db = admin.database();
+  const db = getDatabase();
   const users = (await db.ref('itc_data/users').once('value')).val() || {};
   const profiles = Object.values(users).filter(Boolean);
   if (!profiles.some(u => u.company_id === 'COMP-ITC-LEGACY' && (u.managedOps || []).includes('ITC-B02'))) throw new Error('Bureau 02 introuvable');
@@ -28,12 +30,12 @@ async function main() {
       continue;
     }
     const password = crypto.randomBytes(15).toString('base64url') + '!7a';
-    const user = await admin.auth().createUser({email, password, displayName: name});
+    const user = await getAuth().createUser({email, password, displayName: name});
     // Save immediately so a later database failure cannot lose the password.
     credentials.push({equipe: name, username, password, bureau: '02'});
     fs.writeFileSync(output, JSON.stringify(credentials, null, 2) + '\n', {mode: 0o600});
     const security = {uid: user.uid, email, role: 'Technicien', company_id: 'COMP-ITC-LEGACY', is_active: true};
-    await admin.auth().setCustomUserClaims(user.uid, {role: security.role, company_id: security.company_id});
+    await getAuth().setCustomUserClaims(user.uid, {role: security.role, company_id: security.company_id});
     await db.ref().update({
       ['auth_profiles/' + user.uid]: security,
       ['itc_data/users/' + nextKey++]: {...security, id: nextId++, name, full_name: name, username, managedOps: ['ITC-B02', 'MOOV'], temporary_password: null, must_change_password: true, account_status: 'active', created_at: new Date().toISOString()},
@@ -44,4 +46,4 @@ async function main() {
   }
   console.log('Identifiants enregistrés dans tools/comptes-bureau-02.json');
 }
-main().catch(error => {console.error(error.message); process.exitCode = 1;}).finally(async () => {if (admin.apps.length) await admin.app().delete();});
+main().catch(error => {console.error(error.message); process.exitCode = 1;}).finally(async () => {if (getApps().length) await deleteApp(getApp());});

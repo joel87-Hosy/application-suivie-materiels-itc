@@ -3,7 +3,9 @@
 // Usage:
 //   npm run sync-security-profiles -- --serviceAccount tools/serviceAccountKey.json
 
-const admin = require("firebase-admin");
+const { initializeApp, cert, getApp, deleteApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getDatabase } = require('firebase-admin/database');
 const fs = require("fs");
 const path = require("path");
 const yargs = require("yargs");
@@ -29,12 +31,12 @@ if (!fs.existsSync(serviceAccountPath)) {
 
 const serviceAccount = require(serviceAccountPath);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+initializeApp({
+  credential: cert(serviceAccount),
   databaseURL: "https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app",
 });
 
-const db = admin.database();
+const db = getDatabase();
 
 function toList(value) {
   if (Array.isArray(value)) return value;
@@ -47,7 +49,7 @@ async function resolveUid(profile) {
   const email = String(profile.email || "").trim().toLowerCase();
   if (!email) return null;
   try {
-    const userRecord = await admin.auth().getUserByEmail(email);
+    const userRecord = await getAuth().getUserByEmail(email);
     return userRecord.uid;
   } catch (error) {
     console.warn("Auth user not found for profile:", email);
@@ -88,7 +90,7 @@ async function main() {
       is_demo: profile.is_demo === true,
       updated_at: new Date().toISOString(),
     });
-    await admin.auth().setCustomUserClaims(uid, {
+    await getAuth().setCustomUserClaims(uid, {
       role,
       company_id: companyId,
     });
@@ -97,7 +99,7 @@ async function main() {
 
   console.log("Security profiles synced:", synced);
   console.log("Profiles skipped:", skipped);
-  await admin.app().delete();
+  await deleteApp(getApp());
 }
 
 main().catch((error) => {

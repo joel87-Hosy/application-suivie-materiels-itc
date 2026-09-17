@@ -3,7 +3,9 @@
 //   node scripts/create_super_admin.js --password "ChangeMe123!"
 //   node scripts/create_super_admin.js --email admin@system.local --password "ChangeMe123!" --name "SUPER ADMIN"
 
-const admin = require("firebase-admin");
+const { initializeApp, cert, getApp, deleteApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getDatabase } = require('firebase-admin/database');
 const fs = require("fs");
 const path = require("path");
 const yargs = require("yargs");
@@ -48,18 +50,18 @@ if (!fs.existsSync(serviceAccountPath)) {
 
 const serviceAccount = require(serviceAccountPath);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+initializeApp({
+  credential: cert(serviceAccount),
   databaseURL: "https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app",
 });
 
-const db = admin.database();
+const db = getDatabase();
 
 async function getOrCreateAuthUser() {
   const email = String(argv.email || "").trim().toLowerCase();
   try {
-    const existing = await admin.auth().getUserByEmail(email);
-    await admin.auth().updateUser(existing.uid, {
+    const existing = await getAuth().getUserByEmail(email);
+    await getAuth().updateUser(existing.uid, {
       password: argv.password,
       displayName: argv.name,
       disabled: false,
@@ -67,7 +69,7 @@ async function getOrCreateAuthUser() {
     return existing.uid;
   } catch (err) {
     if (err.code !== "auth/user-not-found") throw err;
-    const created = await admin.auth().createUser({
+    const created = await getAuth().createUser({
       email,
       password: argv.password,
       displayName: argv.name,
@@ -82,7 +84,7 @@ async function main() {
   const email = String(argv.email || "").trim().toLowerCase();
   const uid = await getOrCreateAuthUser();
 
-  await admin.auth().setCustomUserClaims(uid, {
+  await getAuth().setCustomUserClaims(uid, {
     role: "SUPER_ADMIN",
     company_id: "PLATFORM",
   });
@@ -133,7 +135,7 @@ async function main() {
   console.log("Role: SUPER_ADMIN");
   console.log("Auth uid:", uid);
   console.log("Temporary password was set from --password.");
-  await admin.app().delete();
+  await deleteApp(getApp());
 }
 
 main().catch((err) => {

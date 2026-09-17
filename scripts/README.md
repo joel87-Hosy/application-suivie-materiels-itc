@@ -9,12 +9,12 @@ Purpose:
 Prerequisites:
 
 - A Firebase service account JSON key. Save it as `serviceAccountKey.json` at the repository root (or pass its path via `--serviceAccount` or `GOOGLE_APPLICATION_CREDENTIALS`).
-- Node.js (14+ recommended).
+- Node.js 22 or 24 (LTS).
 
 Install & run:
 
 ```bash
-npm install
+npm ci
 # Example usage:
 node scripts/create_firebase_user.js --email gest_b02@itc.ci --password Secret123! --name "GESTIONNAIRE BUREAU 02" --managedOps ITC-B02,MOOV
 ```
