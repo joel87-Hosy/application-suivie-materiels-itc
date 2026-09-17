@@ -2,6 +2,10 @@
 (function (global) {
   const config = () => global.ITCPushConfig || {};
   const status = (message, error) => { const el = document.getElementById("push-notification-status"); if (el) { el.textContent = message; el.className = error ? "text-sm text-red-700" : "text-sm text-slate-600"; } };
+  const messageFor = error => {
+    if (error?.code === "PERMISSION_DENIED" || /permission denied/i.test(String(error?.message || ""))) return "Autorisation Firebase manquante : les règles de notifications doivent être déployées par l’administrateur.";
+    return error?.message || "Activation impossible.";
+  };
   const keyFor = async value => { if (global.crypto?.subtle) { const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)); return [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, "0")).join(""); } return btoa(value).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 180); };
   async function storeToken(token) {
     const user = firebase.auth().currentUser;
@@ -23,6 +27,6 @@
     await storeToken(token); status("Notifications activées sur cet appareil, même lorsque l’application est fermée.");
   }
   async function refresh() { if (global.Notification?.permission !== "granted" || !String(config().vapidPublicKey || "").trim() || !firebase.messaging || !firebase.auth().currentUser) return; try { const token = await firebase.messaging().getToken({vapidKey:config().vapidPublicKey,serviceWorkerRegistration:await navigator.serviceWorker.ready}); if (token) await storeToken(token); } catch (error) { console.warn("Push subscription refresh failed", error); } }
-  global.enablePushNotifications = async button => { if (button) button.disabled = true; status("Activation des notifications…"); try { await activate(); } catch (error) { status(error.message || "Activation impossible.", true); } finally { if (button) button.disabled = false; } };
+  global.enablePushNotifications = async button => { if (button) button.disabled = true; status("Activation des notifications…"); try { await activate(); } catch (error) { status(messageFor(error), true); } finally { if (button) button.disabled = false; } };
   global.refreshPushNotifications = refresh;
 })(window);
