@@ -9599,9 +9599,91 @@
                   </div>
               </div>`;
       }
+      function canCurrentUserReviewTechDemande(demande) {
+        const role = secureStore.profile?.role || currentUser?.role;
+        return demande?.workflow === "TECH_BON_SORTIE" &&
+          ["Coordinateur", "Coordinatrice", "Superviseur", "Superviseur Terrain"].includes(role) &&
+          demande.status === "EN ATTENTE COORDINATION" &&
+          (!demande.coordinateurId || Number(demande.coordinateurId) === Number(currentUser?.id));
+      }
+
+      function coordinationItemRow(item, demande) {
+        const op = normalizeOperatorKey(getDemandItemOperator(item, demande));
+        const label = String(item.label || "").trim();
+        const qty = Math.max(1, parseInt(item.qty, 10) || 1);
+        return `<tr class="border-t coord-demand-item" data-label="${escapeHtml(label)}" data-op="${escapeHtml(op)}">
+          <td class="p-2">${escapeHtml(getOperatorMeta(op).label)}</td>
+          <td class="p-2 font-bold">${escapeHtml(label)}</td>
+          <td class="p-2"><input aria-label="Quantité pour ${escapeHtml(label)}" class="coord-demand-qty w-20 border rounded p-2 text-right font-black" type="number" min="1" step="1" value="${qty}"></td>
+          <td class="p-2 text-right"><button type="button" onclick="coordRemoveDemandItem(this)" class="text-red-600 hover:text-red-800" title="Retirer ce matériel"><i class="fas fa-trash"></i><span class="sr-only">Retirer</span></button></td>
+        </tr>`;
+      }
+
+      function coordinationStockOptions(demande) {
+        const allowedOps = new Set(getDemandeOps(demande).map(normalizeOperatorKey));
+        return (appData.stock || []).filter(stock => {
+          const op = normalizeOperatorKey(stock.op);
+          return (allowedOps.size === 0 || allowedOps.has(op)) && Number(stock.qty) > 0 && String(stock.label || "").trim();
+        }).map(stock => `<option value="${escapeHtml(String(stock._dbKey || ""))}">${escapeHtml(getOperatorMeta(normalizeOperatorKey(stock.op)).label)} — ${escapeHtml(stock.label)} (${parseInt(stock.qty, 10) || 0} disponible)</option>`).join("");
+      }
+
+      function coordAddDemandItem() {
+        const select = document.getElementById("coord-add-material");
+        const body = document.getElementById("coord-demand-items");
+        const stock = (appData.stock || []).find(row => String(row._dbKey || "") === String(select?.value || ""));
+        if (!body || !stock) return alert("Choisissez un matériel disponible.");
+        body.insertAdjacentHTML("beforeend", coordinationItemRow({label: stock.label, qty: 1, op: stock.op}, {op: stock.op}));
+      }
+
+      function coordRemoveDemandItem(button) {
+        const row = button?.closest("tr");
+        if (row) row.remove();
+      }
+
+      function getCoordinationEditedItems(demande) {
+        const rows = Array.from(document.querySelectorAll("#coord-demand-items .coord-demand-item"));
+        const items = rows.map(row => ({
+          label: String(row.dataset.label || "").trim(),
+          op: normalizeOperatorKey(row.dataset.op || ""),
+          qty: parseInt(row.querySelector(".coord-demand-qty")?.value, 10),
+        }));
+        if (!items.length) throw new Error("Conservez au moins un matériel dans la demande.");
+        if (items.some(item => !item.label || !item.op || !Number.isInteger(item.qty) || item.qty < 1)) throw new Error("Chaque ligne doit contenir un matériel et une quantité entière supérieure à zéro.");
+        const allowedOps = new Set(getDemandeOps(demande).map(normalizeOperatorKey));
+        if (allowedOps.size && items.some(item => !allowedOps.has(item.op))) throw new Error("Un matériel sélectionné ne correspond pas à l’opérateur de cette demande.");
+        const requested = new Map();
+        for (const item of items) {
+          const key = item.op + "|" + item.label.toUpperCase();
+          requested.set(key, (requested.get(key) || 0) + item.qty);
+        }
+        for (const [key, qty] of requested) {
+          const [op, label] = key.split("|");
+          const stock = (appData.stock || []).find(row => normalizeOperatorKey(row.op) === op && String(row.label || "").trim().toUpperCase() === label);
+          if (!stock || qty > (parseInt(stock.qty, 10) || 0)) throw new Error(`Stock insuffisant pour ${label} (${op}). Disponible : ${parseInt(stock?.qty, 10) || 0}.`);
+        }
+        return items;
+      }
+
+      function sameCoordinationItems(left, right) {
+        const compact = items => (items || []).map(item => ({label:String(item.label || "").trim(), op:normalizeOperatorKey(item.op || ""), qty:parseInt(item.qty, 10) || 0}));
+        return JSON.stringify(compact(left)) === JSON.stringify(compact(right));
+      }
+
+      function coordinationAdjustmentNotice(demande) {
+        const adjustment = Array.isArray(demande?.coordinationAdjustments) ? demande.coordinationAdjustments.at(-1) : null;
+        if (!adjustment) return "";
+        const list = items => (items || []).map(item => `${item.label} × ${item.qty}`).join(", ");
+        return `<div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[9px] text-amber-950 uppercase">
+          <p class="font-black"><i class="fas fa-pen-to-square mr-2"></i>Demande ajustée par ${escapeHtml(adjustment.by || "COORDINATION")}</p>
+          <p class="mt-1">Demandé : ${escapeHtml(list(adjustment.beforeItems))}</p>
+          <p>Validé : ${escapeHtml(list(adjustment.afterItems))}</p>
+        </div>`;
+      }
+
       function openCoordWorkflowDemande(id) {
         const d = (appData.demandes || []).find((x) => x.id === id);
         if (!d) return alert("Demande introuvable.");
+        if (!canCurrentUserReviewTechDemande(d)) return alert("Cette demande n’est pas disponible pour votre validation.");
         const gestionnaires = getGestionnaireUsers();
         const gestOptions = gestionnaires
           .map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`)
@@ -9621,12 +9703,17 @@
             </div>
             <div class="mt-5 border rounded-2xl overflow-hidden">
               <table class="w-full text-[9px] uppercase">
-                <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Operateur</th><th class="p-2 text-left">Designation</th><th class="p-2 text-right">Qte</th></tr></thead>
-                <tbody>
-                  ${(d.items || []).map((item) => `<tr class="border-t"><td class="p-2">${escapeHtml(getOperatorMeta(getDemandItemOperator(item, d)).label)}</td><td class="p-2">${escapeHtml(item.label)}</td><td class="p-2 text-right font-black">${parseInt(item.qty) || 0}</td></tr>`).join("")}
+                <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Operateur</th><th class="p-2 text-left">Designation</th><th class="p-2 text-right">Qte validée</th><th class="p-2"></th></tr></thead>
+                <tbody id="coord-demand-items">
+                  ${(d.items || []).map((item) => coordinationItemRow(item, d)).join("")}
                 </tbody>
               </table>
             </div>
+            <div class="mt-3 flex gap-2 items-end flex-wrap">
+              <label class="flex-1 min-w-[220px] text-[8px] text-slate-400 uppercase">Ajouter un matériel disponible<select id="coord-add-material" class="mt-1 w-full border-2 p-3 rounded-xl text-xs bg-white"><option value="">Choisir un matériel</option>${coordinationStockOptions(d)}</select></label>
+              <button type="button" onclick="coordAddDemandItem()" class="bg-indigo-100 text-indigo-800 px-4 py-3 rounded-xl text-[9px] uppercase font-black"><i class="fas fa-plus mr-1"></i> Ajouter</button>
+            </div>
+            <p class="mt-2 text-[8px] text-slate-500 uppercase">Vérifiez les quantités avant signature. Toute modification est conservée dans l’historique du bon.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
               <div>
                 <label class="text-[8px] text-slate-400 uppercase">Gestionnaire destinataire</label>
@@ -9646,10 +9733,22 @@
       async function coordSignAndSendDemande(id) {
         const d = (appData.demandes || []).find((x) => x.id === id);
         if (!d) return alert("Demande introuvable.");
+        if (!canCurrentUserReviewTechDemande(d)) return alert("Cette demande n’est plus disponible pour votre validation.");
         const managerSelect = document.getElementById("coord-assign-gestionnaire");
         const managerId = managerSelect ? parseInt(managerSelect.value, 10) : null;
         const signature = getFormTextValue("coord-signature");
         if (!managerId || !signature) return alert("Choisissez un gestionnaire et signez le bon.");
+        let editedItems;
+        try { editedItems = getCoordinationEditedItems(d); }
+        catch (error) { return alert(error.message || "Impossible de valider les matériels."); }
+        const initialItems = (d.items || []).map(item => ({label:item.label, op:normalizeOperatorKey(getDemandItemOperator(item, d)), qty:parseInt(item.qty, 10) || 0}));
+        const wasAdjusted = !sameCoordinationItems(initialItems, editedItems);
+        if (wasAdjusted) {
+          d.coordinationAdjustments = Array.isArray(d.coordinationAdjustments) ? d.coordinationAdjustments : [];
+          d.coordinationAdjustments.push({at:new Date().toISOString(), byId:currentUser?.id || null, by:currentUser?.name || "COORDINATION", beforeItems:initialItems, afterItems:editedItems});
+          d.items = editedItems;
+          d.coordinationItemsAdjustedAt = new Date().toISOString();
+        }
         d.assignedGestionnaireId = managerId;
         d.assignedGestionnaireName = gestionnaireNameById(managerId) || "";
         d.coordinationSignatureText = signature;
@@ -9658,7 +9757,7 @@
         d.status = "EN ATTENTE GESTIONNAIRE";
         d.statut = "EN ATTENTE GESTIONNAIRE";
         addNotification(managerId, `BON A VALIDER : ${d.id} signe par ${currentUser?.name || "COORDINATION"}`);
-        addNotification(d.demandeurOriginalId, `VOTRE BON ${d.id} A ETE SIGNE PAR LA COORDINATION.`);
+        addNotification(d.demandeurOriginalId, wasAdjusted ? `VOTRE BON ${getBonReference(d)} A ETE AJUSTE ET SIGNE PAR LA COORDINATION.` : `VOTRE BON ${getBonReference(d)} A ETE SIGNE PAR LA COORDINATION.`);
         if (!(await save())) return;
         alert("BON ENVOYE AU GESTIONNAIRE.");
         showSection("cockpit");
@@ -10135,6 +10234,7 @@
               <p class="text-[9px] uppercase"><b>Operateur(s) :</b> ${escapeHtml(formatDemandeOps(d))}</p>
               <p class="text-[9px] uppercase md:col-span-2"><b>Motif :</b> ${escapeHtml(d.motif || "")}</p>
             </div>
+            ${coordinationAdjustmentNotice(d)}
             <div class="mt-5 border rounded-2xl overflow-hidden">
               <table class="w-full text-[9px] uppercase">
                 <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Operateur</th><th class="p-2 text-left">Designation</th><th class="p-2 text-right">Qte</th></tr></thead>
