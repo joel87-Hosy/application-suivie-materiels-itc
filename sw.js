@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v13-voice-responsiveness";
+const CACHE_NAME = "itc-gestion-materiels-v14-bon-references";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const APP_SHELL = [
   "./assets/assistant-knowledge.js",
   "./assets/assistant-reports.js",
   "./assets/voice-assistant.js",
+  "./assets/bon-reference.js",
   "./assets/stock-control.css",
   "./offline.html",
   "./privacy.html",

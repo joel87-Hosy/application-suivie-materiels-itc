@@ -1662,6 +1662,7 @@
     <script src="assets/assistant-knowledge.js"></script>
     <script src="assets/assistant-reports.js"></script>
     <script src="assets/voice-assistant.js"></script>
+    <script src="assets/bon-reference.js"></script>
     <script>
       let currentSectionId = "cockpit"; // Par défaut on est sur le cockpit
       // CONFIGURATION FIREBASE
@@ -2160,6 +2161,47 @@
               .filter(Boolean),
           ),
         ];
+      }
+
+      function getBonReference(bon) {
+        return BonReference.format(bon,{data:appData});
+      }
+      function bonServiceField(id, selected='') {
+        return `<label class="block text-xs font-bold">Service émetteur<select id="${id}" required class="w-full border-2 p-3 rounded-xl text-xs bg-white"><option value="">Choisir le service</option>${Object.entries(BonReference.services).map(([code,name])=>`<option value="${code}" ${code===selected?'selected':''}>${escapeHtml(name)} (${code})</option>`).join('')}</select></label>`;
+      }
+      function canAssignBonService(bon) {
+        if (!bon || bon.company_id !== secureStore.profile?.company_id) return false;
+        if (secureStore.profile?.role === 'Superviseur') return true;
+        return secureStore.profile?.role === 'Gestionnaire' && canCurrentUserManageSortie(bon);
+      }
+      function bonServiceEditor(bon,kind) {
+        if(!canAssignBonService(bon))return '';
+        const service=BonReference.resolve(bon,appData).serviceAbbreviation || '';
+        const key=encodeURIComponent(String(bon._dbKey || bon.id)).replace(/'/g,'%27');
+        return `<label class="block text-xs mt-2">Service émetteur<select aria-label="Service émetteur du bon" class="border rounded p-2 ml-2 bg-white" onchange="saveBonService('${kind}','${key}',this)"><option value="">À renseigner</option>${Object.entries(BonReference.services).map(([code,name])=>`<option value="${code}" ${service===code?'selected':''}>${escapeHtml(name)} (${code})</option>`).join('')}</select></label>`;
+      }
+      async function saveBonService(kind,keyEncoded,select) {
+        if(!['sorties','demandes'].includes(kind))return;
+        const key=decodeURIComponent(keyEncoded),service=select.value;
+        const bon=(appData[kind] || []).find(r=>(r._dbKey || r.id)===key);
+        if(!canAssignBonService(bon) || !BonReference.services[service]) {alert('Choisissez un service autorisé : B2B, DEP ou MAIN.');return;}
+        const related=kind==='demandes'?(appData.sorties || []).filter(r=>r.company_id===bon.company_id && (r.sourceDemandeId===bon.id || (bon.sortieId && r.id===bon.sortieId))):(appData.demandes || []).filter(r=>r.company_id===bon.company_id && (r.id===bon.sourceDemandeId || r.sortieId===bon.id));
+        const targets=[{kind,bon},...related.map(bon=>({kind:kind==='demandes'?'sorties':'demandes',bon}))];
+        if(targets.some(t=>!t.bon._dbKey || !canAssignBonService(t.bon))) {alert('Le bon lié est indisponible ou hors de votre périmètre.');return;}
+        select.disabled=true;
+        try {
+          const updates={},at=new Date().toISOString();
+          for(const t of targets) {
+            const path=`itc_data/${t.kind}/${t.bon._dbKey}`;
+            updates[path+'/serviceAbbreviation']=service;
+            updates[path+'/serviceAssignedAt']=at;
+            updates[path+'/serviceAssignedBy']=secureStore.uid;
+          }
+          await db.ref().update(updates);
+          targets.forEach(t=>{t.bon.serviceAbbreviation=service;});
+          showSection(currentSectionId);
+        } catch(error) {select.value=bon.serviceAbbreviation || '';alert('Service non enregistré : '+error.message);}
+        finally {select.disabled=false;}
       }
 
       function formatDemandeOps(demande) {
@@ -4476,6 +4518,7 @@
                               </datalist>
                           </div>
                           <div class="md:col-span-2">
+                              ${bonServiceField("s-service",saved.serviceAbbreviation)}
                               <label class="text-[8px] text-slate-400 uppercase">Référence du Bon Physique / Motif</label>
                               <input id="s-ref" type="text" list="sortie-references-list" class="w-full border-2 p-3 rounded-xl text-xs uppercase" placeholder="EX: BON N°123 - CHANTIER ABOBO" required />
                               <p class="mt-1 text-[7px] text-slate-400 uppercase">Liste filtree selon les stocks dedies selectionnes</p>
@@ -4585,6 +4628,8 @@
           alert("Accès refusé pour cet opérateur.");
           return;
         }
+        const serviceAbbreviation = getFormTextValue("s-service");
+        if (!BonReference.services[serviceAbbreviation]) return alert("Choisissez le service : B2B, DEP ou MAIN.");
         const ref = getFormTextValue("s-ref");
         const tech = getFormTextValue("s-tech");
         const emetteur = getFormTextValue("s-emetteur");
@@ -4656,6 +4701,7 @@
         if (!appData.sorties) appData.sorties = [];
         const sortieRecord = {
           id: `SORTIE-${Date.now()}`,
+          serviceAbbreviation,
           ref,
           op: selectedOps.join("/"),
           ops: selectedOps,
@@ -4674,7 +4720,7 @@
         rememberSortieEmetteur(emetteur, selectedOps);
         rememberSortieDestinataire(tech, selectedOps);
         rememberSortieReference(ref, selectedOps);
-        sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
+        sortieRecord.pdfName = `Bon_Sortie_${getBonReference(sortieRecord)}.pdf`;
         appData.sorties.push(sortieRecord);
         if (!(await save())) return; // Sauvegarde Firebase
         localStorage.removeItem("draft_sortie");
@@ -5728,13 +5774,13 @@
                   "</div>",
               );
               parts.push(
-                '<div class="text-[8px] text-red-600 font-black mt-1">' +
-                  escapeHtml(String(s.pdfName || `Bon_Sortie_${s.id}.pdf`)) +
+                '<div class="text-[8px] text-red-600 font-black mt-1 break-all">' +
+                  escapeHtml(`Bon_Sortie_${getBonReference(s)}.pdf`) +
                   "</div>",
               );
               parts.push(
-                '<div class="text-[9px] text-slate-600">ID: ' +
-                  escapeHtml(String(s.id || "-")) +
+                '<div class="text-[9px] text-slate-600 break-words">Code : ' +
+                  escapeHtml(getBonReference(s)) +
                   " | Operateur: " +
                   escapeHtml(String(s.op || "-")) +
                   " | Destinataire: " +
@@ -5765,6 +5811,7 @@
                 );
               }
 
+              parts.push(bonServiceEditor(s,"sorties"));
               const items = getSortieItems(s) || [];
               if (items.length > 0) {
                 parts.push('<ul class="mt-2 text-[9px] list-disc pl-4">');
@@ -6098,6 +6145,10 @@
 
         let y = doc.lastAutoTable.finalY + 6;
         doc.setFontSize(8);
+        const referenceLines = doc.splitTextToSize(`Code : ${getBonReference(sortie)}`, pageWidth - margin * 2);
+        doc.text(referenceLines, margin, y);
+        y += referenceLines.length * 4 + 4;
+        doc.setFontSize(8);
         doc.text(
           "Pour etre dans les delais, toutes les demandes doivent etre formulees deux (02) semaines avant la date de livraison",
           margin,
@@ -6116,7 +6167,7 @@
         y += 10;
 
         doc.setFontSize(9);
-        doc.text("Service/Departement : LOGISTIQUE", margin, y);
+        doc.text(`Service/Departement : ${BonReference.resolve(sortie,appData).serviceAbbreviation || "NON RENSEIGNE"}`, margin, y);
         doc.text(`Emetteur : ${emetteur}`, 105, y);
         y += 7;
         doc.text(`Fonction : ${receiverRole}`, margin, y);
@@ -6238,7 +6289,7 @@
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         await drawSortieBonBesoinPdf(doc, s);
-        doc.save(`Bon_Sortie_${s.id}.pdf`);
+        doc.save(`Bon_Sortie_${getBonReference(s)}.pdf`);
       }
 
       async function exportSortieRefPDF(refKeyEncoded) {
@@ -6285,7 +6336,9 @@
 
           doc.setFontSize(10);
           doc.text(`Sortie ${idx + 1}`, 14, cursorY);
-          doc.text(`ID: ${s.id}`, 14, cursorY + 6);
+          doc.setFontSize(7);
+          doc.text(`Code : ${getBonReference(s)}`, 14, cursorY + 6, {maxWidth:180});
+          doc.setFontSize(10);
           doc.text(`Date: ${s.date}`, 14, cursorY + 12);
           doc.text(`Opérateur: ${s.op}`, 14, cursorY + 18);
           doc.text(`${s.equipe ? "Equipe" : "Destinataire"}: ${getBonEquipeName(s)}`, 14, cursorY + 24);
@@ -6324,7 +6377,9 @@
           doc.setFontSize(12);
           doc.text(`Rapport de Sortie - ${s.ref}`, 14, 20);
           doc.setFontSize(10);
-          doc.text(`ID: ${s.id}`, 14, 28);
+          doc.setFontSize(7);
+          doc.text(`Code : ${getBonReference(s)}`, 14, 28, {maxWidth:180});
+          doc.setFontSize(10);
           doc.text(`Date: ${s.date}`, 14, 34);
           doc.text(`Opérateur: ${s.op}`, 14, 40);
           doc.text(`${s.equipe ? "Equipe" : "Destinataire"}: ${getBonEquipeName(s)}`, 14, 46);
@@ -7325,6 +7380,7 @@
           tech: document.getElementById("s-tech")?.value,
           emetteur: document.getElementById("s-emetteur")?.value,
           ref: document.getElementById("s-ref")?.value,
+          serviceAbbreviation: document.getElementById("s-service")?.value,
           dateBon: document.getElementById("s-date-bon")?.value,
           items: items,
         };
@@ -8839,9 +8895,9 @@
                                 (bs) => `
                             <div class="bg-slate-50 p-5 rounded-2xl border border-slate-100 flex justify-between items-center hover:shadow-md transition duration-200 gap-3 flex-wrap">
                               <div>
-                                  <p class="text-indigo-900 font-black text-sm">
+                                  <p class="text-indigo-900 font-black text-sm break-all">
                                       <span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[8px] mr-2">BS</span>
-                                      ${bs.id}
+                                      ${escapeHtml(getBonReference(bs))}
                                   </p>
 
                                   <p class="text-[8px] uppercase text-orange-500 font-bold mt-1">
@@ -8949,10 +9005,10 @@
                           <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-emerald-300 transition">
                             <div class="flex justify-between items-start gap-3 flex-wrap">
                               <div>
-                                <p class="font-black text-slate-900 text-[11px] uppercase"><i class="fas fa-file-signature text-emerald-600 mr-2"></i>${escapeHtml(bon.id)} - ${escapeHtml(bon.demandeurName || "")}</p>
+                                <p class="font-black text-slate-900 text-[11px] break-all"><i class="fas fa-file-signature text-emerald-600 mr-2"></i>${escapeHtml(getBonReference(bon))}${bon.demandeurName || bon.tech ? " - " + escapeHtml(bon.demandeurName || bon.tech) : ""}</p>
                                 <p class="text-[8px] text-slate-500 uppercase mt-1">Role signature : ${escapeHtml(role)} | Statut : ${escapeHtml(bon.status || "")}</p>
                                 <p class="text-[8px] text-slate-500 uppercase mt-1">Operateur(s) : ${escapeHtml(formatDemandeOps(bon))}</p>
-                                <p class="text-[8px] text-orange-600 uppercase mt-1">Motif : ${escapeHtml(bon.motif || bon.ref || "")}</p>
+                                <p class="text-[8px] text-orange-600 uppercase mt-1">Motif : ${escapeHtml(bon.motif || bon.ref || "")}</p>${bonServiceEditor(bon,bon.historySource === "SORTIE" ? "sorties" : "demandes")}
                               </div>
                               <button onclick="${bon.historySource === "SORTIE" ? "exportSortiePDF" : "downloadPDF"}('${bon.id}')" class="bg-emerald-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-emerald-700 transition inline-flex items-center gap-2">
                                 <i class="fas fa-file-pdf"></i> PDF
@@ -9030,6 +9086,7 @@
                               </select>
                           </div>
                           <div class="md:col-span-2">
+                              ${bonServiceField("t-service")}
                               <label class="text-[8px] text-slate-400 uppercase">Reference du bon / Motif</label>
                               <input id="t-objectif" type="text" list="tech-references-list" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="EX: BON N 123 - CHANTIER ABOBO" required />
                               <p class="mt-1 text-[7px] text-slate-400 uppercase">Liste filtree selon les stocks dedies selectionnes</p>
@@ -9372,6 +9429,8 @@
 
       async function handleTechSubmit(e) {
         e.preventDefault();
+        const serviceAbbreviation = getFormTextValue("t-service");
+        if (!BonReference.services[serviceAbbreviation]) return alert("Choisissez le service : B2B, DEP ou MAIN.");
         const pickedItems = getSelectedTechItemsFromPicker();
         const manualItems = getManualTechDemandeItems();
         const items = pickedItems.length ? pickedItems : manualItems;
@@ -9398,8 +9457,9 @@
           const now = new Date().toLocaleString();
           const motif = getFormTextValue("t-objectif");
           const d = {
-            id: "BS-" + Date.now().toString().slice(-4),
+            id: "BS-" + Date.now().toString(),
             workflow: "TECH_BON_SORTIE",
+            serviceAbbreviation,
             demandeurOriginalId: currentUser.id,
             demandeurName: currentUser.username ? currentUser.name : getFormTextValue("t-nom"),
             receptionnaireNom: getFormTextValue("t-nom"),
@@ -9426,7 +9486,7 @@
           if (!appData.demandes) appData.demandes = [];
           appData.demandes.unshift(d);
           rememberTechDemandeReference(motif, ops);
-          addNotification(assignedCoordinateurId, `DEMANDE A SIGNER : ${d.id} - ${d.demandeurName}`);
+          addNotification(assignedCoordinateurId, `DEMANDE A SIGNER : ${getBonReference(d)} - ${d.demandeurName}`);
           if (!(await save())) return;
           alert("DEMANDE TRANSMISE AU COORDINATEUR / SUPERVISEUR.");
           showSection("cockpit");
@@ -9548,7 +9608,7 @@
           <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
             <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-orange-700 via-amber-600 to-yellow-500 text-white">
               <p class="text-[8px] tracking-[0.2em] opacity-80">VALIDATION COORDINATION</p>
-              <h3 class="mt-1 uppercase text-xl font-black"><i class="fas fa-file-signature mr-2"></i>${escapeHtml(d.id)} - Bon de sortie</h3>
+              <h3 class="mt-1 uppercase text-xl font-black"><i class="fas fa-file-signature mr-2"></i>${escapeHtml(getBonReference(d))} - Bon de sortie</h3>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-5 rounded-2xl border">
               <p class="text-[9px] uppercase"><b>${d.equipe ? "Équipe" : "Receptionnaire"} :</b> ${escapeHtml(getBonEquipeName(d))}</p>
@@ -9653,7 +9713,7 @@
         });
 
         const c = {
-          id: "BS-" + Date.now().toString().slice(-4),
+          id: "BS-" + Date.now().toString(),
           demandeurOriginalId: tech.technicienId,
           demandeurName: tech.technicienNom,
           coordinateurNom: currentUser.name, // Nom de la coordinatrice connectée
@@ -10016,7 +10076,7 @@
                           <div class="bg-slate-50 p-4 rounded-2xl border hover:border-amber-300 transition shadow-sm">
                               <div class="flex items-center justify-between gap-3 flex-wrap">
                                 <div>
-                                  <p class="font-black text-indigo-900 flex items-center gap-2"><i class="fas fa-file-signature text-indigo-500"></i>${d.id} | ${d.demandeurName}</p>
+                                  <p class="font-black text-indigo-900 flex items-center gap-2"><i class="fas fa-file-signature text-indigo-500"></i>${escapeHtml(getBonReference(d))} | ${escapeHtml(d.demandeurName)}</p>
                                   <p class="text-[7px] text-orange-600 uppercase italic mt-1">MOTIF : ${d.motif || "NON PRÉCISÉ"}</p>
                                   <p class="text-[7px] text-slate-500 uppercase mt-1">Opérateur : ${escapeHtml(getOperatorMeta(d?.op || "ITC").label)}</p>
                                 </div>
@@ -10063,7 +10123,7 @@
           <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
             <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-amber-700 via-orange-600 to-amber-500 text-white">
               <p class="text-[8px] tracking-[0.2em] opacity-80">VALIDATION GESTIONNAIRE</p>
-              <h3 class="mt-1 uppercase text-xl font-black"><i class="fas fa-clipboard-check mr-2"></i>${escapeHtml(d.id)} - Bon de sortie</h3>
+              <h3 class="mt-1 uppercase text-xl font-black"><i class="fas fa-clipboard-check mr-2"></i>${escapeHtml(getBonReference(d))} - Bon de sortie</h3>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-5 rounded-2xl border">
               <p class="text-[9px] uppercase"><b>${d.equipe ? "Équipe" : "Receptionnaire"} :</b> ${escapeHtml(getBonEquipeName(d))}</p>
@@ -10146,7 +10206,7 @@
                           (d) => `
                           <div class="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border hover:border-green-300 transition shadow-sm gap-3 flex-wrap">
                               <div>
-                                <p class="text-xs text-slate-800"><i class="fas fa-receipt text-green-600 mr-2"></i>${d.id} - ${d.demandeurName}</p>
+                                <p class="text-xs text-slate-800"><i class="fas fa-receipt text-green-600 mr-2"></i>${escapeHtml(getBonReference(d))} - ${escapeHtml(d.demandeurName)}</p>
                                 <p class="text-[8px] text-slate-500 mt-1 uppercase">${escapeHtml(getOperatorMeta(d?.op || "ITC").label)} • ${Array.isArray(d.items) ? d.items.length : 0} ligne(s)</p>
                               </div>
                               <button onclick="validerLivraison('${d.id}')" class="bg-green-600 text-white px-4 py-2 rounded-lg text-[9px] uppercase inline-flex items-center gap-2 hover:bg-green-700 transition"><i class="fas fa-check-circle"></i>Confirmer Sortie</button>
@@ -10161,6 +10221,13 @@
 
       async function finalSortie(id) {
         const d = appData.demandes.find((x) => x.id === id);
+        if (!d) return alert("Bon introuvable.");
+        if (!BonReference.services[d.serviceAbbreviation]) {
+          const service = String(window.prompt("Service emetteur du bon : B2B, DEP (Deploiement) ou MAIN (Maintenance)") || "").trim().toUpperCase();
+          if (!service) return;
+          if (!BonReference.services[service]) return alert("Service invalide : utilisez B2B, DEP ou MAIN.");
+          d.serviceAbbreviation = service;
+        }
         if (d?.workflow === "TECH_BON_SORTIE") {
           let stockInsuffisant = false;
           (d.items || []).forEach((i) => {
@@ -10206,7 +10273,7 @@
               createdBy: currentUser ? currentUser.name : "GESTIONNAIRE",
               sourceDemandeId: d.id,
             };
-            sortieRecord.pdfName = `Bon_Sortie_${sortieRecord.id}.pdf`;
+            sortieRecord.pdfName = `Bon_Sortie_${getBonReference(sortieRecord)}.pdf`;
             d.sortieId = sortieRecord.id;
             d.pdfName = sortieRecord.pdfName;
             appData.sorties.push(sortieRecord);
@@ -11262,7 +11329,7 @@
         const d = appData.demandes.find((x) => x.id === id);
         if (d?.workflow === "TECH_BON_SORTIE") {
           await drawSortieBonBesoinPdf(doc, d);
-          doc.save(`BS_ITC_${d.id}.pdf`);
+          doc.save(`Bon_Sortie_${getBonReference(d)}.pdf`);
           return;
         }
 
@@ -11283,6 +11350,9 @@
 
             doc.setFontSize(16);
             doc.text("BON DE SORTIE MATÉRIEL", 105, 22, { align: "center" });
+
+            doc.setFontSize(8);
+            doc.text(doc.splitTextToSize(`Code : ${getBonReference(d)}`, 180), 15, 43);
 
             doc.autoTable({
               startY: 85,
@@ -11325,7 +11395,7 @@
               didDrawCell: d.status === "LIVREE" ? drawValidatedStamp : undefined,
             });
 
-            doc.save(`BS_ITC_${d.id}.pdf`);
+            doc.save(`Bon_Sortie_${getBonReference(d)}.pdf`);
           } catch (e) {
             alert("Erreur PDF : vérifiez que le logo est accessible.");
           }

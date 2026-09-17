@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict');
+const B=require('../assets/bon-reference');
+const record={id:'SORTIE-1788262231772',company_id:'A',serviceAbbreviation:'DEP',ref:'Chantier Abobo',dateBon:'2026-09-17',date:'17/09/2026 10:30:00'};
+const before=JSON.stringify(record);
+assert.match(B.format(record),/^DEP-CHANTIER-ABOBO-20260917-SORTIE[A-Z0-9]+$/);
+assert.equal(JSON.stringify(record),before);
+assert.notEqual(B.format(record),B.format({...record,id:'SORTIE-1788262231773'}));
+assert.equal(B.dateCode('31/02/2026'),'');assert.equal(B.dateCode('2026-09-17T23:00:00-03:00'),'20260917');
+assert.match(B.format({...record,serviceAbbreviation:'',ref:'',dateBon:'',date:''}),/^SERVICE-NR-MOTIF-NR-DATE-NR-/);
+assert.match(B.format({...record,serviceAbbreviation:'ÉTU',ref:'<script>alert(1)</script>'}),/^ETU-SCRIPT-ALERT-1-SCRIPT-/);
+const demande={id:'BS-1234',company_id:'A',workflow:'TECH_BON_SORTIE',status:'LIVREE',motif:'Maintenance',date:'01/09/2026',dateLivraison:'17/09/2026',sortieId:record.id};
+const sortie={...record,sourceDemandeId:demande.id,motif:demande.motif};
+const data={demandes:[demande],sorties:[sortie]};
+assert.equal(B.format(demande,{data}),B.format(sortie,{data}));
+assert.match(B.format({...demande,status:'PRET',sortieId:null}),/EN-ATTENTE/);
+assert.notEqual(B.format({...demande,company_id:'B'},{data}),B.format(sortie,{data}));
+console.log('PASS: department/motif/date references, legacy dates, linked demand and sortie, company isolation, stable distinct suffix and unchanged source records.');
