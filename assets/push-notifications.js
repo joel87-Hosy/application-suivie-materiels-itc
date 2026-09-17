@@ -5,8 +5,13 @@
   const keyFor = async value => { if (global.crypto?.subtle) { const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)); return [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, "0")).join(""); } return btoa(value).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 180); };
   async function storeToken(token) {
     const user = firebase.auth().currentUser;
-    if (!user || !global.currentUser?.company_id) throw new Error("Connectez-vous avant d’activer les notifications.");
-    await firebase.database().ref("push_subscriptions/" + user.uid + "/" + await keyFor(token)).set({token, company_id: global.currentUser.company_id, updatedAt: new Date().toISOString(), platform: navigator.userAgent.slice(0, 180)});
+    if (!user) throw new Error("Connectez-vous avant d’activer les notifications.");
+    // This script is loaded before the application’s module variables. Read the
+    // authenticated profile directly instead of relying on window.currentUser.
+    const profile = (await firebase.database().ref("auth_profiles/" + user.uid).once("value")).val();
+    const companyId = String(profile?.company_id || "").trim();
+    if (!companyId) throw new Error("Votre entreprise n’est pas renseignée. Contactez un superviseur.");
+    await firebase.database().ref("push_subscriptions/" + user.uid + "/" + await keyFor(token)).set({token, company_id: companyId, updatedAt: new Date().toISOString(), platform: navigator.userAgent.slice(0, 180)});
   }
   async function activate() {
     const vapidKey = String(config().vapidPublicKey || "").trim();
