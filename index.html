@@ -18,6 +18,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-messaging-compat.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
@@ -1663,6 +1664,8 @@
     <script src="assets/assistant-reports.js"></script>
     <script src="assets/voice-assistant.js"></script>
     <script src="assets/bon-reference.js"></script>
+    <script src="assets/push-config.js"></script>
+    <script src="assets/push-notifications.js"></script>
     <script>
       let currentSectionId = "cockpit"; // Par défaut on est sur le cockpit
       // CONFIGURATION FIREBASE
@@ -12370,6 +12373,7 @@
 
       // Appelé après chaque connexion réussie — réinitialise et ouvre l'assistant
       function onUserLogin() {
+        refreshPushNotifications?.();
         stopVoiceAssistant();
         // Réinitialiser l'historique avec le message d'accueil personnalisé
         chatAssistantState.messages = [getChatAssistantGreeting()];

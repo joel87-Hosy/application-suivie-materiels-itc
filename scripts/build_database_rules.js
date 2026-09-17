@@ -33,6 +33,13 @@ rules.tenant_settings = {'$companyId': {
   '.read': `${admin} || (${member} && ${company} === $companyId)`,
   '$field': {'.write': `${admin} || (${member} && ${company} === $companyId && ${staff})`},
 }};
+rules.push_subscriptions = {'$uid': {
+  '.read': `auth != null && (auth.uid === $uid || ${admin})`,
+  '$device': {
+    '.write': `auth != null && auth.uid === $uid`,
+    '.validate': "newData.hasChildren(['token','company_id','updatedAt']) && newData.child('token').isString() && newData.child('token').val().length <= 4096 && newData.child('company_id').val() === root.child('auth_profiles').child(auth.uid).child('company_id').val() && newData.child('updatedAt').isString()",
+  },
+}};
 rules.itc_data = {};
 for (const name of ['stock', 'stockMovements', 'sorties', 'demandes', 'techDemandes', 'retours', 'notifications', 'consumptionArchives', 'platformAuditLogs']) {
   let permission = ['stock', 'sorties', 'consumptionArchives'].includes(name) ? managers : staff;

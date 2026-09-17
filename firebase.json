@@ -2,6 +2,9 @@
   "database": {
     "rules": "database.rules.json"
   },
+  "functions": [
+    { "source": "functions", "codebase": "notifications" }
+  ],
   "emulators": {
     "database": { "host": "127.0.0.1", "port": 9000 },
     "ui": { "enabled": false },

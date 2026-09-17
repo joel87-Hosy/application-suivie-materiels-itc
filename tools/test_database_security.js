@@ -57,6 +57,12 @@ async function main() {
   await assertSucceeds(tech.ref('itc_data/notifications/n').set({company_id:'A',actorUid:'tech',userId:1,message:'Request sent',lu:false}));
   await assertSucceeds(tech.ref('itc_data/notifications/n/lu').set(true));
   await assertFails(tech.ref('itc_data/notifications/n/message').set('Forged audit'));
+  const pushDevice={token:'web-push-token',company_id:'A',updatedAt:'2026-09-17T08:00:00.000Z'};
+  await assertSucceeds(tech.ref('push_subscriptions/tech/device').set(pushDevice));
+  await assertSucceeds(tech.ref('push_subscriptions/tech/device').once('value'));
+  await assertFails(manager.ref('push_subscriptions/tech/device').once('value'));
+  await assertFails(manager.ref('push_subscriptions/tech/forged').set(pushDevice));
+  await assertFails(tech.ref('push_subscriptions/tech/wrong-company').set({...pushDevice,company_id:'B'}));
   await assertFails(tech.ref('itc_data/demandes/other/status').set('approved'));
   await assertSucceeds(admin.ref('itc_data/stock').once('value'));
   const techStore = new SecureStore(tech,()=>{},error=>{throw error;});

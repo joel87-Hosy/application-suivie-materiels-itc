@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v14-bon-references";
+const CACHE_NAME = "itc-gestion-materiels-v15-web-push";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,6 +10,8 @@ const APP_SHELL = [
   "./assets/assistant-reports.js",
   "./assets/voice-assistant.js",
   "./assets/bon-reference.js",
+  "./assets/push-config.js",
+  "./assets/push-notifications.js",
   "./assets/stock-control.css",
   "./offline.html",
   "./privacy.html",
@@ -49,6 +51,20 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
+});
+
+importScripts("https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/9.17.1/firebase-messaging-compat.js");
+importScripts("./assets/push-config.js");
+firebase.initializeApp({apiKey:"AIzaSyD7P-6vY3yHQx7OFCs6th6gN6EURP89QUQ",authDomain:"itc-erp.firebaseapp.com",projectId:"itc-erp",messagingSenderId:"870100539481",appId:"1:870100539481:web:e12d817a9a44e867e97948"});
+firebase.messaging().onBackgroundMessage(payload => {
+  const data = payload.data || {};
+  return self.registration.showNotification(data.title || "ITC Gestion Matériels", {body:data.body || "Nouvelle notification.",icon:"./assets/pwa-icon-192.png",badge:"./assets/pwa-icon-192.png",tag:data.notificationId || "itc-notification",renotify:true,silent:false,data:{url:data.url || "./index.html"}});
+});
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const url = event.notification.data?.url || "./index.html";
+  event.waitUntil(clients.matchAll({type:"window",includeUncontrolled:true}).then(windows => windows[0] ? windows[0].focus() : clients.openWindow(url)));
 });
 
 self.addEventListener("fetch", (event) => {

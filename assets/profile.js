@@ -27,7 +27,11 @@ function renderMonProfil(container) {
       <label class="flex gap-2 text-sm"><input type="checkbox" onchange="this.form.querySelectorAll('[autocomplete*=password]').forEach(input => input.type = this.checked ? 'text' : 'password')">Afficher les mots de passe</label>
       <button class="bg-indigo-600 text-white rounded-xl px-5 py-3">Changer mon mot de passe</button>
       <p id="profile-password-status" role="status" aria-live="polite"></p>
-    </form></section></div>`;
+    </form></section>
+    <section class="bg-white rounded-2xl p-6 border space-y-3"><h3 class="font-bold text-lg">Notifications sur cet appareil</h3>
+    <p class="text-sm text-slate-600">Recevez une notification système lorsque l’application est fermée : bon à signer, à valider ou matériel disponible.</p>
+    <button type="button" onclick="enablePushNotifications(this)" class="bg-indigo-600 text-white rounded-xl px-5 py-3">Activer les notifications</button>
+    <p id="push-notification-status" class="text-sm text-slate-600" role="status" aria-live="polite"></p></section></div>`;
 }
 
 async function getOwnProfileRef() {

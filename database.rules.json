@@ -30,6 +30,15 @@
         }
       }
     },
+    "push_subscriptions": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || (auth != null && root.child('auth_profiles').child(auth.uid).child('is_active').val() === true && root.child('auth_profiles').child(auth.uid).child('role').val() === 'SUPER_ADMIN'))",
+        "$device": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.hasChildren(['token','company_id','updatedAt']) && newData.child('token').isString() && newData.child('token').val().length <= 4096 && newData.child('company_id').val() === root.child('auth_profiles').child(auth.uid).child('company_id').val() && newData.child('updatedAt').isString()"
+        }
+      }
+    },
     "itc_data": {
       "stock": {
         ".indexOn": [
