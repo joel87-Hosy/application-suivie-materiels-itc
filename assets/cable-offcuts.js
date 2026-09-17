@@ -11,7 +11,7 @@
   const quantity=v=>Number(v||0).toLocaleString('fr-FR',{maximumFractionDigits:2})+' m';
   const state=()=>data.stores[op]||{};
   const role=()=>env.profile()?.role;
-  const call=async payload=>(await firebase.app().functions('europe-west1').httpsCallable('cableOffcuts')(payload)).data;
+  const call=payload=>global.CableOffcutsTransport.call(payload);
   const btn=(action,id,label)=>`<button type="button" data-action="${action}" data-id="${esc(id)}" class="px-3 py-2 rounded-lg bg-teal-700 text-white text-xs">${label}</button>`;
   const input=(name,label,type='text')=>`<label class="block text-sm">${label}<input name="${name}" type="${type}" ${type==='number'?'min="0.01" max="1000000" step="0.01"':''} maxlength="500" required class="block w-full border rounded-lg p-3 mt-1"></label>`;
   const table=(headers,body)=>`<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="bg-slate-100"><tr>${headers.map(h=>`<th class="p-3">${h}</th>`).join('')}</tr></thead><tbody>${body.length?body.map(r=>`<tr class="border-b">${r.map(v=>`<td class="p-3 align-top">${v}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}" class="p-4 text-slate-500">Aucun élément.</td></tr>`}</tbody></table></div>`;

@@ -9,9 +9,10 @@ async function until(fn,label){for(let n=0;n<100;n++){const value=await fn();if(
 function html(role){return `<!doctype html><meta charset="utf-8"><main id="app"></main><script>
 const role=${JSON.stringify(role)};
 window.confirm=()=>true;
-window.firebase={app:()=>({functions:()=>({httpsCallable:()=>async data=>{const response=await fetch('/call',{method:'POST',body:JSON.stringify({role,data})});const result=await response.json();if(result.error)throw Error(result.error);return {data:result};}})})};
+window.firebase={auth:()=>({currentUser:{getIdToken:async()=>role}}),app:()=>({options:{projectId:'demo-test'},functions:()=>{throw Error('SDK Functions must not initialize messaging');}}),messaging:()=>{throw Error('Web Push service worker unavailable');}};
+const originalFetch=window.fetch.bind(window);window.fetch=async(url,options)=>{if(String(url).includes('cloudfunctions.net/cableOffcuts')){const response=await originalFetch('/call',{method:'POST',body:JSON.stringify({role,data:JSON.parse(options.body).data})});const result=await response.json();return new Response(JSON.stringify(result.error?{error:{message:result.error}}:{result}),{status:result.error?400:200});}return originalFetch(url,options);};
 window.pdfSaves=[];window.jspdf={jsPDF:class{setFontSize(){}text(){}autoTable(){}save(name){pdfSaves.push(name);}}};
-</script><script src="/module.js"></script><script>CableOffcuts.setup({profile:()=>({role,company_id:'A'})});CableOffcuts.enter(document.getElementById('app'));</script>`;}
+</script><script src="/transport.js"></script><script src="/module.js"></script><script>CableOffcuts.setup({profile:()=>({role,company_id:'A'})});CableOffcuts.enter(document.getElementById('app'));</script>`;}
 async function page(port,role){
  const target=await(await fetch('http://127.0.0.1:'+port+'/json/new?'+encodeURIComponent(server.url+'/?role='+encodeURIComponent(role)),{method:'PUT'})).json();
  const ws=new WebSocket(target.webSocketDebuggerUrl);sockets.push(ws);await new Promise(r=>ws.onopen=r);let seq=0;const pending=new Map();
@@ -25,6 +26,7 @@ async function page(port,role){
 async function main(){
  server=http.createServer(async(req,res)=>{const url=new URL(req.url,'http://localhost');res.setHeader('Content-Type','text/html; charset=utf-8');
   if(url.pathname==='/module.js'){res.setHeader('Content-Type','application/javascript');return res.end(fs.readFileSync('assets/cable-offcuts.js'));}
+  if(url.pathname==='/transport.js'){res.setHeader('Content-Type','application/javascript');return res.end(fs.readFileSync('assets/cable-offcuts-transport.js'));}
   if(url.pathname==='/call'){let body='';for await(const chunk of req)body+=chunk;const {role,data}=JSON.parse(body);try{if(data.action==='overview')return res.end(JSON.stringify({stores:{MOOV:state},sources:role==='Technicien'?[source]:[]}));state=core.transition(state,data,actors[role],{op:'MOOV',company:'A',now:new Date().toISOString(),id:data.commandId,source});counter++;res.end(JSON.stringify({ok:true}));}catch(e){res.end(JSON.stringify({error:e.message}));}return;}
   res.end(html(url.searchParams.get('role')));
  });

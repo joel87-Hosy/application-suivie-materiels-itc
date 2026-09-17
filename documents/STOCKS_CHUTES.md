@@ -17,7 +17,7 @@ Les gestionnaires et coordinateurs accèdent à leurs stocks affectés. Le super
 
 ## Architecture et déploiement
 
-Le module utilise `cable_offcuts/{company_id}/{op}` avec `lots`, `returns`, `requests`, `events` et `commands`. Les lectures et commandes passent par la fonction callable `cableOffcuts` dans la région `europe-west1`. Les écritures directes depuis le navigateur sont interdites. Les autorisations sont relues côté serveur et chaque commande modifie atomiquement l'état du stock. Un identifiant de commande protège les nouvelles tentatives contre les doubles réceptions et doubles sorties.
+Le module utilise `cable_offcuts/{company_id}/{op}` avec `lots`, `returns`, `requests`, `events` et `commands`. Les lectures et commandes passent par la fonction callable `cableOffcuts` dans la région `europe-west1`. Le transport HTTPS utilise le jeton Firebase Auth de la session et le protocole callable officiel ; il ne demande pas de jeton de notification et ne dépend pas du service worker Web Push. Les écritures directes depuis le navigateur sont interdites. Les autorisations sont relues côté serveur et chaque commande modifie atomiquement l'état du stock. Un identifiant de commande protège les nouvelles tentatives contre les doubles réceptions et doubles sorties.
 
 Les notifications sont envoyées dans le système interne existant aux coordinateurs et gestionnaires affectés et au technicien concerné. Une panne de notification ne remet pas en cause un mouvement déjà enregistré.
 
@@ -26,7 +26,9 @@ Déployer ensemble les composants suivants pour activer la fonction en ligne :
 1. Installer les dépendances existantes de `functions/` si nécessaire.
 2. Déployer la fonction : `firebase deploy --only functions:notifications:cableOffcuts --project itc-erp`.
 3. Générer les règles avec `npm run build:rules`, puis déployer `database.rules.json` avec la procédure habituelle. Le nouveau chemin est fermé par défaut, y compris avec les anciennes règles.
-4. Construire le site avec `npm run build` et publier le répertoire `public/` via Render. Le cache applicatif passe à `v17-cable-offcuts`.
+4. Construire le site avec `npm run build` et publier le répertoire `public/` via Render. Le cache applicatif passe à `v18-offcuts-transport`.
+
+Le déploiement exige un compte Google Cloud autorisé à déployer les fonctions du projet et à consulter ses services. Le compte de service local utilisé pour administrer les données a refusé le déploiement avec HTTP 403 (`serviceusage.services.get` et droits Cloud Functions absents). Utiliser un compte de déploiement autorisé ; un simple redéploiement du site Render ne crée pas la fonction manquante.
 
 Aucune conversion des données de stock normal n'est requise. Les anciens comptes d'équipes sans `controlScopes` utilisent leur affectation `managedOps` administrée dans leur profil. Les anciens retours de câbles en bon état ne sont pas intégrés automatiquement : ils doivent être déclarés depuis un bon source dans le nouveau circuit.
 
