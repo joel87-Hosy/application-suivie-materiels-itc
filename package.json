@@ -22,6 +22,9 @@
     "test:profile": "node tools/test_profile.js",
     "test:control": "node tools/test_stock_control.js",
     "test:control:browser": "node tools/test_control_browser.js",
+    "test:chutes": "node tools/test_cable_offcuts.js",
+    "test:chutes:browser": "node tools/test_cable_offcuts_browser.js",
+    "test:chutes:integration": "firebase emulators:exec --only database --project demo-itc-security \"node tools/test_cable_offcuts_integration.js\"",
     "migrate:security": "node scripts/migrate_tenant_security.js"
   },
   "dependencies": {

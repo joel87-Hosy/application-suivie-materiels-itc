@@ -18,6 +18,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-functions-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-messaging-compat.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -1660,6 +1661,7 @@
     <script src="assets/control-core.js"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js"></script>
+    <script src="assets/cable-offcuts.js"></script>
     <script src="assets/assistant-knowledge.js"></script>
     <script src="assets/assistant-reports.js"></script>
     <script src="assets/voice-assistant.js"></script>
@@ -2508,6 +2510,7 @@
 
       function logout() {
         stopVoiceAssistant();
+        window.CableOffcuts?.stop();
         window.StockControl?.reset();
         secureStore.stop();
         appData = emptyAppData();
@@ -2583,6 +2586,15 @@
         // On transforme le rôle en MAJUSCULES pour éviter les erreurs de saisie
         const r = currentUser.role.trim().toUpperCase();
         const isSuperAdmin = r === "SUPER_ADMIN";
+        window.CableOffcuts.setup({profile: () => secureStore.profile});
+        let chuteMenu = document.getElementById("menu-cable-offcuts");
+        if (!chuteMenu) {
+          chuteMenu = document.createElement("div");
+          chuteMenu.id = "menu-cable-offcuts";
+          chuteMenu.innerHTML = `<button type="button" onclick="showSection('stocks-chutes')" class="w-full text-left p-3 rounded-xl bg-emerald-800 text-white font-bold"><i class="fas fa-recycle mr-2"></i>Stocks de chutes</button>`;
+          document.getElementById("menu-cockpit")?.parentNode.insertBefore(chuteMenu, document.getElementById("menu-cockpit"));
+        }
+        chuteMenu.classList.toggle("hidden", !window.CableOffcuts.roles.includes(currentUser.role));
         let controlMenu = document.getElementById("menu-stock-control");
         if (!controlMenu) {
           controlMenu = document.createElement("div");
@@ -6558,9 +6570,10 @@
       }
 
       function showSection(id) {
-        if (window.StockControl?.isBusy()) return;
-        if (secureStore.profile?.role === "Contrôleur" && !id.startsWith("control-") && id !== "mon-profil") id = "control-dashboard";
+        if (window.StockControl?.isBusy() || window.CableOffcuts?.isBusy()) return;
+        if (secureStore.profile?.role === "Contrôleur" && !id.startsWith("control-") && id !== "mon-profil" && id !== "stocks-chutes") id = "control-dashboard";
         window.StockControl?.stop();
+        window.CableOffcuts?.stop();
         currentSectionId = id;
         const container = document.getElementById("app-container");
         container.onclick = null;
@@ -6578,7 +6591,10 @@
         if (id === "stock-itc-b01") {
           viewTitle.innerText = "STOCK ITC BUREAU 01";
         }
-        if (id.startsWith("control-")) {
+        if (id === "stocks-chutes") {
+          viewTitle.innerText = "STOCKS DE CHUTES DE CÂBLES";
+          window.CableOffcuts.enter(container);
+        } else if (id.startsWith("control-")) {
           window.StockControl.enter(id);
         } else if (id === "mon-profil") {
           renderMonProfil(container);
@@ -6645,6 +6661,14 @@
           container.innerHTML = `<div class="p-10 text-center opacity-50 uppercase font-black">Section "${id}" en cours de déploiement...</div>`;
         }
 
+        if (["tech-nouvelle-demande", "tech-mes-demandes", "coord-demandes-tech", "demandes-coordonnatrice", "gestion-retours", "reception", "flux-materiels"].includes(id)) {
+          const chuteLink = document.createElement("button");
+          chuteLink.type = "button";
+          chuteLink.className = "m-4 p-3 rounded-xl bg-teal-100 text-teal-900 font-bold text-sm";
+          chuteLink.textContent = "Stocks de chutes : retours de câbles, entrées, demandes et bons de sortie";
+          chuteLink.onclick = () => showSection("stocks-chutes");
+          container.prepend(chuteLink);
+        }
         enhanceSectionUX(id);
 
         // 5. GESTION DES NOTIFICATIONS (Après le rendu)
@@ -10085,6 +10109,10 @@
       function renderRetourForm(container) {
         container.innerHTML = `
               <div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black">
+                <div class="mb-5 border border-teal-200 bg-teal-50 rounded-xl p-4 not-italic">
+                  <p class="text-sm mb-3">Un câble en bon état avec une longueur restante ? Déclarez sa distance en mètres et son bon d’origine pour alimenter le stock de chutes après les deux validations.</p>
+                  <button type="button" onclick="showSection('stocks-chutes')" class="bg-teal-700 text-white rounded-lg p-3 text-xs">Retour de câble en bon état → stock de chutes</button>
+                </div>
                 <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-orange-700 via-amber-600 to-yellow-500 text-white">
                   <p class="text-[8px] tracking-[0.2em] opacity-80">RETOUR TERRAIN</p>
                   <h3 class="mt-1 uppercase text-xl"><i class="fas fa-rotate-left mr-2"></i>Déclarer un Retour</h3>
@@ -10103,6 +10131,14 @@
 
       async function handleRetourSubmit(e) {
         e.preventDefault();
+        const returnedLabel = getFormTextValue("ret-label");
+        const returnedMaterial = (appData.stock || []).find(s => String(s.label || "").trim().toUpperCase() === returnedLabel.trim().toUpperCase());
+        const cableDescription = (returnedLabel + " " + (returnedMaterial?.type || "")).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+        if (document.getElementById("ret-etat").value === "NEUF" && /CABLE|BOBINE|JARRETIERE|CORDON OPTIQUE/.test(cableDescription)) {
+          alert("Pour ce câble en bon état, choisissez le bon d’origine et la longueur restante dans le retour vers le stock de chutes.");
+          showSection("stocks-chutes");
+          return;
+        }
         const r = {
           id: "RET-" + Date.now().toString().slice(-4),
           techName: currentUser.name,
@@ -10442,6 +10478,13 @@
 
       async function validerRetour(id) {
         const r = appData.retours.find((x) => x.id === id);
+        if (!r) return alert("Retour introuvable.");
+        const returnedType = (appData.stock || []).find(s => s.label === r.label)?.type || "";
+        if (r.etat === "NEUF" && /CABLE|BOBINE|JARRETIERE|CORDON OPTIQUE/.test((r.label + " " + returnedType).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase())) {
+          alert("Ce câble en bon état doit suivre le circuit des stocks de chutes : bon d’origine, validation du coordinateur, puis réception physique. Demandez au technicien de le déclarer dans ce circuit.");
+          showSection("stocks-chutes");
+          return;
+        }
         if (r.etat === "NEUF") {
           const s = appData.stock.find(
             (st) =>
@@ -13378,6 +13421,34 @@
         return buildStockQtyByDesignation().get(cleanDesignation) || 0;
       }
 
+      function getFluxStockEntries(archives = []) {
+        const companyId = secureStore.profile?.company_id;
+        const isAdmin = secureStore.profile?.role === "SUPER_ADMIN";
+        return (appData.stockMovements || []).filter((movement) => {
+          if (!companyId || (!isAdmin && movement.company_id !== companyId)) return false;
+          if (movement.type !== "in" || !Number.isFinite(Number(movement.qty)) || Number(movement.qty) <= 0) return false;
+          if (!isFluxEntryAllowedForCurrentUser(movement)) return false;
+          const label = String(movement.label || "").trim().toUpperCase();
+          if (!label) return false;
+          // A delivered request already supplies its own entry in this view.
+          if (movement.reference && (appData.demandes || []).some(d =>
+            d.company_id === movement.company_id && d.status === "LIVREE" &&
+            (d.id === movement.reference || d._dbKey === movement.reference))) return false;
+          const date = new Date(getSortieTimestamp(movement.createdAt));
+          const month = getMonthKey(date.getMonth(), date.getFullYear());
+          // Monthly archives already include these receipts; count each once.
+          return !archives.some(archive => archive.company_id === movement.company_id && archive.key === month &&
+            Object.entries(archive.operatorStats || {}).some(([op, stats]) =>
+              normalizeOperatorKey(op) === normalizeOperatorKey(movement.op) &&
+              Number(stats.entrantsByDesignation?.[sanitizeFirebaseKey(label)]) > 0));
+        }).map(movement => ({
+          label: String(movement.label).trim().toUpperCase(),
+          type: "ENTREE", date: movement.createdAt, qty: Number(movement.qty),
+          op: movement.op, ref: movement.reference || "Réception directe",
+          details: "Entrée en stock",
+        }));
+      }
+
       function ensureFluxMaterial(allMateriels, label) {
         const cleanLabel = String(label || "").trim().toUpperCase();
         if (!cleanLabel) return null;
@@ -13525,6 +13596,10 @@
           });
         });
 
+        getFluxStockEntries(visibleArchives).forEach(entry => {
+          ensureFluxMaterial(allMateriels, entry.label).entrees.push(entry);
+        });
+
         if (allMateriels.size === 0) {
           container.innerHTML = `
             <div class="space-y-4 p-4">
@@ -13602,6 +13677,25 @@
         container.innerHTML = html;
       }
 
+      function renderFluxMovementDates(mouvements) {
+        return ["ENTREE", "SORTIE"].map(type => {
+          const rows = mouvements.filter(m => m.type === type);
+          const title = type === "ENTREE" ? "Dates des entrées" : "Dates des sorties";
+          return `<section class="bg-white rounded-2xl border border-slate-200 p-5">
+            <h4 class="text-sm font-black text-slate-800 mb-3">${title}</h4>
+            ${rows.length ? `<div class="overflow-x-auto"><table class="w-full text-xs text-left">
+              <thead class="bg-slate-50"><tr><th class="p-3">Date</th><th class="p-3">Quantité</th><th class="p-3">Stock</th><th class="p-3">Référence</th></tr></thead>
+              <tbody>${rows.map(m => {
+                const archived = String(m.details || "").startsWith("Archive ");
+                const timestamp = getSortieTimestamp(m.date);
+                const date = archived ? `${m.details} — date exacte non disponible` : timestamp
+                  ? new Date(timestamp).toLocaleString("fr-FR") : "Date non renseignée";
+                return `<tr class="border-t border-slate-100"><td class="p-3">${escapeHtml(date)}</td><td class="p-3 font-bold">${m.qty}</td><td class="p-3">${escapeHtml(m.op || "—")}</td><td class="p-3">${escapeHtml(m.ref || "—")}</td></tr>`;
+              }).join("")}</tbody></table></div>` : `<p class="text-sm text-slate-500">${type === "ENTREE" ? "Aucune entrée enregistrée." : "Aucune sortie enregistrée."}</p>`}
+          </section>`;
+        }).join("");
+      }
+
       function renderFluxMaterielDetail(container, designation) {
         if (!container) return;
         
@@ -13642,9 +13736,15 @@
 
         const cleanDesignation = String(designation || "").trim().toUpperCase();
         const stockActuel = getCurrentStockQtyForDesignation(cleanDesignation);
+        const materialTypes = [...new Set(getVisibleStockEntriesForFlux()
+          .filter(s => String(s.label || "").trim().toUpperCase() === cleanDesignation &&
+            (secureStore.profile?.role === "SUPER_ADMIN" || s.company_id === secureStore.profile?.company_id))
+          .map(s => String(s.type || "").trim()).filter(Boolean))];
+        const materialType = materialTypes.join(" / ") || "Non renseigné";
         
         // Récupère les mouvements
-        const mouvements = [];
+        const mouvements = getFluxStockEntries(visibleArchives)
+          .filter(entry => entry.label === cleanDesignation);
         
         // Entrees depuis les demandes
         visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
@@ -13746,6 +13846,8 @@
         if (mouvements.length === 0) {
           container.innerHTML = `
             <div class="space-y-4 p-4">
+              <h3 class="text-lg font-black text-slate-800">${escapeHtml(cleanDesignation)}</h3>
+              <p class="text-sm text-slate-600">Type de matériel : <strong>${escapeHtml(materialType)}</strong></p>
               <div class="bg-white rounded-2xl border border-cyan-200 p-5 text-center">
                 <p class="text-[8px] text-cyan-600 uppercase font-black">Stock actuel disponible</p>
                 <p class="text-2xl font-black ${stockActuel > 0 ? 'text-cyan-700' : 'text-red-700'}">${stockActuel}</p>
@@ -13754,6 +13856,7 @@
                 <i class="fas fa-arrow-left mr-2"></i> Retour à la liste
               </button>
               <p class="text-center text-slate-500">Aucun mouvement pour ce matériel.</p>
+              ${renderFluxMovementDates(mouvements)}
             </div>
           `;
           return;
@@ -13800,6 +13903,7 @@
 
             <div class="bg-white rounded-3xl shadow-xl border-2 border-cyan-600 p-6">
               <h3 class="text-lg font-black uppercase text-slate-800 mb-4">${escapeHtml(cleanDesignation)}</h3>
+              <p class="text-sm text-slate-600 mb-4">Type de matériel : <strong>${escapeHtml(materialType)}</strong></p>
               <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                 <div class="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-center">
                   <p class="text-[8px] text-green-600 uppercase font-black">Total Entrées</p>
@@ -13833,6 +13937,7 @@
             </div>
 
             <div class="bg-white rounded-3xl shadow-xl border-2 border-slate-200 p-6">
+              <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">${renderFluxMovementDates(mouvements)}</div>
               <h4 class="text-[11px] font-black uppercase text-slate-800 mb-4">Par Semaine</h4>
               <div class="space-y-3">
         `;
@@ -13961,7 +14066,8 @@
         if (
           visibleSorties.length === 0 &&
           visibleDemandes.length === 0 &&
-          stockQtyByDesignation.size === 0
+          stockQtyByDesignation.size === 0 &&
+          getFluxStockEntries().length === 0
         ) {
           alert("Aucun flux à exporter");
           return;
@@ -14015,6 +14121,10 @@
               ref: demande.id
             });
           });
+        });
+
+        getFluxStockEntries().forEach(entry => {
+          ensureFluxMaterial(allMateriels, entry.label).entrees.push(entry);
         });
 
         const materiels = Array.from(allMateriels.values()).sort((a, b) =>
@@ -14100,7 +14210,8 @@
 
         const cleanDesignation = String(designation || "").trim().toUpperCase();
         const stockActuel = getCurrentStockQtyForDesignation(cleanDesignation);
-        const mouvements = [];
+        const mouvements = getFluxStockEntries()
+          .filter(entry => entry.label === cleanDesignation);
 
         visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
           const items = demande.items || [];
@@ -14242,6 +14353,10 @@
         });
 
         const wb = XLSX.utils.book_new();
+        getFluxStockEntries().forEach(entry => {
+          ensureFluxMaterial(allMateriels, entry.label).entrees.push(entry);
+        });
+
         const materiels = Array.from(allMateriels.values()).sort((a, b) =>
           b.sorties.length + b.entrees.length - (a.sorties.length + a.entrees.length)
         );
@@ -14308,7 +14423,8 @@
 
         const cleanDesignation = String(designation || "").trim().toUpperCase();
         const stockActuel = getCurrentStockQtyForDesignation(cleanDesignation);
-        const mouvements = [];
+        const mouvements = getFluxStockEntries()
+          .filter(entry => entry.label === cleanDesignation);
 
         visibleDemandes.filter(d => d.status === "LIVREE").forEach((demande) => {
           const items = demande.items || [];

@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v15-web-push";
+const CACHE_NAME = "itc-gestion-materiels-v17-cable-offcuts";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -6,6 +6,7 @@ const APP_SHELL = [
   "./assets/secure-store.js",
   "./assets/control-core.js",
   "./assets/stock-control.js",
+  "./assets/cable-offcuts.js",
   "./assets/assistant-knowledge.js",
   "./assets/assistant-reports.js",
   "./assets/voice-assistant.js",

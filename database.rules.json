@@ -231,6 +231,10 @@
         }
       }
     },
+    "cable_offcuts": {
+      ".read": false,
+      ".write": false
+    },
     "stock_control": {
       "$company": {
         "$op": {

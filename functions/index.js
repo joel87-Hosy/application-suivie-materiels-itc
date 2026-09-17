@@ -3,6 +3,7 @@ const {initializeApp} = require("firebase-admin/app");
 const {getDatabase} = require("firebase-admin/database");
 const {getMessaging} = require("firebase-admin/messaging");
 initializeApp();
+exports.cableOffcuts = require('./cable-offcuts').cableOffcuts;
 const titleFor = message => /BON A VALIDER/i.test(message) ? "Bon à valider" : /DEMANDE A SIGNER/i.test(message) ? "Bon à signer" : /MATERIEL EST DISPONIBLE/i.test(message) ? "Matériel disponible" : "ITC Gestion Matériels";
 exports.sendNotificationPush = onValueCreated("/itc_data/notifications/{notificationId}", async event => {
   const notification = event.data.val(); if (!notification || !Number.isFinite(Number(notification.userId))) return;

@@ -41,6 +41,8 @@ rules.push_subscriptions = {'$uid': {
   },
 }};
 rules.itc_data = {};
+// Cable remnant transactions are exclusively executed by the authenticated callable.
+rules.cable_offcuts = {'.read': false, '.write': false};
 for (const name of ['stock', 'stockMovements', 'sorties', 'demandes', 'techDemandes', 'retours', 'notifications', 'consumptionArchives', 'platformAuditLogs']) {
   let permission = ['stock', 'sorties', 'consumptionArchives'].includes(name) ? managers : staff;
   if (['demandes', 'techDemandes'].includes(name)) {
