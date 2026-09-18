@@ -22,6 +22,12 @@ Deno.serve(async request => {
     if (profileError || !profile?.is_active || !profile.company_id) return json({ error: 'Compte non autorisé ou suspendu.' }, 403);
     const actor = { ...profile.profile, uid: profile.firebase_uid || auth.user.id, user_id: auth.user.id, email: auth.user.email, company_id: profile.company_id, role: profile.role, is_active: profile.is_active, control_scopes: profile.control_scopes };
     const command = await request.json().catch(() => ({}));
+    const {data: config,error: configError}=await admin.from('stock_workflow_config').select('enabled').eq('company_id',profile.company_id).maybeSingle();
+    if(configError)throw configError;
+    const workflowEnabled=config?.enabled===true;
+    const {data: managerRows,error: managerError}=await admin.from('app_profiles').select('user_id,role,is_active,company_id,control_scopes,profile').eq('company_id',profile.company_id).eq('role','Gestionnaire').eq('is_active',true);
+    if(managerError)throw managerError;
+    const assignedManager=(managerRows||[]).find(row=>row.user_id===command.managerUid);
     const { data: stockRows } = await admin.from('app_records').select('record_key,payload').eq('collection', 'stock').eq('company_id', profile.company_id);
     const { data: userRows } = await admin.from('app_records').select('record_key,payload').eq('collection', 'users').eq('company_id', profile.company_id);
     const { data: sortieRows } = await admin.from('app_records').select('record_key,payload').eq('collection', 'sorties').eq('company_id', profile.company_id);
@@ -49,21 +55,24 @@ Deno.serve(async request => {
         const source = sourceFromSortie(sortie, { ...item, type: item.type || material?.type }, actor, sortie._dbKey, index);
         if (source) sources.push(source);
       }
-      return json({ stores: result, sources });
+      return json({ stores: result, sources, workflowEnabled, userId:auth.user.id, managers:(managerRows||[]).map(m=>({uid:m.user_id,name:m.profile?.name||m.role,scopes:m.control_scopes})) });
     }
     if (!validKey(command.op) || !validKey(command.commandId) || !canRead(actor, command.op)) return json({ error: 'Stock non autorisé.' }, 403);
-    const { data: store, error: storeError } = await admin.from('cable_offcut_stores').select('state').eq('company_id', profile.company_id).eq('op', command.op).maybeSingle();
-    if (storeError) throw storeError;
     let source = null;
     if (command.action === 'return' && !command.issueId) {
       const sortie = sorties.find(row => row._dbKey === command.sortieKey);
       const item = sortie?.items?.[command.itemIndex];
       if (sortie && item) source = sourceFromSortie(sortie, item, actor, command.sortieKey, command.itemIndex);
     }
-    const next = await transition(store?.state || {}, command, actor, { op: command.op, company: profile.company_id, now: new Date().toISOString(), id: command.commandId, source });
-    const { error: saveError } = await admin.from('cable_offcut_stores').upsert({ company_id: profile.company_id, op: command.op, state: next, updated_at: new Date().toISOString() }, { onConflict: 'company_id,op' });
-    if (saveError) throw saveError;
-    return json({ ok: true });
+    for(let attempt=0;attempt<4;attempt++) {
+      const {data:store,error:storeError}=await admin.from('cable_offcut_stores').select('state').eq('company_id',profile.company_id).eq('op',command.op).maybeSingle();
+      if(storeError)throw storeError;
+      const next=await transition(store?.state||{},command,actor,{op:command.op,company:profile.company_id,now:new Date().toISOString(),id:command.commandId,source,workflowEnabled,assignedManager});
+      const {data:saved,error:saveError}=await admin.rpc('save_offcut_state',{company:profile.company_id,operator:command.op,previous_state:store?.state??null,next_state:next});
+      if(saveError)throw saveError;
+      if(saved)return json({ok:true});
+    }
+    throw new Error('Le stock a changé. Actualisez puis réessayez.');
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : 'Erreur du service Supabase.' }, 400);
   }

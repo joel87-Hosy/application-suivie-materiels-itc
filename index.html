@@ -1660,7 +1660,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="assets/supabase-public-config.js?v=20260918-shared1"></script>
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
-    <script src="assets/supabase-store.js?v=20260918-full-data"></script>
+    <script src="assets/supabase-store.js?v=20260918-validator"></script>
+    <script src="assets/validator-workflow.js?v=20260918-validator"></script>
     <script src="assets/control-core.js"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js"></script>
@@ -2459,8 +2460,11 @@
         await firebase.auth().signOut();
       }
 
+      let manualLoginInProgress = false;
       async function handleLogin(e) {
         e.preventDefault();
+        if (manualLoginInProgress) return;
+        manualLoginInProgress = true;
         const identifier = document
           .getElementById("login-email")
           .value.toLowerCase()
@@ -2477,7 +2481,9 @@
             const result = await supabaseBackend.auth.signInWithPassword({email, password});
             if (result.error) throw result.error;
             authUser = result.data.user;
-            await firebase.auth().signInWithEmailAndPassword(email, password);
+            // Supabase is authoritative. New accounts do not require a legacy Firebase identity.
+            try { await firebase.auth().signInWithEmailAndPassword(email, password); }
+            catch (_) { await firebase.auth().signOut(); }
           } else {
             const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
             authUser = userCredential.user;
@@ -2540,6 +2546,8 @@
           }
         } catch (error) {
           alert("ÉCHEC D'AUTHENTIFICATION : " + error.message);
+        } finally {
+          manualLoginInProgress = false;
         }
       }
 
@@ -2619,6 +2627,8 @@
         // On transforme le rôle en MAJUSCULES pour éviter les erreurs de saisie
         const r = currentUser.role.trim().toUpperCase();
         const isSuperAdmin = r === "SUPER_ADMIN";
+        window.ValidatorWorkflow.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection});
+        window.ValidatorWorkflow.menu();
         window.CableOffcuts.setup({profile: () => secureStore.profile});
         let chuteMenu = document.getElementById("menu-cable-offcuts");
         if (!chuteMenu) {
@@ -2648,8 +2658,9 @@
         if (menuSup)
           menuSup.classList.toggle(
             "hidden",
-            !isSuperAdmin && r !== "SUPERVISEUR",
-          );
+            !isSuperAdmin && !["SUPERVISEUR", "DG", "VALIDATEUR", "VALIDATRICE"].includes(r),
+        );
+        menuSup?.querySelector('[onclick*="company-users"]')?.classList.toggle('hidden', window.ValidatorWorkflow.isValidator());
 
         // 2. Menu Technicien
         const menuTech = document.getElementById("menu-technicien");
@@ -2703,7 +2714,7 @@
           const menuItcB02 = document.getElementById("menu-stock-itc-b02");
           if (menuItcB02) {
             let showItcB02 = false;
-            if (isSuperAdmin || r === "SUPERVISEUR") showItcB02 = true;
+            if (isSuperAdmin || ["SUPERVISEUR","DG","VALIDATEUR","VALIDATRICE"].includes(r)) showItcB02 = true;
             if (isStockScopedUser(currentUser)) {
               const managedNorm = getManagedOpsNormalized(currentUser);
               showItcB02 = showItcB02 || managedNorm.includes("ITC-B02");
@@ -2720,7 +2731,7 @@
           const menuItcB01 = document.getElementById("menu-stock-itc-b01");
           if (menuItcB01) {
             let showItcB01 = false;
-            if (isSuperAdmin || r === "SUPERVISEUR" || r === "COORDINATRICE")
+            if (isSuperAdmin || ["SUPERVISEUR","DG","VALIDATEUR","VALIDATRICE","COORDINATRICE"].includes(r))
               showItcB01 = true;
             if (isStockScopedUser(currentUser)) {
               const managedNorm = getManagedOpsNormalized(currentUser);
@@ -2738,7 +2749,7 @@
           const menuMoov = document.getElementById("menu-stock-moov");
           if (menuMoov) {
             let showMoov = false;
-            if (isSuperAdmin || r === "SUPERVISEUR") showMoov = true;
+            if (isSuperAdmin || ["SUPERVISEUR","DG","VALIDATEUR","VALIDATRICE"].includes(r)) showMoov = true;
             if (isStockScopedUser(currentUser)) {
               const managedNorm = getManagedOpsNormalized(currentUser);
               showMoov = showMoov || managedNorm.includes("MOOV");
@@ -4736,6 +4747,20 @@
           return; // On arrête tout si une erreur de stock survient
         }
 
+        if (window.ValidatorWorkflow.enabled()) {
+          appData.demandes ||= [];
+          appData.demandes.push({id:`BON-${crypto.randomUUID()}`,ref,serviceAbbreviation,
+            op:selectedOps.join('/'),ops:selectedOps,tech,emetteur,items:selectedItems,
+            demandeurName:tech,demandeurOriginalId:currentUser.id,createdBy:currentUser.name,
+            date:new Date().toISOString(),dateBon:dateBonValue,motif:ref,
+            status:'EN ATTENTE VALIDATEUR',statut:'EN ATTENTE VALIDATEUR'});
+          if (!(await save())) return;
+          localStorage.removeItem('draft_sortie');
+          alert('Demande transmise au validateur. Le stock sera débité après validation et remise physique.');
+          showSection('cockpit');
+          return;
+        }
+
         // Enregistrement de l'activité
         updates.forEach(({ itemInStock, nextQty }) => {
           itemInStock.qty = nextQty;
@@ -6146,7 +6171,7 @@
         ).toUpperCase();
         const managerSignature = getSortieSignatureText(sortie, createdBy);
         const technicianSignature = getSortieTechnicianSignatureText(sortie);
-        const coordinationSignature = getSortieCoordinationSignatureText(sortie);
+        const coordinationSignature = [getSortieCoordinationSignatureText(sortie), window.ValidatorWorkflow.trace(sortie)].filter(Boolean).join('\n');
         const receiver = getBonEquipeName(sortie).toUpperCase();
         const ref = String(sortie.ref || "").toUpperCase();
         const op = formatDemandeOps(sortie).toUpperCase();
@@ -6603,7 +6628,9 @@
       }
 
       function showSection(id) {
+        if (window.ValidatorWorkflow?.isBusy()) return;
         if (window.StockControl?.isBusy() || window.CableOffcuts?.isBusy()) return;
+        window.ValidatorWorkflow?.stop();
         if (secureStore.profile?.role === "Contrôleur" && !id.startsWith("control-") && id !== "mon-profil" && id !== "stocks-chutes") id = "control-dashboard";
         window.StockControl?.stop();
         window.CableOffcuts?.stop();
@@ -6624,7 +6651,10 @@
         if (id === "stock-itc-b01") {
           viewTitle.innerText = "STOCK ITC BUREAU 01";
         }
-        if (id === "stocks-chutes") {
+        if (id === "validation-bons") {
+          viewTitle.innerText = "VALIDATION DES BONS";
+          window.ValidatorWorkflow.enter(container);
+        } else if (id === "stocks-chutes") {
           viewTitle.innerText = "STOCKS DE CHUTES DE CÂBLES";
           window.CableOffcuts.enter(container);
         } else if (id.startsWith("control-")) {
@@ -8666,11 +8696,12 @@
 
         let pendingDemandes =
           demandes.filter((d) => d.status === "EN ATTENTE GESTIONNAIRE") || [];
+        if (window.ValidatorWorkflow.isValidator()) pendingDemandes = demandes.filter(d => d.status === 'EN ATTENTE VALIDATEUR');
         if (isTechnicienUser(currentUser)) {
           pendingDemandes = demandes.filter(
             (d) =>
               parseInt(d.demandeurOriginalId) === parseInt(currentUser?.id) &&
-              ["EN ATTENTE COORDINATION", "EN ATTENTE GESTIONNAIRE", "PRET"].includes(d.status),
+              ["EN ATTENTE COORDINATION", "EN ATTENTE VALIDATEUR", "EN ATTENTE GESTIONNAIRE", "PRET"].includes(d.status),
           );
         } else if (isStockScopedUser(currentUser)) {
           pendingDemandes = pendingDemandes.filter((d) =>
@@ -9782,7 +9813,7 @@
               </div>
             </div>
             <button onclick="coordSignAndSendDemande('${d.id}')" class="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] mt-6 uppercase font-black shadow-lg hover:bg-black transition inline-flex items-center justify-center gap-2">
-              <i class="fas fa-paper-plane"></i> Envoyer au gestionnaire
+              <i class="fas fa-paper-plane"></i> ${window.ValidatorWorkflow.enabled() ? 'Envoyer au validateur' : 'Envoyer au gestionnaire'}
             </button>
           </div>`;
       }
@@ -9813,10 +9844,10 @@
         d.coordinationBy = currentUser ? currentUser.name : "COORDINATION";
         d.status = "EN ATTENTE GESTIONNAIRE";
         d.statut = "EN ATTENTE GESTIONNAIRE";
-        addNotification(managerId, `BON A VALIDER : ${d.id} signe par ${currentUser?.name || "COORDINATION"}`);
+        if (!window.ValidatorWorkflow.enabled()) addNotification(managerId, `BON A VALIDER : ${d.id} signe par ${currentUser?.name || "COORDINATION"}`);
         addNotification(d.demandeurOriginalId, wasAdjusted ? `VOTRE BON ${getBonReference(d)} A ETE AJUSTE ET SIGNE PAR LA COORDINATION.` : `VOTRE BON ${getBonReference(d)} A ETE SIGNE PAR LA COORDINATION.`);
         if (!(await save())) return;
-        alert("BON ENVOYE AU GESTIONNAIRE.");
+        alert(window.ValidatorWorkflow.enabled() ? "BON ENVOYÉ AU VALIDATEUR." : "BON ENVOYE AU GESTIONNAIRE.");
         showSection("cockpit");
       }
 
@@ -9911,7 +9942,7 @@
           `VOTRE BON ${c.id} EST PRÊT. TÉLÉCHARGEZ LE PDF.`,
         );
         // Notify the selected gestionnaire if any
-        if (c.assignedGestionnaireId) {
+        if (!window.ValidatorWorkflow.enabled() && c.assignedGestionnaireId) {
           addNotification(
             c.assignedGestionnaireId,
             `NOUVELLE COMMANDE À TRAITER : ${c.id} (assignée par ${currentUser.name})`,
@@ -9919,7 +9950,7 @@
         }
         if (!(await save())) return;
         alert(
-          "COMMANDE ENVOYÉE AU MAGASIN. Gestionnaire assigné: " +
+          (window.ValidatorWorkflow.enabled() ? "COMMANDE ENVOYÉE AU VALIDATEUR. Gestionnaire proposé : " : "COMMANDE ENVOYÉE AU MAGASIN. Gestionnaire assigné: ") +
             (c.assignedGestionnaireName || "Automatique"),
         );
         showSection("cockpit");
@@ -10113,7 +10144,9 @@
         }
         appData.demandes.unshift(c);
         // Notification au gestionnaire : validation requise (utilise la selection si fournie)
-        if (c.assignedGestionnaireId) {
+        if (window.ValidatorWorkflow.enabled()) {
+          // Les validateurs sont notifiés par le serveur après enregistrement.
+        } else if (c.assignedGestionnaireId) {
           addNotification(
             c.assignedGestionnaireId,
             `VALIDATION REQUISE : Commande ${c.id} soumise par ${currentUser.name}`,
@@ -10132,7 +10165,7 @@
         );
         if (!(await save())) return;
         alert(
-          "TRANSMIS. Gestionnaire assigné: " +
+          (window.ValidatorWorkflow.enabled() ? "TRANSMIS AU VALIDATEUR. Gestionnaire proposé : " : "TRANSMIS. Gestionnaire assigné: ") +
             (c.assignedGestionnaireName || "Automatique"),
         );
         showSection("cockpit");
@@ -10204,10 +10237,10 @@
         const data = toutesLesDemandes.filter(
           (d) =>
             d.status === "EN ATTENTE GESTIONNAIRE" &&
-            (isSuperAdmin ||
+            (d.validatorDecision ? d.assignedGestionnaireUid === secureStore.uid : (isSuperAdmin ||
               d.workflow !== "TECH_BON_SORTIE" ||
               !d.assignedGestionnaireId ||
-              parseInt(d.assignedGestionnaireId) === parseInt(currentUser?.id)),
+              parseInt(d.assignedGestionnaireId) === parseInt(currentUser?.id))),
         );
 
         const statsByOp = {};
@@ -10277,7 +10310,7 @@
 
       async function prepSortie(id) {
         const d = appData.demandes.find((x) => x.id === id);
-        if (d?.workflow === "TECH_BON_SORTIE") {
+        if (d?.workflow === "TECH_BON_SORTIE" || d?.validatorDecision) {
           openGestionnaireWorkflowDemande(id);
           return;
         }
@@ -10304,6 +10337,7 @@
               <p class="text-[9px] uppercase md:col-span-2"><b>Motif :</b> ${escapeHtml(d.motif || "")}</p>
             </div>
             ${coordinationAdjustmentNotice(d)}
+            <p class="mt-3 text-sm">${escapeHtml(window.ValidatorWorkflow.trace(d))}</p>
             <div class="mt-5 border rounded-2xl overflow-hidden">
               <table class="w-full text-[9px] uppercase">
                 <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Operateur</th><th class="p-2 text-left">Designation</th><th class="p-2 text-right">Qte</th></tr></thead>
@@ -10400,6 +10434,7 @@
           if (!BonReference.services[service]) return alert("Service invalide : utilisez B2B, DEP ou MAIN.");
           d.serviceAbbreviation = service;
         }
+        if (window.ValidatorWorkflow.enabled()) return window.ValidatorWorkflow.issue(d);
         if (d?.workflow === "TECH_BON_SORTIE") {
           let stockInsuffisant = false;
           (d.items || []).forEach((i) => {
@@ -11833,7 +11868,13 @@
         }
       };
       if (useSupabaseBackend) {
-        supabaseBackend.auth.onAuthStateChange((_event, session) => handleActiveAuthState(session?.user || null));
+        supabaseBackend.auth.onAuthStateChange((event, session) => {
+          // Leave the auth callback before calling getUser; avoid simultaneous store connections.
+          setTimeout(() => {
+            if (!manualLoginInProgress && (event === 'SIGNED_OUT' || session?.user?.id !== secureStore.uid))
+              handleActiveAuthState(session?.user || null);
+          }, 0);
+        });
       } else {
         firebase.auth().onAuthStateChanged(handleActiveAuthState);
       }

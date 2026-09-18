@@ -1,9 +1,9 @@
 /* Dedicated cable remnants: all state changes are validated atomically by the server. */
 (function(global) {
   'use strict';
-  const status={COORD_PENDING:'À valider par le coordinateur',RECEPTION_PENDING:'À réceptionner physiquement',RECEIVED:'Réceptionné',ISSUE_PENDING:'À délivrer par le gestionnaire',ISSUED:'Sortie effectuée',REJECTED:'Refusé'};
-  const actions={return:'Retour déclaré',approveReturn:'Retour validé par le coordinateur',receiveReturn:'Réception physique',manualEntry:'Entrée entrepôt',request:'Demande de sortie',approveRequest:'Demande validée',issue:'Sortie physique',rejectReturn:'Retour refusé',rejectRequest:'Demande refusée'};
-  const roles=['Technicien','Coordinateur','Coordinatrice','Gestionnaire','Superviseur','DG','Contrôleur'];
+  const status={VALIDATOR_PENDING:'À valider par le validateur',COORD_PENDING:'À valider par le coordinateur',RECEPTION_PENDING:'À réceptionner physiquement',RECEIVED:'Réceptionné',ISSUE_PENDING:'À délivrer par le gestionnaire',ISSUED:'Sortie effectuée',REJECTED:'Refusé'};
+  const actions={validateRequest:'Bon approuvé par le validateur',return:'Retour déclaré',approveReturn:'Retour validé par le coordinateur',receiveReturn:'Réception physique',manualEntry:'Entrée entrepôt',request:'Demande de sortie',approveRequest:'Demande validée',issue:'Sortie physique',rejectReturn:'Retour refusé',rejectRequest:'Demande refusée'};
+  const roles=['Technicien','Coordinateur','Coordinatrice','Gestionnaire','Superviseur','DG','Validateur','Validatrice','Contrôleur'];
   let env,container,data={stores:{},sources:[]},op='',busy=false,generation=0;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const rows=value=>Object.values(value||{});
@@ -41,27 +41,29 @@
     const manager=role()==='Gestionnaire',tech=role()==='Technicien',coord=['Coordinateur','Coordinatrice'].includes(role());
     const available=lots.filter(l=>l.qty>0);
     const controls=(r,kind)=>{
+      if(['Validateur','Validatrice'].includes(role())&&r.status==='VALIDATOR_PENDING'&&kind==='requests')return '<select data-manager="'+esc(r.id)+'" class="border rounded p-2"><option value="">Gestionnaire dédié</option>'+(data.managers||[]).filter(m=>m.scopes?.[op]).map(m=>'<option value="'+esc(m.uid)+'">'+esc(m.name)+'</option>').join('')+'</select> '+btn('validateRequest',r.id,'Valider et transmettre')+' '+btn('rejectRequest',r.id,'Refuser');
       if(coord&&r.status==='COORD_PENDING')return btn(kind==='returns'?'approveReturn':'approveRequest',r.id,'Valider')+' '+btn(kind==='returns'?'rejectReturn':'rejectRequest',r.id,'Refuser');
       if(manager&&r.status==='RECEPTION_PENDING'&&kind==='returns')return btn('receiveReturn',r.id,'Confirmer la réception physique')+' '+btn('rejectReturn',r.id,'Refuser');
-      if(manager&&r.status==='ISSUE_PENDING'&&kind==='requests')return btn('issue',r.id,'Confirmer la sortie physique')+' '+btn('rejectRequest',r.id,'Refuser');
+      if(manager&&r.status==='ISSUE_PENDING'&&kind==='requests'&&(!data.workflowEnabled||r.assignedManagerUid===data.userId))return btn('issue',r.id,'Confirmer la sortie physique')+' '+btn('rejectRequest',r.id,'Refuser');
       return kind==='requests'&&r.status==='ISSUED'?btn('bon',r.id,'Bon de sortie PDF'):'';
     };
     const history=rows(s.events).sort((a,b)=>b.at.localeCompare(a.at));
     container.innerHTML=`<div class="space-y-6 p-4">
-      <header class="bg-teal-800 text-white rounded-2xl p-6"><h2 class="text-xl font-black">Stocks de chutes de câbles</h2><p class="mt-2">Chaque lot représente une longueur de câble réutilisable en bon état. Les longueurs sont exprimées en mètres.</p><p class="mt-2">Retour : technicien → coordinateur → réception physique du gestionnaire. Réutilisation : demande → coordinateur → sortie physique.</p></header>
+      <header class="bg-teal-800 text-white rounded-2xl p-6"><h2 class="text-xl font-black">Stocks de chutes de câbles</h2><p class="mt-2">Chaque lot représente une longueur de câble réutilisable en bon état. Les longueurs sont exprimées en mètres.</p><p class="mt-2">Retour : technicien → coordinateur → réception physique du gestionnaire. Réutilisation : demande → coordination → validation du bon → sortie physique du gestionnaire dédié.</p></header>
       <div class="flex gap-3 items-center flex-wrap"><label>Stock dédié <select id="chute-op" class="border rounded-lg p-3">${Object.keys(data.stores).sort().map(key=>`<option ${op===key?'selected':''} value="${esc(key)}">Chutes ${esc(key)}</option>`).join('')}</select></label>${btn('refresh','','Actualiser')}${btn('excel','','Rapport Excel')}${btn('pdf','','Rapport PDF')}</div>
       <p id="chute-message" role="status" class="text-sm text-teal-800"></p>
       ${!op?'<p>Aucun stock dédié accessible. Faites vérifier votre affectation.</p>':`
       <div class="bg-white rounded-2xl p-5 border"><h3 class="font-bold">Stock actuel — Chutes ${esc(op)}</h3><p class="text-2xl font-bold">${quantity(lots.reduce((sum,l)=>sum+Number(l.qty),0))}</p><p>${available.length} lot(s) disponible(s). Les lots restent séparés pour respecter la longueur de chaque chute.</p></div>
       ${manager?form('manualEntry','Entrée de chute déjà disponible dans l’entrepôt',input('label','Nom du câble')+input('qty','Longueur de cette chute (m)','number')+input('motif','Motif / origine de la chute')):''}
       ${tech?`<div class="grid md:grid-cols-2 gap-4">${form('return','Retour de câble en bon état',`<label class="block text-sm">Câble reçu / bon d’origine<select name="source" required class="w-full border rounded-lg p-3"><option value="">Choisir un câble reçu</option>${sourceOptions().map(source=>`<option value="${esc(source.choice)}">${esc(source.label)} — ${esc(source.reference)} — restant retournable : ${quantity(source.remaining)}</option>`).join('')}</select></label>`+input('qty','Distance restante à retourner (m)','number')+input('motif','Motif du retour'))}${form('request','Réutiliser une chute : demande de bon de sortie',`<label class="block text-sm">Lot de provenance<select name="lotId" required class="w-full border rounded-lg p-3"><option value="">Choisir un lot</option>${available.map(l=>`<option value="${esc(l.id)}">${esc(l.label)} — ${quantity(l.qty)} — ${esc(l.id)}</option>`).join('')}</select></label>`+input('qty','Longueur demandée (m)','number')+input('motif','Motif / chantier'))}</div>`:''}
+      ${data.workflowEnabled&&(coord||manager||role()==='Superviseur')?form('request','Demande de sortie de chute au validateur',`<label class="block">Lot de provenance<select name="lotId" required class="border rounded-lg p-3 w-full"><option value="">Choisir un lot</option>${available.map(l=>`<option value="${esc(l.id)}">${esc(l.label)} — ${quantity(l.qty)} — ${esc(l.id)}</option>`).join('')}</select></label>`+input('qty','Longueur demandée (m)','number')+input('motif','Motif / chantier / destinataire')):''}
       <section class="bg-white rounded-2xl p-5 border"><h3 class="font-bold mb-3">Lots de chutes et provenance</h3>${table(['Câble / type','Lot','Stock actuel','Origine / bon source','Réception'],lots.map(l=>[esc(l.label)+'<br>'+esc(l.materialType),esc(l.id),quantity(l.qty),esc(l.origin)+'<br>'+esc(l.sourceReference)+(l.parentLotId?'<br>Lot précédent : '+esc(l.parentLotId):''),esc(date(l.createdAt))]))}</section>
       <section class="bg-white rounded-2xl p-5 border"><h3 class="font-bold mb-3">Retours de câbles</h3>${table(['Câble / technicien','Longueur / motif','Bon d’origine','État / validations','Action'],returns.map(r=>[esc(r.label)+'<br>'+esc(r.technicienName),quantity(r.qty)+'<br>'+esc(r.motif),esc(r.source.reference),esc(status[r.status])+'<br>'+stamps(r),controls(r,'returns')]))}</section>
       <section class="bg-white rounded-2xl p-5 border"><h3 class="font-bold mb-3">Demandes et bons de sortie — provenance stock de chutes</h3>${table(['Câble / technicien','Longueur / chantier','Lot de provenance','État / validations','Action'],requests.map(r=>[esc(r.label)+'<br>'+esc(r.technicienName),quantity(r.qty)+'<br>'+esc(r.motif),esc(r.lotId),esc(status[r.status])+'<br>'+stamps(r),controls(r,'requests')]))}</section>
       <section class="bg-white rounded-2xl p-5 border"><h3 class="font-bold mb-3">Historique des flux — Chutes ${esc(op)}</h3>${table(['Date','Action / auteur','Câble / longueur','Variation du stock','Lot / référence / origine'],history.map(e=>[esc(date(e.at)),esc(actions[e.action])+'<br>'+esc(e.actorName),esc(e.label)+'<br>'+quantity(e.qty),quantity(e.delta),esc(e.lotId||'—')+'<br>'+esc(e.reference)+'<br>'+esc(e.sourceReference||'')]))}</section>`}</div>`;
     bind();
   }
-  function stamps(r){return ['coordination','reception','delivery','rejection'].filter(k=>r[k]).map(k=>esc(r[k].name)+' — '+esc(date(r[k].at))+(r[k].reason?' : '+esc(r[k].reason):'')).join('<br>');}
+  function stamps(r){return ['coordination','validation','reception','delivery','rejection'].filter(k=>r[k]).map(k=>esc(r[k].name)+' — '+esc(date(r[k].at))+(r[k].reason?' : '+esc(r[k].reason):'')).join('<br>');}
   function bind(){
     container.onchange=e=>{if(e.target.id==='chute-op'&&!busy){op=e.target.value;render();}};
     container.onsubmit=async e=>{const form=e.target.closest('[data-command]');if(!form)return;e.preventDefault();if(!form.reportValidity())return;
@@ -75,10 +77,11 @@
     container.onclick=async e=>{const button=e.target.closest('[data-action]');if(!button||busy)return;
       const action=button.dataset.action,id=button.dataset.id;
       if(action==='refresh')return refresh();if(action==='excel')return exportExcel();if(action==='pdf')return exportPdf();if(action==='bon')return exportPdf(id);
-      let reason;
+      let reason,managerUid;
+      if(action==='validateRequest'){managerUid=Array.from(container.querySelectorAll('[data-manager]')).find(el=>el.dataset.manager===id)?.value;if(!managerUid)return global.alert('Choisissez le gestionnaire dédié.');}
       if(action.startsWith('reject')){reason=global.prompt('Motif du refus');if(!reason?.trim())return;}
       if(['receiveReturn','issue'].includes(action)&&!global.confirm(action==='receiveReturn'?'Confirmer que la longueur déclarée a été reçue physiquement, contrôlée et est en bon état ?':'Confirmer la remise physique de cette longueur au technicien ?'))return;
-      await mutate({action,target:id,...(reason?{reason}:{})},button);
+      await mutate({action,target:id,...(reason?{reason}:{}),...(managerUid?{managerUid}:{})},button);
     };
   }
   async function mutate(payload,element){
@@ -99,7 +102,7 @@
     doc.setFontSize(14);doc.text(request?'BON DE SORTIE — STOCK DE CHUTES':'RAPPORT — STOCK DE CHUTES',14,18);
     doc.setFontSize(10);doc.text('Provenance : CHUTES '+op,14,27);
     if(request){
-      const lines=[request.reference,'Technicien : '+request.technicienName,'Câble : '+request.label,'Type : '+request.materialType,'Longueur délivrée : '+quantity(request.qty),'Lot : '+request.lotId,'Origine : '+request.sourceReference,'Motif / chantier : '+request.motif,'Coordination : '+request.coordination.name+' — '+date(request.coordination.at),'Réception / sortie gestionnaire : '+request.delivery.name+' — '+date(request.delivery.at)];
+      const lines=[request.reference,'Technicien : '+request.technicienName,'Câble : '+request.label,'Type : '+request.materialType,'Longueur délivrée : '+quantity(request.qty),'Lot : '+request.lotId,'Origine : '+request.sourceReference,'Motif / chantier : '+request.motif,'Coordination : '+(request.coordination?.name||'Demande directe')+' — '+date(request.coordination?.at),...(request.validation?['Validation du bon : '+request.validation.name+' — '+date(request.validation.at)]:[]),'Réception / sortie gestionnaire : '+request.delivery.name+' — '+date(request.delivery.at)];
       doc.autoTable({startY:34,head:[['Traçabilité du bon']],body:lines.map(line=>[line]),styles:{fontSize:9}});
     }else{
       doc.text('Stock actuel : '+quantity(rows(state().lots).reduce((sum,l)=>sum+l.qty,0)),14,34);

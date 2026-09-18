@@ -35,6 +35,10 @@ function renderMonProfil(container) {
 }
 
 async function getOwnProfileRef() {
+  if (window.ITCSupabaseConfig?.client) {
+    const client=window.ITCSupabaseConfig.client;
+    return {update:async changes=>{const {error}=await client.rpc('update_own_profile',{changes});if(error)throw error;}};
+  }
   const authUser = firebase.auth().currentUser;
   if (!authUser || !currentUser || (currentUser.uid && currentUser.uid !== authUser.uid)) throw new Error('Session expirée. Reconnectez-vous.');
   const entry = (appData.users || []).find(u => u.uid === authUser.uid);
@@ -91,9 +95,17 @@ async function changeMonProfilPassword(event) {
     if (newPassword !== document.getElementById('profile-confirm-password').value) throw new Error('Les nouveaux mots de passe ne correspondent pas.');
     if (newPassword === oldPassword) throw new Error('Choisissez un mot de passe différent du mot de passe actuel.');
     const ref = await getOwnProfileRef();
-    const user = firebase.auth().currentUser;
-    await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, oldPassword));
-    await user.updatePassword(newPassword);
+    const supabase=window.ITCSupabaseConfig?.client;
+    if (supabase) {
+      const {data,error}=await supabase.auth.getUser(); if(error)throw error;
+      const checked=await supabase.auth.signInWithPassword({email:data.user.email,password:oldPassword});
+      if(checked.error)throw checked.error;
+      const changed=await supabase.auth.updateUser({password:newPassword});if(changed.error)throw changed.error;
+    } else {
+      const user = firebase.auth().currentUser;
+      await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, oldPassword));
+      await user.updatePassword(newPassword);
+    }
     passwordChanged = true;
     form.reset();
     form.querySelectorAll('[autocomplete*=password]').forEach(input => input.type = 'password');

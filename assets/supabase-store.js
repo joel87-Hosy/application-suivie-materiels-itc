@@ -1,5 +1,4 @@
 (function (global) {
-  const control = global.ControlCore;
   const collections = ['stock', 'stockMovements', 'sorties', 'demandes', 'techDemandes', 'retours', 'notifications', 'consumptionArchives', 'platformAuditLogs', 'companies', 'users'];
   const settings = ['materialTypes', 'scansDuJour', 'derniereDateScan', 'lastConsumptionArchiveKey'];
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -58,6 +57,10 @@
         controlScopes: profile.control_scopes,
         controlScopeKeys: profile.control_scope_keys,
       };
+      const {data: workflow, error: workflowError} = await this.client.from('stock_workflow_config')
+        .select('enabled').eq('company_id', profile.company_id).maybeSingle();
+      if (workflowError) throw workflowError;
+      this.profile.validatorWorkflowEnabled = workflow?.enabled === true;
       await this.read(generation);
       this.ready = true;
       this.timer = setInterval(() => this.read(generation).catch(error => this.deny(error, generation)), 10000);
@@ -116,6 +119,7 @@
       return data;
     }
     async save(data) {
+      const control = global.ControlCore;
       if (!this.ready || !this.profile) throw new Error('Données non chargées. Reconnectez-vous.');
       if (this.profile.role === 'Contrôleur') throw new Error('Utilisez le module Contrôle pour enregistrer vos vérifications.');
       const rows = [];
@@ -124,19 +128,25 @@
           if (!row || typeof row !== 'object') continue;
           const recordKey = row._dbKey || key();
           const next = clean(row);
+          if (equal(next, this.raw[name]?.[recordKey])) continue;
           next.company_id = name === 'companies' ? next.id : (next.company_id || (this.profile.role === 'SUPER_ADMIN' ? 'COMP-ITC-LEGACY' : this.profile.company_id));
           if (control.scopedCollections.includes(name)) {
             next.op = control.operator(next.op);
             next.scope_key = control.scopeKey(next.company_id, next.op);
           }
-          rows.push({collection: name, record_key: recordKey, company_id: next.company_id, payload: next, updated_at: new Date().toISOString()});
+          rows.push({collection: name, record_key: recordKey, company_id: next.company_id, payload: next, previous: this.raw[name]?.[recordKey] ?? null});
         }
       }
-      const { error } = await this.client.from('app_records').upsert(rows, { onConflict: 'collection,record_key' });
-      if (error) throw error;
-      const settingRows = settings.map(setting => ({company_id: this.profile.company_id, setting_key: setting, value: clean(data[setting] ?? null), updated_at: new Date().toISOString()}));
-      const { error: settingsError } = await this.client.from('app_settings').upsert(settingRows, {onConflict: 'company_id,setting_key'});
-      if (settingsError) throw settingsError;
+      if (rows.length) {
+        const {error} = await this.client.rpc('save_app_changes', {changes: rows});
+        if (error) throw error;
+      }
+      const settingRows = settings.filter(setting => !equal(data[setting], this.raw.settings?.[setting]))
+        .map(setting => ({company_id: this.profile.company_id, setting_key: setting, value: clean(data[setting] ?? null), updated_at: new Date().toISOString()}));
+      if (settingRows.length) {
+        const {error: settingsError} = await this.client.from('app_settings').upsert(settingRows, {onConflict: 'company_id,setting_key'});
+        if (settingsError) throw settingsError;
+      }
       await this.read(this.generation);
     }
   }

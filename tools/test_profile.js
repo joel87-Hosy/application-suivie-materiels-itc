@@ -11,6 +11,7 @@ function setup(team = true) {
   auth.EmailAuthProvider = {credential: (email, password) => ({email, password})};
   const profile = {uid: user.uid, name: 'Flash-Abonné', role: 'Technicien', username: team ? 'flash-abonne' : undefined};
   const context = {firebase: {auth}, currentUser: {...profile}, appData: {users: [{...profile, _dbKey: "37"}]}, document: {getElementById: id => inputs[id]}, db: {ref: path => ({once: async () => ({val: () => ({'37': profile})}), update: async changes => updates.push({path, changes})})}, updateUserInfo() {}, escapeHtml: text => String(text).replace(/</g, '&lt;')};
+  context.window = {};
   vm.createContext(context); vm.runInContext(source, context);
   const button = {disabled: false};
   const form = {querySelector: () => button, querySelectorAll: () => [], reset: () => calls.push('reset')};
@@ -55,7 +56,18 @@ function setup(team = true) {
   partial.context.db.ref = () => ({once: async () => ({val: () => ({37: {uid: 'team-uid'}})}), update: async () => {throw new Error('offline');}});
   await partial.context.changeMonProfilPassword(partial.event);
   assert.match(partial.inputs['profile-password-status'].textContent, /a été modifié/);
-  for (const role of ['SUPER_ADMIN', 'Superviseur', 'Contrôleur', 'Gestionnaire', 'Coordinateur', 'Superviseur Terrain', 'Technicien']) {
+  const migrated = setup(false);
+  migrated.context.window.ITCSupabaseConfig = {client:{auth:{
+    getUser:async()=>({data:{user:{email:'validator@example.com'}}}),
+    signInWithPassword:async()=>{migrated.calls.push('reauth');return {};},
+    updateUser:async()=>{migrated.calls.push('password');return {};},
+  },rpc:async(name,{changes})=>{assert.equal(name,'update_own_profile');migrated.updates.push({changes});return {};}}};
+  migrated.inputs['profile-current-password'].value='old-password';
+  migrated.inputs['profile-new-password'].value=migrated.inputs['profile-confirm-password'].value='new-password';
+  await migrated.context.changeMonProfilPassword(migrated.event);
+  assert.deepEqual(migrated.calls,['reauth','password','reset']);
+  assert.equal(migrated.updates[0].changes.must_change_password,false);
+  for (const role of ['SUPER_ADMIN', 'Superviseur', 'Validateur', 'Validatrice', 'Contrôleur', 'Gestionnaire', 'Coordinateur', 'Superviseur Terrain', 'Technicien']) {
     const container = {};
     team.context.currentUser.role = role;
     team.context.renderMonProfil(container);
