@@ -2492,7 +2492,9 @@
 
           const userProfile = (appData.users || []).find(
             (u) => String(u.email || "").toLowerCase() === email,
-          );
+          ) || (useSupabaseBackend && String(secureStore.profile?.email || "").toLowerCase() === email
+            ? secureStore.profile
+            : null);
 
           if (userProfile) {
             if (isCompanySuspendedForUser(userProfile)) {
@@ -11799,7 +11801,9 @@
             (u) =>
               String(u.email || "").toLowerCase() ===
               String(user.email || "").toLowerCase(),
-          );
+          ) || (useSupabaseBackend && String(secureStore.profile?.email || "").toLowerCase() === String(user.email || "").toLowerCase()
+            ? secureStore.profile
+            : null);
           if (userProfile) {
             currentUser = {...userProfile, ...secureStore.profile};
             document.getElementById("login-screen").classList.add("hidden");
