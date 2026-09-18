@@ -1,9 +1,11 @@
 /* Public Supabase client configuration. Never place a service-role key here. */
 (function (global) {
-  const projectUrl = "https://ufstydudgffhbkkjtbbg.supabase.co";
+  const projectUrl = global.ITCSupabasePublicConfig?.projectUrl || "https://ufstydudgffhbkkjtbbg.supabase.co";
+  let legacyKey = "";
+  try { legacyKey = global.localStorage?.getItem("itc_supabase_publishable_key") || ""; } catch (_) {}
   const publishableKey = String(
-    global.ITC_SUPABASE_PUBLISHABLE_KEY ||
-      global.localStorage?.getItem("itc_supabase_publishable_key") ||
+    global.ITCSupabasePublicConfig?.publishableKey || global.ITC_SUPABASE_PUBLISHABLE_KEY ||
+      legacyKey ||
       "",
   ).trim();
   const client = publishableKey && global.supabase
@@ -13,7 +15,7 @@
   global.ITCSupabaseConfig = {
     projectUrl,
     publishableKey,
-    isConfigured: Boolean(publishableKey),
+    isConfigured: Boolean(client),
     client,
   };
 })(window);

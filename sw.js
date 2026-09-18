@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v21-supabase-only";
+const CACHE_NAME = "itc-gestion-materiels-v22-supabase-shared-config";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -9,6 +9,10 @@ const APP_SHELL = [
   "./assets/cable-offcuts.js",
   "./assets/cable-offcuts-transport.js",
   "./assets/supabase-config.js",
+  "./assets/supabase-public-config.js",
+  "./assets/supabase-public-config.js?v=20260918-shared1",
+  "./assets/supabase-config.js?v=20260918-shared1",
+  "./assets/cable-offcuts-transport.js?v=20260918-shared1",
   "./assets/supabase-store.js",
   "./assets/assistant-knowledge.js",
   "./assets/assistant-reports.js",

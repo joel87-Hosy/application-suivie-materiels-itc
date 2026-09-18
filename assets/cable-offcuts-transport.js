@@ -4,14 +4,10 @@
 (function(global) {
   'use strict';
   async function call(payload) {
-    const publishableKey = String(global.localStorage?.getItem('itc_supabase_publishable_key') || '').trim();
-    const supabaseConfig = global.ITCSupabaseConfig || (publishableKey && global.supabase ? {
-      projectUrl: 'https://ufstydudgffhbkkjtbbg.supabase.co',
-      publishableKey,
-      client: global.supabase.createClient('https://ufstydudgffhbkkjtbbg.supabase.co', publishableKey),
-    } : null);
+    // Share the same client and session as application login, on every device.
+    const supabaseConfig = global.ITCSupabaseConfig;
     const supabase = supabaseConfig?.client;
-    if (!supabase) throw new Error('Supabase n’est pas configuré pour les stocks de chutes. Rechargez l’application après avoir enregistré la clé publique.');
+    if (!supabase) throw new Error('La configuration du site est incomplète. Faites publier la configuration Supabase commune à tous les appareils.');
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !sessionData.session) throw new Error('Reconnectez-vous pour accéder aux stocks de chutes.');
     const response = await fetch(supabaseConfig.projectUrl + '/functions/v1/cable-offcuts', {
