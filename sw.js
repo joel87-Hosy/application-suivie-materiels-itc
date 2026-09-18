@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v19-supabase-offcuts";
+const CACHE_NAME = "itc-gestion-materiels-v20-supabase-offcuts";
 const APP_SHELL = [
   "./",
   "./index.html",

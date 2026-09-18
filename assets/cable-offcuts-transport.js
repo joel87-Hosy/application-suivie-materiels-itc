@@ -4,7 +4,12 @@
 (function(global) {
   'use strict';
   async function call(payload) {
-    const supabaseConfig = global.ITCSupabaseConfig;
+    const publishableKey = String(global.localStorage?.getItem('itc_supabase_publishable_key') || '').trim();
+    const supabaseConfig = global.ITCSupabaseConfig || (publishableKey && global.supabase ? {
+      projectUrl: 'https://ufstydudgffhbkkjtbbg.supabase.co',
+      publishableKey,
+      client: global.supabase.createClient('https://ufstydudgffhbkkjtbbg.supabase.co', publishableKey),
+    } : null);
     if (supabaseConfig) {
       const supabase = supabaseConfig.client;
       if (!supabase) throw new Error('Supabase n’est pas configuré pour les stocks de chutes. Rechargez l’application après avoir enregistré la clé publique.');
