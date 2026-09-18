@@ -4,16 +4,18 @@
 (function(global) {
   'use strict';
   async function call(payload) {
-    const supabase = global.ITCSupabaseConfig?.client;
-    if (supabase) {
+    const supabaseConfig = global.ITCSupabaseConfig;
+    if (supabaseConfig) {
+      const supabase = supabaseConfig.client;
+      if (!supabase) throw new Error('Supabase n’est pas configuré pour les stocks de chutes. Rechargez l’application après avoir enregistré la clé publique.');
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !sessionData.session) throw new Error('Reconnectez-vous pour accéder aux stocks de chutes.');
-      const response = await fetch(global.ITCSupabaseConfig.projectUrl + '/functions/v1/cable-offcuts', {
+      const response = await fetch(supabaseConfig.projectUrl + '/functions/v1/cable-offcuts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + sessionData.session.access_token,
-          'apikey': global.ITCSupabaseConfig.publishableKey,
+          'apikey': supabaseConfig.publishableKey,
         },
         body: JSON.stringify(payload),
       });
