@@ -4,6 +4,23 @@
 (function(global) {
   'use strict';
   async function call(payload) {
+    const supabase = global.ITCSupabaseConfig?.client;
+    if (supabase) {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) throw new Error('Reconnectez-vous pour accéder aux stocks de chutes.');
+      const response = await fetch(global.ITCSupabaseConfig.projectUrl + '/functions/v1/cable-offcuts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + sessionData.session.access_token,
+          'apikey': global.ITCSupabaseConfig.publishableKey,
+        },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || body?.error) throw new Error(body?.error || 'Le service Supabase des stocks de chutes est indisponible.');
+      return body;
+    }
     const user=firebase.auth().currentUser;
     if(!user)throw new Error('Reconnectez-vous pour accéder aux stocks de chutes.');
     const project=firebase.app().options.projectId;
