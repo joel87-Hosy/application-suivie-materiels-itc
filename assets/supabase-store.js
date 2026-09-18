@@ -64,14 +64,10 @@
       return this.value();
     }
     async read(generation) {
-      const query = this.profile.role === 'SUPER_ADMIN'
-        ? this.client.from('app_records').select('*')
-        : this.client.from('app_records').select('*').eq('company_id', this.profile.company_id);
-      const [{ data: records, error: recordsError }, { data: settingRows, error: settingsError }] = await Promise.all([
-        query,
+      const [records, { data: settingRows, error: settingsError }] = await Promise.all([
+        this.readAllRecords(generation),
         this.client.from('app_settings').select('*').eq('company_id', this.profile.company_id),
       ]);
-      if (recordsError) throw recordsError;
       if (settingsError) throw settingsError;
       if (generation !== this.generation) return;
       this.raw = {};
@@ -81,6 +77,29 @@
       }
       this.raw.settings = Object.fromEntries((settingRows || []).map(row => [row.setting_key, row.value]));
       if (this.ready) this.onChange(this.value());
+    }
+    async readAllRecords(generation) {
+      const records = [], seen = new Set();
+      const company = this.profile.company_id, isAdmin = this.profile.role === 'SUPER_ADMIN';
+      // PostgREST caps a response (normally 1000 rows). Notifications and
+      // histories must not crowd stock cards out of the application snapshot.
+      for (;;) {
+        if (generation !== this.generation) throw new Error('Session remplacée.');
+        let query = this.client.from('app_records').select('*')
+          .order('collection', {ascending:true}).order('record_key', {ascending:true})
+          .range(records.length, records.length + 499);
+        if (!isAdmin) query = query.eq('company_id', company);
+        const {data, error} = await query;
+        if (error) throw error;
+        if (!data?.length) return records;
+        for (const row of data) {
+          const identity = JSON.stringify([row.collection, row.record_key]);
+          if (seen.has(identity)) throw new Error('Les données ont changé pendant le chargement. Actualisez la page.');
+          seen.add(identity); records.push(row);
+        }
+        // Advance by the number actually received, including servers whose
+        // configured row limit is lower than the requested page size.
+      }
     }
     deny(error, generation) {
       if (generation !== this.generation) return;
