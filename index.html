@@ -1657,6 +1657,9 @@
     </div>
 
     <link rel="stylesheet" href="assets/stock-control.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/supabase-config.js"></script>
+    <script src="assets/supabase-store.js"></script>
     <script src="assets/control-core.js"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js"></script>
@@ -1685,6 +1688,11 @@
 
       firebase.initializeApp(firebaseConfig);
       const db = firebase.database();
+      const supabaseBackend = window.ITCSupabaseConfig?.client || null;
+      const useSupabaseBackend = Boolean(supabaseBackend);
+      const activeAuth = useSupabaseBackend ? supabaseBackend.auth : firebase.auth();
+      const activeStoreClass = useSupabaseBackend ? SupabaseStore : SecureStore;
+      const activeStoreDatabase = useSupabaseBackend ? supabaseBackend : db;
 
       async function createAuthUserWithoutChangingSession({
         email,
@@ -1787,8 +1795,8 @@
       }
       let appData = emptyAppData();
       let pendingSave = null;
-      const secureStore = new SecureStore(db, data => applyServerData({val: () => data}), error => {
-        console.error("Accès Firebase interrompu", error);
+      const secureStore = new activeStoreClass(activeStoreDatabase, data => applyServerData({val: () => data}), error => {
+        console.error("Accès backend interrompu", error);
         logout();
         alert(error.message || "Accès refusé. Reconnectez-vous.");
       });
@@ -2022,7 +2030,7 @@
       // Force une lecture fraîche côté serveur pour s'assurer d'afficher
       // l'état le plus récent après un changement d'utilisateur/connexion.
       function refreshAppDataFromServer() {
-        return secureStore.connect(firebase.auth().currentUser)
+        return getActiveAuthUser().then(user => secureStore.connect(user))
           .then(() => {
             const data = secureStore.value();
             if (!data) return;
@@ -2433,6 +2441,22 @@
       });
 
       // --- AUTH ---
+      async function getActiveAuthUser() {
+        if (!useSupabaseBackend) return firebase.auth().currentUser;
+        const result = await supabaseBackend.auth.getUser();
+        if (result.error) throw result.error;
+        return result.data.user;
+      }
+
+      async function signOutActiveAuth() {
+        if (useSupabaseBackend) {
+          const result = await supabaseBackend.auth.signOut();
+          if (result.error) throw result.error;
+          return;
+        }
+        await firebase.auth().signOut();
+      }
+
       async function handleLogin(e) {
         e.preventDefault();
         const identifier = document
@@ -2446,15 +2470,21 @@
         const password = document.getElementById("login-password").value;
 
         try {
-          const userCredential = await firebase
-            .auth()
-            .signInWithEmailAndPassword(email, password);
+          let authUser;
+          if (useSupabaseBackend) {
+            const result = await supabaseBackend.auth.signInWithPassword({email, password});
+            if (result.error) throw result.error;
+            authUser = result.data.user;
+          } else {
+            const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+            authUser = userCredential.user;
+          }
           // Après connection, forcer la lecture depuis le serveur puis
           // retrouver le profil dans les données fraîchement chargées.
           try {
             await refreshAppDataFromServer();
           } catch (e) {
-            await firebase.auth().signOut();
+            await signOutActiveAuth();
             throw e;
           }
 
@@ -2464,14 +2494,14 @@
 
           if (userProfile) {
             if (isCompanySuspendedForUser(userProfile)) {
-              await firebase.auth().signOut();
+              await signOutActiveAuth();
               alert(
                 "Acces bloque : votre entreprise est suspendue. Contactez l'administrateur plateforme.",
               );
               return;
             }
             if (userProfile.is_active === false) {
-              await firebase.auth().signOut();
+              await signOutActiveAuth();
               const accountStatus = String(userProfile.account_status || "suspended").toLowerCase();
               alert(
                 accountStatus === "disabled"
@@ -2519,9 +2549,7 @@
         document.getElementById("app-container").innerHTML = "";
         // 1. Déconnexion de Firebase Auth
         firebase
-          .auth()
-          .signOut()
-          .then(() => {
+        signOutActiveAuth().then(() => {
             // 2. Nettoyage des données locales
             appData.currentUserId = null;
             currentUser = null;
@@ -8821,7 +8849,7 @@
                 `<span class="font-black px-3 py-1 rounded-lg text-[8px] ${badgeColor}">${qtyVal} U</span>`,
               );
               if (
-                String(currentUser.role || "").toUpperCase() === "GESTIONNAIRE"
+                String(currentUser?.role || "").toUpperCase() === "GESTIONNAIRE"
               ) {
                 parts.push(
                   `<button onclick="ouvrirModifStock('${m.op}','${m.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 ml-1"><i class="fas fa-edit"></i></button>`,
@@ -11753,7 +11781,7 @@
         showSection("cockpit");
       }
 
-      firebase.auth().onAuthStateChanged(async (user) => {
+        const handleActiveAuthState = async (user) => {
         if (user) {
           // Forcer la lecture serveur pour s'assurer d'avoir les données à jour
           try {
@@ -11796,7 +11824,12 @@
           document.getElementById("app-container").innerHTML = "";
           currentUser = null;
         }
-      });
+      };
+      if (useSupabaseBackend) {
+        supabaseBackend.auth.onAuthStateChange((_event, session) => handleActiveAuthState(session?.user || null));
+      } else {
+        firebase.auth().onAuthStateChanged(handleActiveAuthState);
+      }
     </script>
 
     <script>
