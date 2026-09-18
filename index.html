@@ -2452,6 +2452,7 @@
         if (useSupabaseBackend) {
           const result = await supabaseBackend.auth.signOut();
           if (result.error) throw result.error;
+          await firebase.auth().signOut();
           return;
         }
         await firebase.auth().signOut();
@@ -2475,6 +2476,7 @@
             const result = await supabaseBackend.auth.signInWithPassword({email, password});
             if (result.error) throw result.error;
             authUser = result.data.user;
+            await firebase.auth().signInWithEmailAndPassword(email, password);
           } else {
             const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
             authUser = userCredential.user;
