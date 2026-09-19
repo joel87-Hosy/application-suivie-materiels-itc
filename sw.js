@@ -1,10 +1,11 @@
-const CACHE_NAME = "itc-gestion-materiels-v24-validator";
+const CACHE_NAME = "itc-gestion-materiels-v25-tabs";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./assets/profile.js",
   "./assets/secure-store.js",
   "./assets/control-core.js",
+  "./assets/control-core.js?v=20260919-tabs",
   "./assets/stock-control.js",
   "./assets/cable-offcuts.js",
   "./assets/cable-offcuts-transport.js",
@@ -14,7 +15,7 @@ const APP_SHELL = [
   "./assets/supabase-config.js?v=20260918-shared1",
   "./assets/cable-offcuts-transport.js?v=20260918-shared1",
   "./assets/supabase-store.js",
-  "./assets/supabase-store.js?v=20260918-validator",
+  "./assets/supabase-store.js?v=20260919-tabs",
   "./assets/validator-workflow.js?v=20260918-validator",
   "./assets/validator-workflow.js",
   "./assets/assistant-knowledge.js",
@@ -118,6 +119,14 @@ self.addEventListener("fetch", (event) => {
             .then((cached) => cached || caches.match("./offline.html")),
         )
     );
+    return;
+  }
+
+  // Prefer the current application code; cached modules remain an offline fallback.
+  if (url.pathname.endsWith('.js')) {
+    event.respondWith(fetch(request, {cache:'no-cache'})
+      .then(response => {if (!response.ok) throw new Error('Module unavailable'); return updateCache(request, response);})
+      .catch(async () => (await caches.match(request)) || Response.error()));
     return;
   }
 

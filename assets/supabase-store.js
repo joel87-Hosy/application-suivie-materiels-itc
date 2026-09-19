@@ -118,9 +118,30 @@
       for (const setting of settings) data[setting] = clone(this.raw.settings?.[setting] ?? (['materialTypes', 'scansDuJour'].includes(setting) ? [] : null));
       return data;
     }
+    async markNotificationsRead() {
+      if (!this.ready || !this.profile || this.profile.id == null) return [];
+      const generation = this.generation;
+      const changes = Object.entries(this.raw.notifications || {})
+        .filter(([, row]) => String(row.userId) === String(this.profile.id) && !row.lu && row.company_id === this.profile.company_id)
+        .map(([record_key, row]) => ({collection:'notifications', record_key, company_id:this.profile.company_id,
+          previous:clone(row), payload:{...clone(row), lu:true}}));
+      if (!changes.length) return [];
+      const {error} = await this.client.rpc('save_app_changes', {changes});
+      if (error) throw error;
+      if (generation !== this.generation) return [];
+      const updated = [];
+      for (const row of changes) {
+        if (equal(this.raw.notifications?.[row.record_key], row.previous)) {
+          this.raw.notifications[row.record_key] = row.payload;
+          updated.push(row.record_key);
+        }
+      }
+      return updated;
+    }
     async save(data) {
       const control = global.ControlCore;
       if (!this.ready || !this.profile) throw new Error('Données non chargées. Reconnectez-vous.');
+      if (!Array.isArray(control?.scopedCollections)) throw new Error('Le module des stocks est incomplet. Utilisez le bouton de mise à jour de l’application, puis réessayez.');
       if (this.profile.role === 'Contrôleur') throw new Error('Utilisez le module Contrôle pour enregistrer vos vérifications.');
       const rows = [];
       for (const name of collections) {

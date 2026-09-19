@@ -1660,9 +1660,9 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="assets/supabase-public-config.js?v=20260918-shared1"></script>
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
-    <script src="assets/supabase-store.js?v=20260918-validator"></script>
+    <script src="assets/control-core.js?v=20260919-tabs"></script>
+    <script src="assets/supabase-store.js?v=20260919-tabs"></script>
     <script src="assets/validator-workflow.js?v=20260918-validator"></script>
-    <script src="assets/control-core.js"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js"></script>
     <script src="assets/cable-offcuts-transport.js?v=20260918-shared1"></script>
@@ -2813,7 +2813,7 @@
         if (appData.derniereDateScan !== aujourdhui) {
           appData.scansDuJour = []; // On vide l'historique
           appData.derniereDateScan = aujourdhui; // On met à jour la date
-          save();
+          // Persist the new day with the next actual scan, never on tab navigation.
         }
       }
 
@@ -7307,8 +7307,8 @@
             appData.scansDuJour.unshift({
               id: id,
               heure: new Date().toLocaleTimeString([], {
-                hour: "2p",
-                minute: "2p",
+                hour: "2-digit",
+                minute: "2-digit",
               }),
               technicien: d.demandeurName,
             });
@@ -11615,22 +11615,27 @@
           }
         }, 500);
       }
+      let markingNotifications = false;
       async function markNotificationsAsRead() {
-        if (!appData || !appData.notifications) return; // Sécurité totale
-
-        appData.notifications.forEach((n) => {
-          if (n.userId === currentUser.id) n.lu = true;
-        });
-        if (!(await save())) return;
-      }
-      async function markNotificationsAsRead() {
-        if (!appData || !appData.notifications) return; // Sécurité totale
-
-        appData.notifications.forEach((n) => {
-          if (n.userId === currentUser.id) n.lu = true;
-        });
-        if (!(await save())) return;
-        updateNotifications;
+        if (markingNotifications || !currentUser || !Array.isArray(appData?.notifications)) return;
+        const userId = currentUser.id;
+        const unread = appData.notifications.filter(n => String(n.userId) === String(userId) && !n.lu);
+        if (!unread.length) return;
+        markingNotifications = true;
+        try {
+          if (typeof secureStore.markNotificationsRead === 'function') {
+            const updated = new Set(await secureStore.markNotificationsRead());
+            if (currentUser?.id !== userId) return;
+            appData.notifications.forEach(n => { if (updated.has(n._dbKey)) n.lu = true; });
+          } else {
+            unread.forEach(n => { n.lu = true; });
+            if (!(await save())) return;
+          }
+          updateNotifications();
+        } catch (error) {
+          // An unread notification must never prevent opening an operational tab.
+          console.warn('Lecture des notifications non synchronisée ; nouvel essai au prochain onglet.', error);
+        } finally { markingNotifications = false; }
       }
       function addNotification(u, m, auditFlux = "ITC") {
         if (!appData.notifications) appData.notifications = [];
@@ -13724,7 +13729,8 @@
 
           html += `
             <div class="bg-gradient-to-br from-slate-50 to-white border-2 border-cyan-200 rounded-2xl p-4 cursor-pointer hover:shadow-lg transition hover:border-cyan-400 hover-lift" 
-                 onclick="renderFluxMaterielDetail(document.getElementById('app-container'), '${escapeHtml(mat.designation)}')">
+                 data-flux-designation="${escapeHtml(mat.designation)}"
+                 onclick="renderFluxMaterielDetail(document.getElementById('app-container'), this.dataset.fluxDesignation)">
               <p class="text-[10px] font-black text-slate-800 uppercase mb-3 truncate">${escapeHtml(mat.designation)}</p>
               <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
                 <div class="bg-green-50 border border-green-200 rounded-lg p-2 text-center">
@@ -14008,10 +14014,10 @@
                 </div>
               </div>
               <div class="flex gap-2">
-                <button onclick="exportFluxMaterielDetailPDF('${escapeHtml(cleanDesignation)}')" class="bg-red-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow-sm hover:bg-red-700">
+                <button data-flux-designation="${escapeHtml(cleanDesignation)}" onclick="exportFluxMaterielDetailPDF(this.dataset.fluxDesignation)" class="bg-red-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow-sm hover:bg-red-700">
                   <i class="fas fa-file-pdf mr-1"></i> Export PDF
                 </button>
-                <button onclick="exportFluxMaterielDetailExcel('${escapeHtml(cleanDesignation)}')" class="bg-green-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow-sm hover:bg-green-700">
+                <button data-flux-designation="${escapeHtml(cleanDesignation)}" onclick="exportFluxMaterielDetailExcel(this.dataset.fluxDesignation)" class="bg-green-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow-sm hover:bg-green-700">
                   <i class="fas fa-file-excel mr-1"></i> Export Excel
                 </button>
               </div>
