@@ -14,7 +14,7 @@ Le dossier reste présent pour identifier et maintenir l'ancien déploiement.
 Le supprimer du dépôt ne supprimerait pas les fonctions déjà déployées.
 
 Les SDK Firebase du navigateur ont encore des usages distincts et actifs :
-inventaires et contrôles, identité visuelle, création de comptes et récupération
+inventaires et contrôles, identité visuelle et récupération
 de mot de passe. Leur retrait nécessite la migration de ces parcours et des
 données correspondantes. La liste à jour est dans
 [`docs/architecture.md`](../docs/architecture.md#ce-qui-tourne-encore-sur-firebase).

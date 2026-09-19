@@ -34,6 +34,9 @@ Deno.serve(async request => {
     const sorties = (sortieRows || []).map(row => ({ ...row.payload, _dbKey: row.record_key }));
     if (command.action === 'overview') {
       const ops = new Set(stock.map(row => row.op === 'ITC' ? 'ITC-B01' : row.op).filter(Boolean));
+      const {data: locations,error: locationsError}=await admin.from('stock_locations').select('op').eq('company_id',profile.company_id);
+      if(locationsError)throw locationsError;
+      for(const location of locations||[])ops.add(location.op);
       Object.keys(profile.control_scopes || {}).forEach(op => ops.add(op));
       const { data: stores } = await admin.from('cable_offcut_stores').select('op,state').eq('company_id', profile.company_id);
       const result: Record<string, any> = {};

@@ -1663,6 +1663,7 @@
     <script src="assets/supabase-public-config.js?v=20260918-shared1"></script>
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
     <script src="assets/control-core.js?v=20260919-tabs"></script>
+    <script src="assets/company-users.js?v=20260919-cities"></script>
     <script src="assets/supabase-store.js?v=20260919-workflow"></script>
     <script src="assets/validator-workflow.js?v=20260919-bureaus"></script>
     <script src="assets/secure-store.js"></script>
@@ -2127,7 +2128,7 @@
           .join("");
       }
 
-      const BON_OPERATORS = ["ITC-B01", "ITC-B02", "ORANGE", "MOOV", "MTN"];
+      const BON_OPERATORS = ["ITC-B01", "ITC-B02", "OCI", "CIC", "MOOV", "MTN", "ITC-BOUAKE", "ITC-SAN-PEDRO", "ITC-YAMOUSSOUKRO"];
 
       function getWorkflowOperatorsForCurrentUser() {
         if (!isStockScopedUser(currentUser)) return BON_OPERATORS;
@@ -2781,6 +2782,11 @@
           // ignore
         }
 
+        for (const op of ['ITC-BOUAKE','ITC-SAN-PEDRO','ITC-YAMOUSSOUKRO']) {
+          const id='menu-stock-'+op.toLowerCase();let button=document.getElementById(id);
+          if(!button){button=document.createElement('button');button.id=id;button.className='w-full text-left p-3 rounded-xl text-xs font-bold';button.textContent='STOCK '+op;button.setAttribute('onclick',"showSection('stock-"+op.toLowerCase()+"'); toggleSidebarMobile()");document.getElementById('section-stock-disponible')?.append(button);}
+          button.classList.toggle('hidden',isStockScopedUser(currentUser)&&!isOperatorAllowedForUser(currentUser,op));
+        }
         console.log("Mise à jour des menus terminée.");
       }
       function updateUserInfo() {
@@ -2845,7 +2851,7 @@
         if (normalized.includes("ITC-B01")) return "ITC-B01";
 
         // Default ITC to ITC-B01 for backward compatibility
-        if (normalized.includes("ITC")) return "ITC-B01";
+        if (normalized === "ITC") return "ITC-B01";
 
         return normalized || "ITC-B01";
       }
@@ -2937,6 +2943,8 @@
       function getManagedOpsNormalized(user) {
         if (!user) return [];
 
+        if (user.role === 'Gestionnaire' && user.controlScopes && typeof user.controlScopes === 'object') return ControlCore.scopes(user.controlScopes);
+        if (user.stockScopeMode === 'explicit') return ControlCore.scopes(user.managedOps);
         const raw = user.managedOps;
         let ops = [];
 
@@ -3028,7 +3036,7 @@
       }
 
       function getArchiveOperatorsForCurrentUser() {
-        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
+        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN", "ITC-BOUAKE", "ITC-SAN-PEDRO", "ITC-YAMOUSSOUKRO"];
         const role = String(currentUser?.role || "")
           .trim()
           .toUpperCase();
@@ -3066,7 +3074,7 @@
           statsEquipe[equipe] = (statsEquipe[equipe] || 0) + totalItems;
         });
 
-        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
+        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN", "ITC-BOUAKE", "ITC-SAN-PEDRO", "ITC-YAMOUSSOUKRO"];
         const operatorStats = operators.reduce((acc, op) => {
           acc[op] = {
             availableTotal: 0,
@@ -3223,7 +3231,7 @@
         const statsTech = snapshot.statsTech;
         const statsEquipe = snapshot.statsEquipe;
         const operatorStats = snapshot.operatorStats;
-        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN"];
+        const operators = ["ITC-B01", "ITC-B02", "CIC", "OCI", "MOOV", "MTN", "ITC-BOUAKE", "ITC-SAN-PEDRO", "ITC-YAMOUSSOUKRO"];
 
         const renderDesignationTotals = (totals, colorClass) => {
           const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
@@ -4219,6 +4227,8 @@
           .map((op) => normalizeOperatorKey(op))
           .filter(Boolean);
         const hasB02 = normalizedOps.some((op) => ["ITC-B02", "MOOV"].includes(op));
+        const cities=normalizedOps.filter(op=>['ITC-BOUAKE','ITC-SAN-PEDRO','ITC-YAMOUSSOUKRO'].includes(op));
+        if(cities.length)return new Set(normalizedOps).size===1?cities[0]:'MULTI';
         const hasB01 = normalizedOps.some((op) => ["ITC-B01", "OCI", "CIC", "MTN"].includes(op));
         if (hasB02 && !hasB01) return "B02";
         if (hasB01 && !hasB02) return "B01";
@@ -4360,7 +4370,7 @@
       }
 
       function getAllowedSortieOperators() {
-        const knownOps = ["ITC-B01", "ITC-B02", "OCI", "CIC", "MOOV", "MTN"];
+        const knownOps = ["ITC-B01", "ITC-B02", "OCI", "CIC", "MOOV", "MTN", "ITC-BOUAKE", "ITC-SAN-PEDRO", "ITC-YAMOUSSOUKRO"];
         const stockOps = ((appData && appData.stock) || [])
           .map((item) => normalizeOperatorKey(item.op))
           .filter(Boolean);
@@ -7553,7 +7563,7 @@
         return (
           map[key] || {
             icon: "fa-box",
-            label: key,
+            label: ({'ITC-BOUAKE':'ITC BOUAKÉ','ITC-SAN-PEDRO':'ITC SAN-PÉDRO','ITC-YAMOUSSOUKRO':'ITC YAMOUSSOUKRO'})[key] || key,
             color: "#64748b",
             badge: "bg-slate-100 text-slate-700",
             border: "border-slate-300",
@@ -8284,18 +8294,7 @@
         return "active";
       }
 
-      async function editCompanyUserStockAccess(userId) {
-        if (!isCurrentCompanySupervisor()) return;
-        const user = (appData.users || []).find(u => String(u.id) === String(userId));
-        if (!user || user.role !== "Gestionnaire") return;
-        if (!isCurrentSuperAdmin() && user.company_id !== secureStore.profile.company_id) return;
-        const value = window.prompt("Stocks autorisés, séparés par des virgules (ex. ITC-B01, ITC-B02, MOOV)", ControlCore.scopes(user.managedOps).join(", "));
-        if (value === null) return;
-        const scopes = ControlCore.scopes(value);
-        if (!scopes.length) { alert("Renseignez au moins un stock."); return; }
-        user.managedOps = scopes;
-        if (await save()) renderCompanyUsersAdmin(document.getElementById("app-container"));
-      }
+      async function editCompanyUserStockAccess(userId) { return CompanyUsers.edit(userId); }
 
       async function manageCompanyUser(userId, action) {
         if (!isCurrentCompanySupervisor()) return;
@@ -8501,12 +8500,12 @@
                   <option value="Contrôleur">Contrôleur</option>
                   <option value="Superviseur Terrain">Superviseur Terrain</option>
                   <option value="Coordinateur">Coordinateur</option>
-                  <option value="Gestionnaire">Gestionnaire</option>
+                  <option value="Gestionnaire">Gestionnaire</option><option value="Validateur">Validateur / Validatrice</option>
                   <option value="Coordinatrice">Coordinatrice</option>
                   <option value="Technicien">Technicien</option>
                 </select>
-                <input id="cu-managed-ops" class="w-full border rounded-xl p-3 text-xs" placeholder="Acces stock (ex: ITC-B01 ou ITC-B02)" />
-                <p class="text-[10px] text-teal-800">Contrôleur : accès automatique à tous les stocks de l’entreprise. Aucun stock à affecter dans ce champ.</p>
+                ${CompanyUsers.selector()}
+
                 <div class="grid grid-cols-[1fr_auto] gap-2">
                   <input id="cu-temp-password" class="w-full border rounded-xl p-3 text-xs font-black text-slate-700" readonly value="${generateTemporaryPassword()}" onclick="this.select()" />
                   <button type="button" onclick="refreshCompanyUserTempPassword()" class="bg-cyan-600 text-white rounded-xl px-3 text-[8px] font-black uppercase">Generer</button>
@@ -8541,152 +8540,7 @@
           </div>`;
       }
 
-      async function createCompanyUserFromSupervisor(event) {
-        event.preventDefault();
-        if (!isCurrentCompanySupervisor()) return;
-        const submitButton = event.submitter;
-        if (submitButton) {
-          submitButton.disabled = true;
-          submitButton.textContent = "Creation...";
-        }
-
-        try {
-          const isSuperAdmin = isCurrentSuperAdmin();
-          const companyId = isSuperAdmin
-            ? getFormTextValue("cu-company-id")
-            : getUserCompanyIdForSuperAdmin(currentUser);
-          const company = getCompanyById(companyId) ||
-            (companyId === "COMP-ITC-LEGACY"
-              ? {
-                id: "COMP-ITC-LEGACY",
-                name: "ITC",
-                logo_url: "assets/nouveau-logo-itc.png",
-              }
-              : null);
-          if (!companyId || !company) {
-            alert("Choisissez une entreprise valide avant de creer ce compte.");
-            return;
-          }
-          const role = document.getElementById("cu-user-role").value;
-          const userName = document.getElementById("cu-user-name").value.trim();
-          const manualOps = document
-            .getElementById("cu-managed-ops")
-            .value.split(",")
-            .map((op) => op.trim())
-            .filter(Boolean);
-          const roleUpper = String(role).toUpperCase();
-          let managedOps =
-            [
-              "CONTRÔLEUR",
-              "GESTIONNAIRE",
-              "TECHNICIEN",
-              "COORDINATEUR",
-              "COORDINATRICE",
-              "SUPERVISEUR TERRAIN",
-            ].includes(roleUpper)
-              ? manualOps
-              : [];
-          managedOps = ControlCore.scopes(managedOps);
-          if (role === "Contrôleur") managedOps = [];
-          if (String(role).toUpperCase() === "TECHNICIEN" && managedOps.length === 0) {
-            const fingerprint = `${userName} ${document.getElementById("cu-user-email").value}`.toUpperCase();
-            if (fingerprint.includes("B02") || fingerprint.includes("BUREAU 02")) {
-              managedOps = ["ITC-B02", "MOOV"];
-            } else {
-              managedOps = ["ITC-B01", "OCI", "CIC", "MTN"];
-            }
-          }
-
-          appData.users = Array.isArray(appData.users) ? appData.users : [];
-          const email = document.getElementById("cu-user-email").value.trim().toLowerCase();
-          const temporaryPassword =
-            document.getElementById("cu-temp-password").value ||
-            generateTemporaryPassword();
-          const existingIndex = appData.users.findIndex(
-            (user) => String(user.email || "").toLowerCase() === email,
-          );
-          const existingProfile =
-            existingIndex >= 0 ? appData.users[existingIndex] : null;
-          if (existingProfile?.uid) {
-            alert("Un profil existe deja avec cet email.");
-            return;
-          }
-
-          const authUser = await createAuthUserWithoutChangingSession({
-            email,
-            password: temporaryPassword,
-            displayName: userName,
-          });
-
-          const maxId = appData.users.reduce(
-            (max, user) => Math.max(max, Number(user.id) || 0),
-            0,
-          );
-          const newProfile = {
-            ...(existingProfile || {}),
-            id: Math.max(maxId + 1, Date.now() * 1000 + crypto.getRandomValues(new Uint32Array(1))[0] % 1000),
-            uid: authUser.uid,
-            company_id: companyId,
-            company_name: company.name,
-            company_logo_url: company?.logo_url || "assets/saas-logo.svg",
-            role,
-            name: userName,
-            full_name: userName,
-            email,
-            managedOps,
-
-            must_change_password: true,
-            is_active: true,
-            account_status: "active",
-            created_at: existingProfile?.created_at || new Date().toISOString(),
-            created_by: currentUser.email,
-          };
-          if (existingIndex >= 0) {
-            newProfile.id = existingProfile.id || maxId + 1;
-            appData.users[existingIndex] = newProfile;
-          } else {
-            appData.users.push(newProfile);
-          }
-
-          appData.platformAuditLogs = Array.isArray(appData.platformAuditLogs)
-            ? appData.platformAuditLogs
-            : [];
-          appData.platformAuditLogs.unshift({
-            action: existingProfile
-              ? "ATTACH_COMPANY_USER_AUTH"
-              : "CREATE_COMPANY_USER",
-            company_id: companyId,
-            role,
-            email,
-            uid: authUser.uid,
-            by: currentUser.email,
-            date: new Date().toLocaleString("fr-FR"),
-          });
-
-          await secureStore.save(appData);
-
-          alert(
-            `Compte cree.\n\nEmail: ${email}\nMot de passe temporaire: ${temporaryPassword}\n\nL'utilisateur peut maintenant se connecter.`,
-          );
-          renderCompanyUsersAdmin(document.getElementById("app-container"));
-        } catch (error) {
-          const code = String(error?.code || "");
-          if (code.includes("email-already-in-use")) {
-            alert("Ce compte existe deja dans Firebase Auth. Supprimez le doublon ou utilisez le script Admin SDK pour le rattacher.");
-          } else if (code.includes("operation-not-allowed")) {
-            alert("Creation impossible : activez le fournisseur Email/Password dans Firebase Authentication.");
-          } else if (code.includes("permission-denied")) {
-            alert("Creation partielle : le compte Auth a peut-etre ete cree, mais les droits de base de donnees refusent l'ecriture du profil securite. Deployeez les nouvelles regles Firebase puis reessayez.");
-          } else {
-            alert("Erreur creation compte : " + (error?.message || error));
-          }
-        } finally {
-          if (submitButton) {
-            submitButton.disabled = false;
-            submitButton.textContent = "Creer le compte";
-          }
-        }
-      }
+      async function createCompanyUserFromSupervisor(event) { return CompanyUsers.create(event); }
 
       function renderCockpit(container) {
         const stock = appData.stock || [];
@@ -8714,8 +8568,7 @@
           "OCI",
           "CIC",
           "MOOV",
-          "MTN",
-        ];
+          "MTN", "ITC-BOUAKE", "ITC-SAN-PEDRO", "ITC-YAMOUSSOUKRO"];
         try {
           if (
             currentUser &&
@@ -8728,8 +8581,7 @@
               "CIC",
               "MTN",
               "ITC-B02",
-              "MOOV",
-            ];
+              "MOOV", "ITC-BOUAKE", "ITC-SAN-PEDRO", "ITC-YAMOUSSOUKRO"];
             operatorsForTotals = cockpitOrder.filter((op) => managed.has(op));
           }
         } catch (e) {}
@@ -10607,10 +10459,7 @@
                       <div>
                           <label class="text-[8px] text-slate-400 uppercase ml-1">Opérateur</label>
                           <select id="r-op" onchange="toggleQtyField(this.value)" class="w-full border-2 p-3 rounded-xl uppercase text-xs bg-white outline-none focus:border-indigo-500">
-                              <option value="ITC">ITC</option>
-                              <option value="OCI-CIC">OCI-CIC</option>
-                              <option value="MOOV">MOOV</option>
-                              <option value="MTN">MTN</option>
+                              ${CompanyUsers.stocks.map(op=>`<option value="${op}">${CompanyUsers.names[op]||op}</option>`).join('')}
                           </select>
                       </div>
 

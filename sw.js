@@ -1,8 +1,9 @@
-const CACHE_NAME = "itc-gestion-materiels-v28-workflow";
+const CACHE_NAME = "itc-gestion-materiels-v29-cities";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./assets/profile.js",
+  "./assets/company-users.js?v=20260919-cities",
   "./assets/secure-store.js",
   "./assets/control-core.js",
   "./assets/control-core.js?v=20260919-tabs",

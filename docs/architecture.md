@@ -21,6 +21,7 @@ Projet `gestion-materiel` (`ufstydudgffhbkkjtbbg`).
 | `app_settings` | Réglages par entreprise |
 | `cable_offcut_stores` | État des stocks de chutes de câbles, un document JSON par stock |
 | `stock_workflow_config` | Configuration historique ; ne désactive plus les protections du circuit |
+| `stock_locations` | Registre des stocks dédiés, y compris les stocks sans matériel |
 
 `app_records.payload` conserve la forme des documents Firebase d'origine, ce qui a
 permis de migrer sans réécrire le front. Les collections sont `stock`, `sorties`,
@@ -96,7 +97,6 @@ une mise à jour amont ne peut pas atteindre la production sans modification de
 | --- | --- | --- |
 | Contrôle des stocks (inventaires, anomalies, audits, pièces jointes) | `assets/stock-control.js` | Realtime Database `stock_control/` |
 | Identité visuelle des entreprises | `index.html` | Realtime Database `tenant_branding/` |
-| Création de comptes | `index.html`, `createAuthUserWithoutChangingSession` | Firebase Auth |
 | Réinitialisation de mot de passe | `index.html` | Firebase Auth |
 | Notifications push | `assets/push-notifications.js`, `functions/index.js` | FCM + Realtime Database `push_subscriptions/` |
 
@@ -111,7 +111,7 @@ et doit être maintenue tant que les fonctions ci-dessus y écrivent.
 ## Tests
 
 ```bash
-npm test          # 19 tests : logique métier, PostgreSQL sur PGlite, service worker
+npm test          # 21 tests : logique métier, PostgreSQL sur PGlite, service worker
 ```
 
 `tools/run_tests.cjs` découvre automatiquement `tools/test_*.js`. Les tests exclus
@@ -145,6 +145,18 @@ du circuit de validation sont transactionnelles et réexécutables ; les scripts
 d'affectation sauvegardent les profils concernés dans `migration_private`.
 
 **Edge Function.** `supabase/functions/cable-offcuts` se déploie séparément.
+`supabase/functions/company-users` crée les comptes Supabase à la demande d'un
+superviseur autorisé. La création du profil et de sa fiche utilisateur est
+transactionnelle. Les stocks sélectionnés sont inscrits dans `managedOps`,
+`control_scopes` et `control_scope_keys` ; les identifiants ne sont pas envoyés par email.
+
+Les stocks `ITC-BOUAKE`, `ITC-SAN-PEDRO` et `ITC-YAMOUSSOUKRO` sont créés vides,
+avec leurs stocks de chutes. Leurs bons suivent le circuit existant et sont
+validés par les deux validateurs du bureau 02. Aucun gestionnaire n'est affecté
+automatiquement : le superviseur choisit les stocks à la création du compte ou
+via « Accès stock ». Une sélection explicite ne reçoit aucun stock supplémentaire
+en fonction du nom du compte ou du bureau. Les écritures directes de matériel
+sont également contrôlées par `guard_dedicated_stock`.
 
 ## Documentation antérieure
 

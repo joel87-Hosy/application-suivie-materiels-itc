@@ -1,21 +1,22 @@
 const assert=require('node:assert/strict');
 (async()=>{
  const {transition}=await import('../supabase/functions/cable-offcuts/core.ts');
- const actor=role=>({role,uid:role,user_id:role,name:role,is_active:true,company_id:'A',control_scopes:{MOOV:true}});
+ for(const stockOp of ['MOOV','ITC-BOUAKE','ITC-SAN-PEDRO','ITC-YAMOUSSOUKRO']){
+ const actor=role=>({role,uid:role,user_id:role,name:role,is_active:true,company_id:'A',control_scopes:{[stockOp]:true}});
  const manager={...actor('Gestionnaire'),profile:{name:'Magasin'}};
  let state={},id=0;
- const call=async(role,command,extra={})=>state=await transition(state,command,actor(role),{op:'MOOV',company:'A',now:new Date().toISOString(),id:String(++id),workflowEnabled:true,assignedManager:manager,...extra});
+ const call=async(role,command,extra={})=>state=await transition(state,command,actor(role),{op:stockOp,company:'A',now:new Date().toISOString(),id:String(++id),workflowEnabled:true,assignedManager:manager,...extra});
  await call('Gestionnaire',{action:'manualEntry',label:'Câble',qty:100,motif:'Entrepôt'});
  await call('Technicien',{action:'request',lotId:'1',qty:30,motif:'Chantier'});
  await call('Coordinateur',{action:'approveRequest',target:'2'});
  assert.equal(state.requests['2'].status,'VALIDATOR_PENDING');
- for(const action of ['validateRequest','rejectRequest'])await assert.rejects(transition(state,{action,target:'2',reason:'Refus'},{...actor('Validateur'),control_scopes:{'ITC-B01':true}},{op:'MOOV',company:'A',now:new Date().toISOString(),id:'outside-'+action,workflowEnabled:true,assignedManager:manager}),/autre bureau/);
+ for(const action of ['validateRequest','rejectRequest'])await assert.rejects(transition(state,{action,target:'2',reason:'Refus'},{...actor('Validateur'),control_scopes:{'ITC-B01':true}},{op:stockOp,company:'A',now:new Date().toISOString(),id:'outside-'+action,workflowEnabled:true,assignedManager:manager}),/autre bureau/);
  await assert.rejects(call('Gestionnaire',{action:'issue',target:'2'}),/non disponible/);
  await assert.rejects(call('Coordinateur',{action:'validateRequest',target:'2'}),/réservée/);
  await assert.rejects(call('Validateur',{action:'validateRequest',target:'2'},{assignedManager:{...manager,control_scopes:{'ITC-B01':true}}}),/non dédié/);
  await call('Validateur',{action:'validateRequest',target:'2'});
  assert.equal(state.lots['1'].qty,100);
- await assert.rejects(transition(state,{action:'issue',target:'2'},{...manager,user_id:'Other'},{op:'MOOV',company:'A',id:'other',workflowEnabled:true}),/affectation/);
+ await assert.rejects(transition(state,{action:'issue',target:'2'},{...manager,user_id:'Other'},{op:stockOp,company:'A',id:'other',workflowEnabled:true}),/affectation/);
  await call('Gestionnaire',{action:'issue',target:'2'});
  assert.equal(state.lots['1'].qty,70);
  await call('Technicien',{action:'return',issueId:'2',qty:4,motif:'Reste'});const returned=String(id);
@@ -27,5 +28,6 @@ const assert=require('node:assert/strict');
  await call('Validatrice',{action:'rejectRequest',target:direct,reason:'Injustifié'});
  assert.equal(state.requests[direct].status,'REJECTED');
  assert.equal(state.lots['1'].qty,70);
+ }
  console.log('PASS: offcut validator stage, refusal, dedicated manager, direct coordinator request, unchanged cable return workflow.');
 })().catch(e=>{console.error(e);process.exitCode=1});

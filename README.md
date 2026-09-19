@@ -27,7 +27,7 @@ npm install
 npm test
 ```
 
-19 tests s'exécutent sans navigateur ni émulateur, dont des tests PostgreSQL
+21 tests s'exécutent sans navigateur ni émulateur, dont des tests PostgreSQL
 réels sur PGlite. Les tests navigateur et émulateur se lancent séparément — voir
 la section « Tests » de [docs/architecture.md](docs/architecture.md).
 La CI les exécute sur chaque push, quelle que soit la branche, et sur chaque pull request.
@@ -71,11 +71,13 @@ locale est configurée), puis sur une réponse locale.
 ## Firebase
 
 Le projet Firebase `itc-erp` reste nécessaire : le contrôle des stocks, l'identité
-visuelle des entreprises, la création de comptes et la réinitialisation de mot de
+visuelle des entreprises et la réinitialisation de mot de
 passe n'ont pas encore été migrés. La liste exacte est dans
 [docs/architecture.md](docs/architecture.md#ce-qui-tourne-encore-sur-firebase).
 Le service historique de notifications est documenté dans
 [functions/README.md](functions/README.md) ; il ne reçoit pas les notifications Supabase.
+La création de comptes par le superviseur passe par l'Edge Function Supabase
+`company-users` ; les affectations de stocks sont vérifiées côté serveur.
 
 Pour les tests locaux, ajouter `localhost` et `127.0.0.1` aux domaines autorisés
 dans la console Firebase (Authentication → Settings) du projet `itc-erp`.

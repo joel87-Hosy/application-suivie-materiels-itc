@@ -16,7 +16,7 @@
   const isManager = () => role() === 'Gestionnaire';
   const allowed = () => ['Contrôleur','Superviseur','Gestionnaire'].includes(role());
   function ops() {
-    return isSupervisor() || isController() ? [...new Set([...appData.stock.filter(s=>s.company_id === company).map(s => C.operator(s.op)), ...appData.users.filter(u=>u.company_id === company).flatMap(u => C.scopes(u.managedOps))])].filter(Boolean).sort() : C.scopes(secureStore.profile?.controlScopes);
+    return isSupervisor() || isController() ? [...new Set([...(window.CompanyUsers?.stocks || []),...appData.stock.filter(s=>s.company_id === company).map(s => C.operator(s.op)), ...appData.users.filter(u=>u.company_id === company).flatMap(u => C.scopes(u.managedOps))])].filter(Boolean).sort() : C.scopes(secureStore.profile?.controlScopes);
   }
   const ref = path => db.ref(`stock_control/${writeContext?.company || company}/${writeContext?.op || op}${path ? '/' + path : ''}`);
   function stop() { if (unsubscribe) unsubscribe(); unsubscribe = null; generation++; }

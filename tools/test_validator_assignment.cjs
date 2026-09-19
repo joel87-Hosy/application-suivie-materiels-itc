@@ -53,6 +53,15 @@ const keysOf=scopes=>Object.fromEntries(Object.keys(scopes).map(op=>['COMP-ITC-L
  await assert.rejects(db.exec(migration('202609190002_assign_validator_bureaus.sql')),/Compte ou périmètre inattendu/,'compte absent ou suspendu : migration annulée');
  await db.exec('ROLLBACK');
  assert.deepEqual((await validators()).filter(v=>v.email.startsWith('nguessan')),assigned.filter(v=>v.email.startsWith('nguessan')),'échec sans écriture partielle');
+ await db.exec(migration('202609190005_city_stocks.sql'));
+ await db.exec(migration('202609190006_city_validators.sql'));
+ await db.exec(migration('202609190006_city_validators.sql'));
+ const cities={'ITC-BOUAKE':true,'ITC-SAN-PEDRO':true,'ITC-YAMOUSSOUKRO':true};
+ for(const v of await validators())assert.deepEqual(v.scopes,v.bureau==='B01'?B01:{...B02,...cities});
+ assert.equal((await db.query('SELECT count(*)::int n FROM cable_offcut_stores')).rows[0].n,3);
+ for(const op of Object.keys(cities))await db.query("INSERT INTO app_records(collection,record_key,company_id,payload) VALUES('demandes',$1,'COMP-ITC-LEGACY',$2)",[op,JSON.stringify({id:op,op,status:'EN ATTENTE VALIDATEUR',items:[{op,label:'Cable',qty:1}]})]);
+ const cityNotices=(await inbox()).filter(n=>Object.keys(cities).some(op=>n.message.includes(op)));
+ assert.equal(cityNotices.length,6);assert.ok(cityNotices.every(n=>!n.email.startsWith('wandja')));
  await db.close();
  console.log('PASS: affectation B01/B02, périmètres hérités du gestionnaire, fiches et notifications synchronisées, réexécution neutre, compte manquant bloquant.');
 })().catch(e=>{console.error(e);process.exitCode=1});
