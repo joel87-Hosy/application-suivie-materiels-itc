@@ -1,47 +1,53 @@
-Notes de développement — Firebase OAuth domains
+# ITC Gestion Matériels
 
-Contexte
+Application web de gestion de matériels télécom (stocks, bons de sortie, chutes
+de câbles, contrôle et rapports), multi-entreprises, installable en PWA.
 
-- Le navigateur empêche les opérations OAuth (popup/redirect) si le domaine courant n'est pas listé dans la section "Authorized domains" de Firebase (Authentication → Settings).
+**Commencez par [docs/architecture.md](docs/architecture.md)** : c'est le seul
+document de présentation de l'architecture actuelle. Les fichiers `.md` de la racine datent d'avant la
+migration vers Supabase et décrivent l'ancienne architecture Firebase.
 
-Aide rapide
+## Démarrer en local
 
-- Pour les tests locaux, ouvrez la console Firebase et ajoutez ces domaines :
-  - localhost
-  - 127.0.0.1
-
-Où aller dans la console Firebase
-
-- URL : https://console.firebase.google.com/project/<PROJECT_ID>/authentication/settings
-- Remplacez <PROJECT_ID> par `itc-erp` (projectId présent dans `index.html`).
-
-Serveur local recommandé (ne pas ouvrir via file://)
-
-- Node (http-server) :
+L'application est statique ; il faut la servir en HTTP (pas d'ouverture en
+`file://`, l'authentification ne fonctionnerait pas).
 
 ```bash
-npx http-server . -p 8080
+npm run build
+npx http-server public -p 8080
 ```
 
-- Python 3 :
+La configuration Supabase publique est dans `assets/supabase-public-config.js`.
+Aucune clé secrète ne doit figurer dans le dépôt.
+
+## Tests
 
 ```bash
-python -m http.server 8080
+npm install
+npm test
 ```
 
-Notes avancées
+19 tests s'exécutent sans navigateur ni émulateur, dont des tests PostgreSQL
+réels sur PGlite. Les tests navigateur et émulateur se lancent séparément — voir
+la section « Tests » de [docs/architecture.md](docs/architecture.md).
 
-- Il n'est pas possible d'ajouter un domaine autorisé directement depuis le client web sans privilèges serveur (il faudrait utiliser l'API Admin de Firebase avec des identifiants de service). Si vous voulez un script automatisé, je peux fournir un script Node.js qui utilise des credentials de compte de service pour modifier les settings du projet (à exécuter depuis une machine de confiance).
+## Publier
 
-Mini backend IA securise (Gemini)
+```bash
+npm run build     # produit public/
+```
 
-- Un endpoint backend est disponible dans `server/ai-chat-backend.js`.
-- Il permet de proteger la cle Gemini et d'appeler le modele depuis le serveur.
+Render publie `public/` en site statique (`render.yaml`). Les migrations de base
+de données s'appliquent à la main dans l'éditeur SQL Supabase : voir la section
+« Déploiement » de [docs/architecture.md](docs/architecture.md).
 
-Demarrage
+## Backend IA (optionnel)
 
-1. Copier `server/.env.example` vers un fichier `.env` local et renseigner au minimum `GEMINI_API_KEY`.
-2. Exporter les variables dans votre terminal (PowerShell):
+`server/ai-chat-backend.js` sert de relais vers Gemini pour éviter d'exposer la
+clé dans le navigateur.
+
+Copier `server/.env.example` vers `.env` et renseigner `GEMINI_API_KEY`, puis
+exporter les variables (PowerShell) :
 
 ```powershell
 $env:GEMINI_API_KEY="votre_cle"
@@ -50,21 +56,23 @@ $env:CHAT_BACKEND_TOKEN="votre_token"
 $env:ALLOWED_ORIGINS="http://localhost:8080"
 ```
 
-3. Lancer le backend:
-
-```bash
-npm run ai-backend
-```
-
-4. Configurer le frontend (console navigateur) pour utiliser le backend:
+Lancer `npm run ai-backend` — vérification sur `http://localhost:8787/health` —
+puis pointer le front vers le relais depuis la console du navigateur :
 
 ```js
 localStorage.setItem("itc_ai_backend_endpoint", "http://localhost:8787/api/chat");
 localStorage.setItem("itc_ai_backend_token", "votre_token");
 ```
 
-Verification rapide
+Sans relais joignable, le chatbot bascule sur Gemini en direct (si une clé
+locale est configurée), puis sur une réponse locale.
 
-- Health check backend: `http://localhost:8787/health`
-- Si le backend est indisponible, le chatbot bascule automatiquement vers Gemini direct (si cle locale) puis vers la reponse locale.
-- Si Gemini n'est pas configure ou echoue, le backend peut repondre en mode local de secours (`source: local-fallback`) quand `ENABLE_LOCAL_FALLBACK=true`.
+## Firebase
+
+Le projet Firebase `itc-erp` reste nécessaire : le contrôle des stocks, l'identité
+visuelle des entreprises, la création de comptes et la réinitialisation de mot de
+passe n'ont pas encore été migrés. La liste exacte est dans
+[docs/architecture.md](docs/architecture.md#ce-qui-tourne-encore-sur-firebase).
+
+Pour les tests locaux, ajouter `localhost` et `127.0.0.1` aux domaines autorisés
+dans la console Firebase (Authentication → Settings) du projet `itc-erp`.

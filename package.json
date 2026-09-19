@@ -6,6 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "test": "node tools/run_tests.cjs",
     "create-user": "node scripts/create_firebase_user.js",
     "create-super-admin": "node scripts/create_super_admin.js",
     "seed-demo-company": "node scripts/seed_demo_company.js",
@@ -24,7 +25,6 @@
     "test:control:browser": "node tools/test_control_browser.js",
     "test:chutes": "node tools/test_cable_offcuts.js",
     "test:chutes:browser": "node tools/test_cable_offcuts_browser.js",
-    "test:chutes:integration": "firebase emulators:exec --only database --project demo-itc-security \"node tools/test_cable_offcuts_integration.js\"",
     "migrate:security": "node scripts/migrate_tenant_security.js"
   },
   "dependencies": {
@@ -32,6 +32,7 @@
     "yargs": "^17.0.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16",
     "@firebase/rules-unit-testing": "^5.0.2",
     "firebase": "^12.19.0",
     "firebase-tools": "^15.30.0"

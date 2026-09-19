@@ -38,10 +38,10 @@ async function main(){
   if(route==='/test-backend.js'){res.setHeader('Content-Type','application/javascript');return res.end(backend);}
   if(route==='/'){
    let html=read('index.html').replace(/<script src="https:\/\/www\.gstatic\.com\/firebasejs\/[^\"]+"><\/script>/g,'')
-    .replace('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>','')
+    .replace(/<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@[^\"]+"><\/script>/g,'')
     .replace('<head>','<head><script src="/test-backend.js"></script><style>.hidden{display:none!important}</style>')
     .replaceAll('if ("serviceWorker" in navigator)', 'if (navigator.serviceWorker)')
-    .replace('<script src="https://cdn.tailwindcss.com"></script>','');
+    .replace(/<script src="https:\/\/cdn\.tailwindcss\.com[^\"]*"><\/script>/g,'');
    for(const [url,local] of vendor)html=html.replaceAll('src="'+url+'"','src="'+local.route+'"');
    res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(html);
   }

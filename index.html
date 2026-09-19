@@ -12,18 +12,20 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/pwa-icon-192.png" />
     <title>ITC Telecom ERP | Automation & Stock Expert</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+    <!-- Toutes les versions sont épinglées : une mise à jour amont ne doit jamais
+         atteindre la production sans passer par une modification de ce fichier. -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-messaging-compat.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode" defer></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8" defer></script>
+    <!-- Bibliothèque XLSX utilisée pour les imports et exports. -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
@@ -1657,7 +1659,7 @@
     </div>
 
     <link rel="stylesheet" href="assets/stock-control.css" />
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0"></script>
     <script src="assets/supabase-public-config.js?v=20260918-shared1"></script>
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
     <script src="assets/control-core.js?v=20260919-tabs"></script>
@@ -2205,15 +2207,12 @@
         if(targets.some(t=>!t.bon._dbKey || !canAssignBonService(t.bon))) {alert('Le bon lié est indisponible ou hors de votre périmètre.');return;}
         select.disabled=true;
         try {
-          const updates={},at=new Date().toISOString();
-          for(const t of targets) {
-            const path=`itc_data/${t.kind}/${t.bon._dbKey}`;
-            updates[path+'/serviceAbbreviation']=service;
-            updates[path+'/serviceAssignedAt']=at;
-            updates[path+'/serviceAssignedBy']=secureStore.uid;
-          }
-          await db.ref().update(updates);
+          // Le serveur écrit le bon et son bon lié : le garde-fou de traçabilité
+          // interdit une écriture directe sur les sorties et les bons déjà décidés.
+          const {error}=await supabaseBackend.rpc('assign_bon_service',{bon_collection:kind,bon_key:bon._dbKey,service_code:service});
+          if(error) throw error;
           targets.forEach(t=>{t.bon.serviceAbbreviation=service;});
+          await refreshAppDataFromServer();
           showSection(currentSectionId);
         } catch(error) {select.value=bon.serviceAbbreviation || '';alert('Service non enregistré : '+error.message);}
         finally {select.disabled=false;}
@@ -2560,8 +2559,7 @@
         currentUser = null;
         clearPrivateLocalData();
         document.getElementById("app-container").innerHTML = "";
-        // 1. Déconnexion de Firebase Auth
-        firebase
+        // 1. Déconnexion du fournisseur d'authentification actif
         signOutActiveAuth().then(() => {
             // 2. Nettoyage des données locales
             appData.currentUserId = null;

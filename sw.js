@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v26-bureaus";
+const CACHE_NAME = "itc-gestion-materiels-v27-bon-service";
 const APP_SHELL = [
   "./",
   "./index.html",
