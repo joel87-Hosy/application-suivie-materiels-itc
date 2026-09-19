@@ -7,6 +7,7 @@
   const isValidator = () => roles.includes(env?.profile()?.role);
   const rpc = async (name, args) => {const {data,error} = await env.client().rpc(name,args); if(error) throw error; return data;};
   const op = value => String(value || '').trim().toUpperCase() === 'ITC' ? 'ITC-B01' : String(value || '').trim().toUpperCase();
+  const covers = request => Array.isArray(request?.items) && request.items.length > 0 && request.items.every(item => env?.profile()?.controlScopes?.[op(item.op || request.op)] === true);
   function setup(config) {env=config;}
   function menu() {
     let element = document.getElementById('menu-validator');
@@ -30,9 +31,10 @@
       await env.refresh();
       const managers=await rpc('workflow_managers',{});
       if(!container.isConnected||token!==generation)return;
-      const requests=(env.data().demandes||[]).filter(r=>r.status==='EN ATTENTE VALIDATEUR');
-      const history=(env.data().demandes||[]).filter(r=>r.validatorDecision).sort((a,b)=>b.validatorDecision.at.localeCompare(a.validatorDecision.at));
+      const requests=(env.data().demandes||[]).filter(r=>r.status==='EN ATTENTE VALIDATEUR' && covers(r));
+      const history=(env.data().demandes||[]).filter(r=>r.validatorDecision && covers(r)).sort((a,b)=>b.validatorDecision.at.localeCompare(a.validatorDecision.at));
       container.innerHTML=`<div class="space-y-5 p-4"><header class="bg-indigo-800 text-white p-6 rounded-2xl"><h2 class="text-xl font-bold">Validation des bons</h2><p>${requests.length} bon(s) à traiter. Une validation transmet le bon au gestionnaire dédié ; le stock sera débité à la remise physique.</p><button type="button" id="validation-refresh" class="border rounded-lg p-2 mt-3">Actualiser les bons</button></header>
+        <p class="font-bold">Bureau de validation : ${esc(env.profile()?.validationBureau || 'Non affecté')} · Stocks : ${esc(Object.keys(env.profile()?.controlScopes || {}).filter(key=>env.profile().controlScopes[key]===true).join(', ') || 'Aucun')}</p>
         ${enabled()?'':'<p>Le nouveau circuit est en cours de préparation.</p>'}
         <p role="status" id="validation-message"></p>
         ${requests.map((r,index)=>{
@@ -69,5 +71,5 @@
     try {await rpc('issue_validated_request',{request_key:request._dbKey,signature,service:request.serviceAbbreviation});await env.refresh();global.alert('Sortie physique enregistrée et tracée.');busy=false;env.navigate('demandes-coordonnatrice');}
     catch(error){global.alert(error.message);}finally{busy=false;}
   }
-  global.ValidatorWorkflow={setup,menu,enter,enabled,isValidator,trace,issue,stop:()=>{generation++;},isBusy:()=>busy};
+  global.ValidatorWorkflow={setup,menu,enter,enabled,isValidator,covers,trace,issue,stop:()=>{generation++;},isBusy:()=>busy};
 })(window);

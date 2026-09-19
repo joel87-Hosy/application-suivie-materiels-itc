@@ -9,6 +9,7 @@ const assert=require('node:assert/strict');
  await call('Technicien',{action:'request',lotId:'1',qty:30,motif:'Chantier'});
  await call('Coordinateur',{action:'approveRequest',target:'2'});
  assert.equal(state.requests['2'].status,'VALIDATOR_PENDING');
+ for(const action of ['validateRequest','rejectRequest'])await assert.rejects(transition(state,{action,target:'2',reason:'Refus'},{...actor('Validateur'),control_scopes:{'ITC-B01':true}},{op:'MOOV',company:'A',now:new Date().toISOString(),id:'outside-'+action,workflowEnabled:true,assignedManager:manager}),/autre bureau/);
  await assert.rejects(call('Gestionnaire',{action:'issue',target:'2'}),/non disponible/);
  await assert.rejects(call('Coordinateur',{action:'validateRequest',target:'2'}),/réservée/);
  await assert.rejects(call('Validateur',{action:'validateRequest',target:'2'},{assignedManager:{...manager,control_scopes:{'ITC-B01':true}}}),/non dédié/);

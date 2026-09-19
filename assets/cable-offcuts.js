@@ -41,7 +41,7 @@
     const manager=role()==='Gestionnaire',tech=role()==='Technicien',coord=['Coordinateur','Coordinatrice'].includes(role());
     const available=lots.filter(l=>l.qty>0);
     const controls=(r,kind)=>{
-      if(['Validateur','Validatrice'].includes(role())&&r.status==='VALIDATOR_PENDING'&&kind==='requests')return '<select data-manager="'+esc(r.id)+'" class="border rounded p-2"><option value="">Gestionnaire dédié</option>'+(data.managers||[]).filter(m=>m.scopes?.[op]).map(m=>'<option value="'+esc(m.uid)+'">'+esc(m.name)+'</option>').join('')+'</select> '+btn('validateRequest',r.id,'Valider et transmettre')+' '+btn('rejectRequest',r.id,'Refuser');
+      if(['Validateur','Validatrice'].includes(role())&&env.profile()?.controlScopes?.[op]===true&&r.status==='VALIDATOR_PENDING'&&kind==='requests')return '<select data-manager="'+esc(r.id)+'" class="border rounded p-2"><option value="">Gestionnaire dédié</option>'+(data.managers||[]).filter(m=>m.scopes?.[op]).map(m=>'<option value="'+esc(m.uid)+'">'+esc(m.name)+'</option>').join('')+'</select> '+btn('validateRequest',r.id,'Valider et transmettre')+' '+btn('rejectRequest',r.id,'Refuser');
       if(coord&&r.status==='COORD_PENDING')return btn(kind==='returns'?'approveReturn':'approveRequest',r.id,'Valider')+' '+btn(kind==='returns'?'rejectReturn':'rejectRequest',r.id,'Refuser');
       if(manager&&r.status==='RECEPTION_PENDING'&&kind==='returns')return btn('receiveReturn',r.id,'Confirmer la réception physique')+' '+btn('rejectReturn',r.id,'Refuser');
       if(manager&&r.status==='ISSUE_PENDING'&&kind==='requests'&&(!data.workflowEnabled||r.assignedManagerUid===data.userId))return btn('issue',r.id,'Confirmer la sortie physique')+' '+btn('rejectRequest',r.id,'Refuser');

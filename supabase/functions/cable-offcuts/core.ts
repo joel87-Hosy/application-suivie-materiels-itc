@@ -16,6 +16,7 @@ export function sourceFromSortie(sortie: any, item: any, actor: any, key: string
 }
 export async function transition(current: any, command: any, actor: any, context: any) {
   const {op,company,now,id,source,workflowEnabled,assignedManager}=context;requireThat(actor.is_active===true&&actor.company_id===company&&canRead(actor,op),'Accès refusé à ce stock de chutes.');
+  if(['Validateur','Validatrice'].includes(actor.role))requireThat(actor.control_scopes?.[op]===true||actor.controlScopes?.[op]===true,'Ce bon de chute dépend d’un autre bureau de validation.');
   const state=structuredClone(current||{lots:{},returns:{},requests:{},events:{},commands:{}});for(const field of ['lots','returns','requests','events','commands'])state[field]||={};
   const fingerprint=await awaitSha(JSON.stringify(command));if(state.commands[id]){requireThat(state.commands[id].uid===actor.uid&&state.commands[id].fingerprint===fingerprint,'Identifiant de commande déjà utilisé.');return state;}
   const stamp={uid:actor.uid,name:actor.name||actor.role,at:now};const event={id,at:now,actorUid:actor.uid,actorName:stamp.name,company_id:company,op,stockKind:'CHUTE',action:command.action};

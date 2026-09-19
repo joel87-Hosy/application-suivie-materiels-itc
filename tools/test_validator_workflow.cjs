@@ -7,7 +7,8 @@ const uuid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
  await db.exec('GRANT SELECT,INSERT,UPDATE,DELETE ON app_records,app_settings TO authenticated; GRANT SELECT ON app_profiles TO authenticated;');
  await db.exec(fs.readFileSync('supabase/migrations/202609180003_cable_offcuts.sql','utf8').split('DO $$')[0]);
  await db.exec(fs.readFileSync('supabase/migrations/202609180005_validator_workflow.sql','utf8'));
- for(const [id,role,company,scopes] of [[1,'Coordinateur','A',{}],[2,'Validateur','A',{}],[3,'Gestionnaire','A',{'ITC-B01':true}],[4,'Gestionnaire','A',{'ITC-B02':true}],[5,'Validatrice','B',{}],[6,'Technicien','A',{}]]){
+ await db.exec(fs.readFileSync('supabase/migrations/202609190001_validator_bureaus.sql','utf8'));
+ for(const [id,role,company,scopes] of [[1,'Coordinateur','A',{}],[2,'Validateur','A',{'ITC-B01':true,CIC:true,MTN:true,OCI:true}],[3,'Gestionnaire','A',{'ITC-B01':true}],[4,'Gestionnaire','A',{'ITC-B02':true,MOOV:true}],[5,'Validatrice','B',{}],[6,'Technicien','A',{}],[7,'Validateur','A',{'ITC-B02':true,MOOV:true}],[8,'Validatrice','A',{}]]){
   await db.query('INSERT INTO auth.users VALUES($1)',[uuid(id)]);
   await db.query("INSERT INTO app_profiles(user_id,company_id,role,control_scopes,profile) VALUES($1,$2,$3,$4,$5)",[uuid(id),company,role,JSON.stringify(scopes),JSON.stringify({id,name:role+' '+id})]);
  }
@@ -19,6 +20,9 @@ const uuid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
  const request={id:'R1',op:'ITC-B01',items:[{label:'Cable',qty:20},{label:'Cable',qty:10}],status:'EN ATTENTE GESTIONNAIRE'};
  await as(1);await insert('demandes','r1',request);
  assert.equal((await read('demandes','r1')).status,'EN ATTENTE VALIDATEUR');
+ const notices=(await db.query("SELECT payload->'userId' AS recipient FROM app_records WHERE collection='notifications'")).rows;
+ assert.deepEqual(notices.map(n=>n.recipient),[2],'only B01 validator notified for B01 request');
+ for(const actorId of [7,8]){await as(actorId);await assert.rejects(db.query("SELECT decide_stock_request('r1',true,$1,'')",[uuid(3)]),/hors de votre bureau/);await assert.rejects(db.exec("SELECT decide_stock_request('r1',false,NULL,'Refus')"),/hors de votre bureau/);}
  await as(1);await assert.rejects(db.query("SELECT decide_stock_request('r1',true,$1,'')",[uuid(3)]),/réservée/);
  await as(5);await assert.rejects(db.query("SELECT decide_stock_request('r1',true,$1,'')",[uuid(3)]),/absent/);
  await as(3);await assert.rejects(db.query("SELECT issue_validated_request('r1','Manager','DEP')"),/affecté/);
@@ -47,6 +51,11 @@ const uuid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
  assert.equal((await db.query("SELECT save_offcut_state('A','ITC-B01',NULL,'{\"lots\":{}}') saved")).rows[0].saved,true);
  assert.equal((await db.query("SELECT save_offcut_state('A','ITC-B01',NULL,'{\"lots\":{}}') saved")).rows[0].saved,false);
  await as(2);await assert.rejects(db.exec("SELECT save_offcut_state('A','ITC-B01',NULL,'{}')"),/permission/);
+ await as(1);await insert('demandes','b02',{...request,id:'B02',op:'MOOV'});
+ await as(2);await assert.rejects(db.exec("SELECT decide_stock_request('b02',false,NULL,'Refus')"),/hors de votre bureau/);
+ await as(7);await db.query("SELECT decide_stock_request('b02',true,$1,'')",[uuid(4)]);
+ await as(1);await insert('demandes','mixed',{...request,id:'MIXED',items:[{op:'ITC-B01',label:'Cable',qty:1},{op:'MOOV',label:'Cable',qty:1}]});
+ for(const actorId of [2,7]){await as(actorId);await assert.rejects(db.exec("SELECT decide_stock_request('mixed',false,NULL,'Refus')"),/hors de votre bureau/);}
  await db.close();
  console.log('PASS: roles, tenant isolation, approval/refusal, dedicated manager, atomic debit, insufficient stock rollback, duplicate issue, stale save, offcut concurrency guard.');
 })().catch(e=>{console.error(e);process.exitCode=1});

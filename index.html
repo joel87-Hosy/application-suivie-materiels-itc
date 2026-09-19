@@ -1662,7 +1662,7 @@
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
     <script src="assets/control-core.js?v=20260919-tabs"></script>
     <script src="assets/supabase-store.js?v=20260919-tabs"></script>
-    <script src="assets/validator-workflow.js?v=20260918-validator"></script>
+    <script src="assets/validator-workflow.js?v=20260919-bureaus"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js"></script>
     <script src="assets/cable-offcuts-transport.js?v=20260918-shared1"></script>
@@ -8696,7 +8696,7 @@
 
         let pendingDemandes =
           demandes.filter((d) => d.status === "EN ATTENTE GESTIONNAIRE") || [];
-        if (window.ValidatorWorkflow.isValidator()) pendingDemandes = demandes.filter(d => d.status === 'EN ATTENTE VALIDATEUR');
+        if (window.ValidatorWorkflow.isValidator()) pendingDemandes = demandes.filter(d => d.status === 'EN ATTENTE VALIDATEUR' && window.ValidatorWorkflow.covers(d));
         if (isTechnicienUser(currentUser)) {
           pendingDemandes = demandes.filter(
             (d) =>

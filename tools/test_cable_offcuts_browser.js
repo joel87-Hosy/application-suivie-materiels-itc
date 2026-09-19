@@ -13,7 +13,7 @@ window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:{a
 localStorage.clear();
 const originalFetch=window.fetch.bind(window);window.fetch=async(url,options)=>{if(String(url).includes('/functions/v1/cable-offcuts')){const response=await originalFetch('/call',{method:'POST',body:JSON.stringify({role,data:JSON.parse(options.body)})});const result=await response.json();return new Response(JSON.stringify(result),{status:result.error?400:200});}return originalFetch(url,options);};
 window.pdfSaves=[];window.jspdf={jsPDF:class{setFontSize(){}text(){}autoTable(){}save(name){pdfSaves.push(name);}}};
-</script><script src="/public-config.js"></script><script src="/config.js"></script><script src="/transport.js"></script><script src="/module.js"></script><script>CableOffcuts.setup({profile:()=>({role,company_id:'A'})});CableOffcuts.enter(document.getElementById('app'));</script>`;}
+</script><script src="/public-config.js"></script><script src="/config.js"></script><script src="/transport.js"></script><script src="/module.js"></script><script>CableOffcuts.setup({profile:()=>({role,company_id:'A',controlScopes:{MOOV:true}})});CableOffcuts.enter(document.getElementById('app'));</script>`;}
 async function page(port,role){
  const target=await(await fetch('http://127.0.0.1:'+port+'/json/new?'+encodeURIComponent(server.url+'/?role='+encodeURIComponent(role)),{method:'PUT'})).json();
  const ws=new WebSocket(target.webSocketDebuggerUrl);sockets.push(ws);await new Promise(r=>ws.onopen=r);let seq=0;const pending=new Map();
