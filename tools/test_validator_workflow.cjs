@@ -8,6 +8,8 @@ const uuid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
  await db.exec(fs.readFileSync('supabase/migrations/202609180003_cable_offcuts.sql','utf8').split('DO $$')[0]);
  await db.exec(fs.readFileSync('supabase/migrations/202609180005_validator_workflow.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/202609190001_validator_bureaus.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/202609190004_unconditional_workflow.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/202609190004_unconditional_workflow.sql','utf8'));
  for(const [id,role,company,scopes] of [[1,'Coordinateur','A',{}],[2,'Validateur','A',{'ITC-B01':true,CIC:true,MTN:true,OCI:true}],[3,'Gestionnaire','A',{'ITC-B01':true}],[4,'Gestionnaire','A',{'ITC-B02':true,MOOV:true}],[5,'Validatrice','B',{}],[6,'Technicien','A',{}],[7,'Validateur','A',{'ITC-B02':true,MOOV:true}],[8,'Validatrice','A',{}]]){
   await db.query('INSERT INTO auth.users VALUES($1)',[uuid(id)]);
   await db.query("INSERT INTO app_profiles(user_id,company_id,role,control_scopes,profile) VALUES($1,$2,$3,$4,$5)",[uuid(id),company,role,JSON.stringify(scopes),JSON.stringify({id,name:role+' '+id})]);
@@ -56,6 +58,26 @@ const uuid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
  await as(7);await db.query("SELECT decide_stock_request('b02',true,$1,'')",[uuid(4)]);
  await as(1);await insert('demandes','mixed',{...request,id:'MIXED',items:[{op:'ITC-B01',label:'Cable',qty:1},{op:'MOOV',label:'Cable',qty:1}]});
  for(const actorId of [2,7]){await as(actorId);await assert.rejects(db.exec("SELECT decide_stock_request('mixed',false,NULL,'Refus')"),/hors de votre bureau/);}
+ for(const configured of [false,null]){
+  await db.exec('RESET ROLE');
+  if(configured===null)await db.exec("DELETE FROM stock_workflow_config WHERE company_id='A'");
+  else await db.exec("UPDATE stock_workflow_config SET enabled=false WHERE company_id='A'");
+  await as(3);
+  await assert.rejects(db.exec("UPDATE app_records SET payload=jsonb_set(payload,'{qty}','0') WHERE record_key='stock1'"),/débit/);
+  await assert.rejects(insert('sorties','bypass',{items:request.items}),/validé/);
+  await assert.rejects(db.exec("DELETE FROM app_records WHERE record_key='stock1'"),/Suppression interdite/);
+  await as(2);
+  await assert.rejects(db.exec("UPDATE app_records SET payload=jsonb_set(payload,'{qty}','999') WHERE record_key='stock1'"),/lecture seule/);
+  await as(1);
+  const key='unconditional-'+String(configured);
+  await insert('demandes',key,{...request,id:key,items:[{label:'Cable',qty:1}]});
+  assert.equal((await read('demandes',key)).status,'EN ATTENTE VALIDATEUR');
+  await as(2);await db.query('SELECT decide_stock_request($1,true,$2,\'\')',[key,uuid(3)]);
+  await as(3);await db.query("SELECT issue_validated_request($1,'Manager','DEP')",[key]);
+ }
+ await db.exec('RESET ROLE');
+ await db.exec("INSERT INTO stock_workflow_config(company_id) VALUES('default-test')");
+ assert.equal((await db.query("SELECT enabled FROM stock_workflow_config WHERE company_id='default-test'")).rows[0].enabled,true);
  await db.close();
  console.log('PASS: roles, tenant isolation, approval/refusal, dedicated manager, atomic debit, insufficient stock rollback, duplicate issue, stale save, offcut concurrency guard.');
 })().catch(e=>{console.error(e);process.exitCode=1});

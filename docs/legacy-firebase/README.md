@@ -6,6 +6,12 @@ partiellement en service, mais **leurs procédures ne sont plus celles à suivre
 
 Référence à jour : [../architecture.md](../architecture.md).
 
+Les anciens index et guides métier (`0_LIRE_DABORD.md`, `DOCUMENTATION_INDEX.md`,
+`RESUME_RAPIDE.md`, `STRUCTURE_DONNEES_COMPLETE.md`, `FLUX_MATERIELS_COMPLET.md`,
+`GUIDE_DEBUGGING.md`, `CODE_SNIPPETS.md`) sont également archivés ici. Leurs
+exemples Firebase et leur circuit sans validateur ne doivent pas servir de
+référence pour modifier l'application actuelle.
+
 | Page | Toujours valable ? |
 | --- | --- |
 | `SECURITE_FIREBASE.md` | Uniquement pour la Realtime Database encore utilisée (`stock_control/`, `tenant_branding/`, `push_subscriptions/`). La sécurité des données métier est désormais dans PostgreSQL : RLS, triggers et fonctions `SECURITY DEFINER`. |

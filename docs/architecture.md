@@ -1,8 +1,8 @@
 # Architecture de l'application
 
 État au 19 septembre 2026. Ce document décrit ce qui tourne réellement.
-Les fichiers `.md` à la racine du dépôt datent d'avant la migration vers
-Supabase : voir la section « Documentation antérieure » en fin de page.
+Les anciennes pages de documentation sont archivées dans
+`docs/legacy-firebase/` : voir la section « Documentation antérieure » en fin de page.
 
 ## En une phrase
 
@@ -20,7 +20,7 @@ Projet `gestion-materiel` (`ufstydudgffhbkkjtbbg`).
 | `app_records` | Toutes les données métier, une ligne par document : `(collection, record_key)` |
 | `app_settings` | Réglages par entreprise |
 | `cable_offcut_stores` | État des stocks de chutes de câbles, un document JSON par stock |
-| `stock_workflow_config` | Activation du circuit de validation, par entreprise |
+| `stock_workflow_config` | Configuration historique ; ne désactive plus les protections du circuit |
 
 `app_records.payload` conserve la forme des documents Firebase d'origine, ce qui a
 permis de migrer sans réécrire le front. Les collections sont `stock`, `sorties`,
@@ -38,13 +38,14 @@ cloisonnés sur `company_id`, comparé au profil de l'appelant
 **2. Trigger `guard_stock_workflow`** sur `app_records`. Il impose :
 
 - les rôles `Validateur` / `Validatrice` sont en lecture seule partout sauf sur leurs notifications — **en toutes circonstances** ;
-- les règles suivantes **uniquement si `stock_workflow_config.enabled` est vrai** pour l'entreprise : pas de suppression dans `stock` / `sorties` / `demandes`, pas d'écriture directe d'une sortie, pas de débit direct du stock, la décision du validateur n'est modifiable que par lui, et un bon prêt à livrer repasse automatiquement en `EN ATTENTE VALIDATEUR`.
+- pour toute entreprise : pas de suppression dans `stock` / `sorties` / `demandes`, pas d'écriture directe d'une sortie, pas de débit direct du stock, décision par la fonction de validation et passage d'un nouveau bon prêt à livrer en `EN ATTENTE VALIDATEUR`.
 
-Une entreprise sans ligne dans `stock_workflow_config` fonctionne donc en mode
-historique, sans ces garde-fous. C'est voulu — le circuit de validation change le
-processus métier — mais cela signifie que **la RLS seule autorise alors tout
-utilisateur authentifié à écrire n'importe quelle donnée de son entreprise**.
-Activer une nouvelle entreprise suppose de poser sa ligne de configuration.
+Ces protections ne dépendent plus de `stock_workflow_config.enabled` : elles
+s'appliquent même si la ligne est absente ou vaut `false`. La migration
+`202609190004_unconditional_workflow.sql` modifie le garde-fou et le défaut de
+configuration, sans modifier les quantités, les bons ou les historiques.
+Le navigateur et le service de chutes imposent également le circuit validateur.
+Les fonctions serveur autorisées conservent leur accès transactionnel aux données.
 
 **3. Fonctions `SECURITY DEFINER`.** Les opérations sensibles ne passent jamais
 par une écriture client :
@@ -126,7 +127,7 @@ TAB_AUDIT_FIXTURE=<instantané privé> node tools/test_all_tabs_browser.cjs
 ```
 
 L'intégration continue (`.github/workflows/tests.yml`) exécute `npm test`,
-`npm run build` et `npm audit` sur chaque push et chaque pull request.
+`npm run build` et `npm audit` sur chaque push de toute branche et chaque pull request.
 
 ## Déploiement
 
@@ -154,9 +155,8 @@ Les pages dont les **procédures** sont périmées ont été déplacées dans
 [legacy-firebase/](legacy-firebase/) : sécurité Realtime Database, comptes
 contrôleur, notifications push, déploiement Render, dépendances.
 
-Celles qui restent à la racine décrivent la **logique métier et la forme des
-données**, qui n'ont pas changé : la migration a conservé les payloads des
-documents Firebase à l'identique dans `app_records.payload`. Elles restent donc
-utiles — `STRUCTURE_DONNEES_COMPLETE.md`, `FLUX_MATERIELS_COMPLET.md`,
-`GUIDE_DEBUGGING.md`, `CODE_SNIPPETS.md`, `RESUME_RAPIDE.md` — à condition de
-lire « Realtime Database » comme « table `app_records` ».
+Les anciens guides métier, exemples de code et index ont également été archivés.
+Ils peuvent décrire un circuit sans validateur ou des écritures Firebase qui ne
+sont plus valides. Pour le circuit actuel, utiliser [validator-workflow.md](validator-workflow.md).
+Le rôle restant du dossier `functions/` est décrit dans
+[son README](../functions/README.md).

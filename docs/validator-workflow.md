@@ -42,6 +42,13 @@ bureau à l’émission.
 
 ## Déploiement
 
+Depuis `202609190004_unconditional_workflow.sql`, le circuit est obligatoire
+pour toutes les entreprises. Une configuration absente ou `enabled=false`
+ne permet plus de contourner la validation. Déployer également le client et
+le service de chutes correspondants ; aucun bon déjà livré n'est réécrit.
+Les étapes ci-dessous décrivent l'introduction historique du circuit ;
+l'activation par entreprise n'est plus nécessaire après cette migration.
+
 1. Appliquer `supabase/migrations/202609180005_validator_workflow.sql`. Cette
    migration est transactionnelle et réexécutable ; elle n’active pas le circuit.
 2. Déployer `supabase/functions/cable-offcuts` et les fichiers web/PWA.

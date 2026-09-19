@@ -57,10 +57,8 @@
         controlScopes: profile.control_scopes,
         controlScopeKeys: profile.control_scope_keys,
       };
-      const {data: workflow, error: workflowError} = await this.client.from('stock_workflow_config')
-        .select('enabled').eq('company_id', profile.company_id).maybeSingle();
-      if (workflowError) throw workflowError;
-      this.profile.validatorWorkflowEnabled = workflow?.enabled === true;
+      // The server enforces validation for every company, including new tenants.
+      this.profile.validatorWorkflowEnabled = true;
       await this.read(generation);
       this.ready = true;
       this.timer = setInterval(() => this.read(generation).catch(error => this.deny(error, generation)), 10000);

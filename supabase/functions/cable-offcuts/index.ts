@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.116.0';
 import { canRead, sourceFromSortie, transition } from './core.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
@@ -22,9 +22,7 @@ Deno.serve(async request => {
     if (profileError || !profile?.is_active || !profile.company_id) return json({ error: 'Compte non autorisé ou suspendu.' }, 403);
     const actor = { ...profile.profile, uid: profile.firebase_uid || auth.user.id, user_id: auth.user.id, email: auth.user.email, company_id: profile.company_id, role: profile.role, is_active: profile.is_active, control_scopes: profile.control_scopes };
     const command = await request.json().catch(() => ({}));
-    const {data: config,error: configError}=await admin.from('stock_workflow_config').select('enabled').eq('company_id',profile.company_id).maybeSingle();
-    if(configError)throw configError;
-    const workflowEnabled=config?.enabled===true;
+    const workflowEnabled=true;
     const {data: managerRows,error: managerError}=await admin.from('app_profiles').select('user_id,role,is_active,company_id,control_scopes,profile').eq('company_id',profile.company_id).eq('role','Gestionnaire').eq('is_active',true);
     if(managerError)throw managerError;
     const assignedManager=(managerRows||[]).find(row=>row.user_id===command.managerUid);

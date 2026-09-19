@@ -3,9 +3,9 @@
 Application web de gestion de matériels télécom (stocks, bons de sortie, chutes
 de câbles, contrôle et rapports), multi-entreprises, installable en PWA.
 
-**Commencez par [docs/architecture.md](docs/architecture.md)** : c'est le seul
-document de présentation de l'architecture actuelle. Les fichiers `.md` de la racine datent d'avant la
-migration vers Supabase et décrivent l'ancienne architecture Firebase.
+**Commencez par [docs/architecture.md](docs/architecture.md)** pour l'architecture
+actuelle. L'ancienne documentation est conservée dans
+[docs/legacy-firebase/](docs/legacy-firebase/) et ne décrit pas le déploiement actuel.
 
 ## Démarrer en local
 
@@ -30,6 +30,7 @@ npm test
 19 tests s'exécutent sans navigateur ni émulateur, dont des tests PostgreSQL
 réels sur PGlite. Les tests navigateur et émulateur se lancent séparément — voir
 la section « Tests » de [docs/architecture.md](docs/architecture.md).
+La CI les exécute sur chaque push, quelle que soit la branche, et sur chaque pull request.
 
 ## Publier
 
@@ -73,6 +74,8 @@ Le projet Firebase `itc-erp` reste nécessaire : le contrôle des stocks, l'iden
 visuelle des entreprises, la création de comptes et la réinitialisation de mot de
 passe n'ont pas encore été migrés. La liste exacte est dans
 [docs/architecture.md](docs/architecture.md#ce-qui-tourne-encore-sur-firebase).
+Le service historique de notifications est documenté dans
+[functions/README.md](functions/README.md) ; il ne reçoit pas les notifications Supabase.
 
 Pour les tests locaux, ajouter `localhost` et `127.0.0.1` aux domaines autorisés
 dans la console Firebase (Authentication → Settings) du projet `itc-erp`.
