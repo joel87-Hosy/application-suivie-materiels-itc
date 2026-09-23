@@ -11,7 +11,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
  // Selective persistence: opening one tab does not clear other tabs or new arrivals.
  vm.runInContext(fs.readFileSync('assets/supabase-store.js','utf8'),context);
  let changes;
- const store=new context.window.SupabaseStore({rpc:async(name,args)=>{changes=args.changes;store.raw.notifications.arrival={userId:7,company_id:'A',lu:false,message:'COMMANDE nouvelle'};return {error:null};}},()=>{},()=>{});
+ const store=new context.window.SupabaseStore({rpc:async(name,args)=>{changes=args.record_keys;store.raw.notifications.arrival={userId:7,company_id:'A',lu:false,message:'COMMANDE nouvelle'};return {data:args.record_keys,error:null};}},()=>{},()=>{});
  store.ready=true;store.profile=user;store.raw.notifications=Object.fromEntries(rows.map(({_dbKey,...payload})=>[_dbKey,payload]));
  await store.markNotificationsRead(['0']);assert.equal(changes.length,1);assert.equal(store.raw.notifications['0'].lu,true);
  for(const key of ['1','2','3','arrival'])assert.equal(store.raw.notifications[key].lu,false);

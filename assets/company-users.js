@@ -38,5 +38,29 @@
     }catch(error){modal.querySelector('[role=status]').textContent=error.message;}finally{button.disabled=false;}};
     modal.showModal();
   }
-  global.CompanyUsers={stocks,names,selector,create,edit};
+  let managing=false;
+  const operations=new Map();
+  async function manage(userId,action){
+    if(managing||!isCurrentCompanySupervisor())return;
+    const user=(appData.users||[]).find(u=>String(u.id)===String(userId));
+    const labels={suspend:'suspendre',disable:'désactiver',activate:'réactiver',delete:'supprimer définitivement'};
+    if(!user||!labels[action])return;
+    if(String(user.id)===String(currentUser.id))return alert('Vous ne pouvez pas modifier votre propre compte.');
+    if(!confirm(`Voulez-vous ${labels[action]} le compte ${user.name||user.email} ?${action==='delete'?' Les bons et historiques seront conservés.':''}`))return;
+    const key=user.uid+'|'+action;
+    if(!operations.has(key))operations.set(key,global.crypto.randomUUID());
+    managing=true;
+    const buttons=Array.from(document.querySelectorAll('#app-container button')).filter(b=>!b.disabled);buttons.forEach(b=>b.disabled=true);
+    try{
+      const config=global.ITCSupabaseConfig;
+      const {data,error}=await config.client.auth.getSession();if(error||!data.session)throw Error('Reconnectez-vous pour gérer ce compte.');
+      const response=await fetch(config.projectUrl+'/functions/v1/company-users',{method:'POST',headers:{'Content-Type':'application/json',apikey:config.publishableKey,Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({action,targetUid:user.uid,companyId:user.company_id,operationId:operations.get(key)})});
+      const result=await response.json();if(!response.ok||result.error)throw Error(result.error||'Action refusée.');
+      operations.delete(key);
+      await refreshAppDataFromServer({render:false});
+      if(currentSectionId==='company-users')renderCompanyUsersAdmin(document.getElementById('app-container'));
+      alert('Compte mis à jour dans Supabase.');
+    }catch(error){alert(error.message);}finally{managing=false;buttons.forEach(b=>b.disabled=false);}
+  }
+  global.CompanyUsers={stocks,names,selector,create,edit,manage};
 })(window);

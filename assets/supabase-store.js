@@ -30,6 +30,7 @@
       this.pending = null;
       this.raw = {};
       this.notificationCompanies = {};
+      this.readNotificationKeys = new Set();
       this.ready = false;
     }
     async connect(user) {
@@ -65,7 +66,7 @@
       // Refresh only after an explicit action; background polling destroys drafts.
       return this.value();
     }
-    async read(generation) {
+    async read(generation, {notify = true} = {}) {
       const [records, { data: settingRows, error: settingsError }] = await Promise.all([
         this.readAllRecords(generation),
         this.client.from('app_settings').select('*').eq('company_id', this.profile.company_id),
@@ -77,10 +78,11 @@
       for (const row of records || []) {
         this.raw[row.collection] ||= {};
         this.raw[row.collection][row.record_key] = row.payload;
+        if (row.collection === 'notifications' && this.readNotificationKeys.has(row.record_key)) this.raw[row.collection][row.record_key] = {...row.payload, lu:true};
         if (row.collection === 'notifications') this.notificationCompanies[row.record_key] = row.company_id;
       }
       this.raw.settings = Object.fromEntries((settingRows || []).map(row => [row.setting_key, row.value]));
-      if (this.ready) this.onChange(this.value());
+      if (this.ready && notify) this.onChange(this.value());
     }
     async readAllRecords(generation) {
       const records = [], seen = new Set();
@@ -114,7 +116,7 @@
       const data = {};
       for (const name of collections) data[name] = Object.entries(this.raw[name] || {})
         .filter(([, row]) => row && typeof row === 'object')
-        .map(([recordKey, row]) => ({ ...clone(row), _dbKey: recordKey }))
+        .map(([recordKey, row]) => ({ ...clone(row), ...(name === 'notifications' && this.readNotificationKeys.has(recordKey) ? {lu:true} : {}), _dbKey: recordKey }))
         .sort((a, b) => (a._order ?? (Number(a._dbKey) || 0)) - (b._order ?? (Number(b._dbKey) || 0)));
       for (const setting of settings) data[setting] = clone(this.raw.settings?.[setting] ?? (['materialTypes', 'scansDuJour'].includes(setting) ? [] : null));
       return data;
@@ -129,15 +131,16 @@
         .map(([record_key, row]) => ({collection:'notifications', record_key, company_id:this.profile.company_id,
           previous:clone(row), payload:{...clone(row), lu:true}}));
       if (!changes.length) return [];
-      const {error} = await this.client.rpc('save_app_changes', {changes});
+      const {data, error} = await this.client.rpc('mark_app_notifications_read', {record_keys:changes.map(row => row.record_key)});
       if (error) throw error;
       if (generation !== this.generation) return [];
       const updated = [];
-      for (const row of changes) {
-        if (equal(this.raw.notifications?.[row.record_key], row.previous)) {
-          this.raw.notifications[row.record_key] = row.payload;
-          updated.push(row.record_key);
+      for (const recordKey of data || []) {
+        this.readNotificationKeys.add(recordKey);
+        if (this.raw.notifications?.[recordKey]) {
+          this.raw.notifications[recordKey] = {...this.raw.notifications[recordKey], lu:true};
         }
+        updated.push(recordKey);
       }
       return updated;
     }
@@ -152,6 +155,8 @@
           if (!row || typeof row !== 'object') continue;
           const recordKey = row._dbKey || key();
           const next = clean(row);
+          // A stale form snapshot must never undo a confirmed read receipt.
+          if (name === 'notifications' && (this.readNotificationKeys.has(recordKey) || this.raw[name]?.[recordKey]?.lu === true)) next.lu = true;
           if (equal(next, this.raw[name]?.[recordKey])) continue;
           next.company_id = name === 'companies' ? next.id : (next.company_id || (this.profile.role === 'SUPER_ADMIN' ? 'COMP-ITC-LEGACY' : this.profile.company_id));
           if (control.scopedCollections.includes(name)) {

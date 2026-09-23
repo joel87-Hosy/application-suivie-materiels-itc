@@ -14,20 +14,19 @@ function extract(name){const start=html.search(new RegExp('^      (?:async )?fun
   {record_key:'other',company_id:'A',payload:{userId:8,company_id:'A',lu:false}},
  ];
  let writes=0,fail=false;
- const client={from:()=>({select:()=>({eq:async()=>({data:[],error:null})})}),rpc:async(name,{changes})=>{
-  assert.equal(name,'save_app_changes');if(fail)return {error:Error('Offline')};
-  for(const change of changes){
-   const row=rows.find(r=>r.record_key===change.record_key);
-   assert.equal(JSON.stringify(change.previous),JSON.stringify(row.payload),'legacy JSON must remain exact for optimistic concurrency');
-   assert.equal(change.collection,'notifications');assert.equal(change.company_id,'A');
-   row.payload=JSON.parse(JSON.stringify(change.payload));writes++;
+ const client={from:()=>({select:()=>({eq:async()=>({data:[],error:null})})}),rpc:async(name,{record_keys})=>{
+  assert.equal(name,'mark_app_notifications_read');if(fail)return {error:Error('Offline')};
+  for(const key of record_keys){
+   const row=rows.find(r=>r.record_key===key);
+   assert.equal(row.company_id,'A'); assert.equal(String(row.payload.userId),'7');
+   row.payload.lu=true;writes++;
   }
-  return {error:null};
+  return {data:record_keys,error:null};
  }};
  const store=new context.window.SupabaseStore(client,data=>{context.appData=data;},()=>{});
  store.ready=true;store.uid='manager';store.profile=context.currentUser;
  store.readAllRecords=async()=>rows.map(r=>({collection:'notifications',...r}));context.secureStore=store;
- vm.runInContext('let markingNotifications=false;let lastNotificationCount=0;'+extract('markNotificationsAsRead')+'\n'+extract('updateNotifications'),context);
+ vm.runInContext('let pendingSave=null;let markingNotifications=false;let lastNotificationCount=0;'+extract('markNotificationsAsRead')+'\n'+extract('updateNotifications'),context);
  await store.read(store.generation);context.updateNotifications();assert.equal(badge.innerText,2);assert.equal(badge.hidden,false);
  await context.markNotificationsAsRead();assert.equal(badge.innerText,0);assert.equal(badge.hidden,true);assert.equal(writes,2);
  assert.equal(rows.find(r=>r.record_key==='other').payload.lu,false);

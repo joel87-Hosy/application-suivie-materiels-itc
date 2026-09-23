@@ -10,7 +10,7 @@ function extract(name){const start=source.search(new RegExp('^      (?:async )?f
  await context.handleScanSuccess('BON');assert.equal(saves,1,'same scan not saved twice');
  context.currentUser={id:7};context.appData.notifications=[{_dbKey:'own',userId:7,lu:false},{_dbKey:'other',userId:8,lu:false}];
  context.secureStore={markNotificationsRead:async()=>['own']};context.updateNotifications=()=>updates++;
- vm.runInContext('let markingNotifications=false;'+extract('markNotificationsAsRead'),context);
+ vm.runInContext('let pendingSave=null;let markingNotifications=false;'+extract('markNotificationsAsRead'),context);
  await context.markNotificationsAsRead();assert.equal(context.appData.notifications[0].lu,true);assert.equal(context.appData.notifications[1].lu,false);assert.equal(saves,1,'notification read never invokes general save');assert.equal(updates,1);
  console.log('PASS: scanner navigation has no writes, valid scan clock format, duplicate scans, targeted notification UI update.');
 })().catch(e=>{console.error(e);process.exitCode=1});

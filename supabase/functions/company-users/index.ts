@@ -11,9 +11,22 @@ Deno.serve(async request=>{
   const {data:auth,error:authError}=await session.auth.getUser();if(authError||!auth.user)return json({error:'Session expirée.'},401);
   const admin=createClient(url,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const {data:actor,error:actorError}=await admin.from('app_profiles').select('role,company_id,is_active').eq('user_id',auth.user.id).single();
-  if(actorError||!actor?.is_active||!['Superviseur','SUPER_ADMIN'].includes(actor.role))return json({error:'Création réservée au superviseur.'},403);
+  if(actorError||!actor?.is_active||!['Superviseur','DG','SUPER_ADMIN'].includes(actor.role))return json({error:'Gestion des comptes réservée au directeur.'},403);
   const c=await request.json();
   if(typeof c.companyId!=='string'||(actor.role!=='SUPER_ADMIN'&&c.companyId!==actor.company_id))return json({error:'Entreprise non autorisée.'},403);
+  if(c.action && c.action!=='create'){
+   if(!['suspend','disable','activate','delete'].includes(c.action)||typeof c.targetUid!=='string'||!c.targetUid||c.targetUid.length>200||typeof c.operationId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.operationId))return json({error:'Action ou compte invalide.'},400);
+   const {data:operation,error:prepareError}=await admin.rpc('prepare_company_account_action',{actor_id:auth.user.id,target_key:c.targetUid,action:c.action,operation_id:c.operationId});
+   if(prepareError||!operation)return json({error:prepareError?.message||'Action refusée.'},400);
+   if(operation.status==='complete')return json({updated:true,action:c.action});
+   const result=c.action==='delete'
+    ? await admin.auth.admin.deleteUser(operation.target_id)
+    : await admin.auth.admin.updateUserById(operation.target_id,{ban_duration:c.action==='activate'?'none':'876000h'});
+   if(result.error && !(c.action==='delete' && result.error.code==='user_not_found'))return json({error:'Le compte reste bloqué dans l’application. Synchronisation Auth à terminer : '+result.error.message},503);
+   const {error:finishError}=await admin.rpc('finish_company_account_action',{actor_id:auth.user.id,operation_id:operation.id});
+   if(finishError)return json({error:'Synchronisation à terminer. Réessayez la même action : '+finishError.message},503);
+   return json({updated:true,action:c.action});
+  }
   if(!['Gestionnaire','Contrôleur','Coordinateur','Coordinatrice','Superviseur Terrain','Technicien','Validateur','Validatrice'].includes(c.role))return json({error:'Rôle non autorisé.'},400);
   if(typeof c.email!=='string'||!/^\S+@\S+\.\S+$/.test(c.email)||typeof c.name!=='string'||!c.name.trim()||c.name.length>120||typeof c.password!=='string'||c.password.length<12||c.password.length>128)return json({error:'Nom, email ou mot de passe invalide (12 caractères minimum).'},400);
   if(!Array.isArray(c.managedOps)||c.managedOps.some((op:unknown)=>typeof op!=='string'))return json({error:'Liste de stocks invalide.'},400);

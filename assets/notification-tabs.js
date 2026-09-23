@@ -34,7 +34,7 @@
       badge.setAttribute('aria-live','polite');
     });
     const counts=Object.fromEntries(sections.map(target=>[target,unread(notifications,user,target).length]));
-    const set=(badge,count)=>{if(!badge)return;badge.innerText=count;badge.classList.toggle('hidden',count===0);};
+    const set=(badge,count)=>{if(!badge)return;badge.innerText=count;badge.hidden=count===0;badge.classList.toggle('hidden',count===0);if(badge.style)badge.style.display=count===0?'none':'';};
     for(const [target,id] of Object.entries(legacyBadges))set(document.getElementById(id),counts[target]);
     document.querySelectorAll('.notification-badge[data-notification-section]').forEach(badge=>set(badge,counts[badge.dataset.notificationSection]||0));
   }

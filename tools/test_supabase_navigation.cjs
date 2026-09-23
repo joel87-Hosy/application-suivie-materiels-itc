@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 function setup() {
  const calls=[],context={window:{},setInterval,clearInterval};
  vm.createContext(context);vm.runInContext(fs.readFileSync('assets/supabase-store.js','utf8'),context);
- const client={rpc:async(name,args)=>{calls.push({name,args});return {error:null}},from(){throw Error('Navigation must not save settings or reload all data')}};
+ const client={rpc:async(name,args)=>{calls.push({name,args});return {data:args.record_keys,error:null}},from(){throw Error('Navigation must not save settings or reload all data')}};
  const store=new context.window.SupabaseStore(client,()=>{throw Error('Navigation must not redraw a form')},()=>{});
  store.ready=true;store.uid='user';store.profile={id:7,company_id:'A',role:'Coordinateur'};
  store.raw={stock:{s:{label:'ONT',op:'ITC-B01',qty:100,company_id:'A'}},notifications:{
@@ -14,8 +14,8 @@ function setup() {
 (async()=>{
  const test=setup(),before=JSON.stringify(test.store.raw.stock);
  assert.deepEqual(Array.from(await test.store.markNotificationsRead()),['mine']);
- assert.equal(test.calls.length,1);assert.equal(test.calls[0].args.changes.length,1);
- assert.equal(test.calls[0].args.changes[0].collection,'notifications');
+ assert.equal(test.calls.length,1);assert.equal(test.calls[0].args.record_keys.length,1);
+ assert.equal(test.calls[0].name,'mark_app_notifications_read');
  assert.equal(JSON.stringify(test.store.raw.stock),before);assert.equal(test.store.raw.notifications.other.lu,false);assert.equal(test.store.raw.notifications.foreign.lu,false);
  await test.store.markNotificationsRead();assert.equal(test.calls.length,1,'no write when already read');
  const failed=setup();failed.client.rpc=async()=>({error:Error('Offline')});
