@@ -10334,75 +10334,41 @@
           matInput.value = String(saved.mat || "");
         }
 
-        // Allow managers to add a new material type from the select
-        try {
-          const typeSelect = document.getElementById("r-type");
-          if (typeSelect) {
-            typeSelect.addEventListener("change", async () => {
-              try {
-                if (typeSelect.value === "__ADD_NEW__") {
-                  const v = window.prompt(
-                    "Entrez le nouveau type de matériel :",
-                  );
-                  if (!v) {
-                    typeSelect.value = "";
-                    return;
-                  }
-                  const newType = String(v || "").trim();
-                  const newTypeKey = newType.toUpperCase();
-                  if (!newType) {
-                    typeSelect.value = "";
-                    return;
-                  }
-
-                  // Ensure appData.materialTypes exists
-                  if (!appData) appData = {};
-                  if (!Array.isArray(appData.materialTypes))
-                    appData.materialTypes = [];
-
-                  if (
-                    !appData.materialTypes.some(
-                      (t) =>
-                        String(t || "")
-                          .trim()
-                          .toUpperCase() === newTypeKey,
-                    )
-                  ) {
-                    appData.materialTypes.push(newType);
-                    // Persist and refresh datalists/DOM
-                    if (!(await save())) return;
-                  }
-
-                  // Add option to select if not present and select it
-                  const exists = Array.from(typeSelect.options).some(
-                    (o) => String(o.value || "").toUpperCase() === newTypeKey,
-                  );
-                  if (!exists) {
-                    const opt = document.createElement("option");
-                    opt.value = newType;
-                    opt.text = newType;
-                    // insert before the add-new option
-                    const addOpt = Array.from(typeSelect.options).find(
-                      (o) => o.value === "__ADD_NEW__",
-                    );
-                    if (addOpt && addOpt.parentNode)
-                      addOpt.parentNode.insertBefore(opt, addOpt);
-                    else typeSelect.appendChild(opt);
-                  }
-                  typeSelect.value = newType;
-                }
-              } catch (e) {
-                console.warn("Erreur ajout type matériel:", e);
-              }
-            });
-          }
-        } catch (e) {
-          console.warn("Erreur initialisation add-type listener", e);
-        }
+        const typeSelect = document.getElementById('r-type');
+        if (typeSelect) typeSelect.addEventListener('change', () => addReceptionMaterialType(typeSelect));
 
         // On réinitialise l'affichage de la quantité selon l'opérateur visible.
         const rOp = document.getElementById("r-op");
         toggleQtyField(rOp ? rOp.value : "ITC");
+      }
+
+      async function addReceptionMaterialType(select) {
+        if (select.value !== '__ADD_NEW__' || select.disabled) return;
+        const input = window.prompt('Entrez le nouveau type de mat\u00e9riel :');
+        const name = String(input || '').trim().toUpperCase();
+        select.value = '';
+        if (!name) return;
+        if (name.length > 150 || name === '__ADD_NEW__') return alert('Saisissez un type de 150 caract\u00e8res maximum.');
+        const generation = secureStore.generation;
+        select.disabled = true;
+        try {
+          const {data, error} = await supabaseBackend.rpc('add_material_type', {type_name:name});
+          if (error) throw error;
+          if (secureStore.generation !== generation) return;
+          appData.materialTypes = data;
+          secureStore.raw.settings ||= {};
+          secureStore.raw.settings.materialTypes = data;
+          if (!select.isConnected) return;
+          let option = Array.from(select.options).find(o => o.value.trim().toUpperCase() === name);
+          if (!option) {
+            option = document.createElement('option'); option.value = name; option.text = name;
+            select.insertBefore(option, Array.from(select.options).find(o => o.value === '__ADD_NEW__') || null);
+          }
+          select.value = option.value;
+          select.dispatchEvent(new Event('input', {bubbles:true}));
+        } catch (error) {
+          if (secureStore.generation === generation) alert('Type non enregistr\u00e9 : ' + error.message);
+        } finally { select.disabled = false; }
       }
 
       let receptionSaving = false;

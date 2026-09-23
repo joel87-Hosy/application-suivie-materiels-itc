@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v39-command-history";
+const CACHE_NAME = "itc-gestion-materiels-v40-material-types";
 const APP_SHELL = [
   "./",
   "./index.html",
