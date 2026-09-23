@@ -61,7 +61,7 @@
       this.profile.validatorWorkflowEnabled = true;
       await this.read(generation);
       this.ready = true;
-      this.timer = setInterval(() => this.read(generation).catch(error => this.deny(error, generation)), 10000);
+      // Refresh only after an explicit action; background polling destroys drafts.
       return this.value();
     }
     async read(generation) {

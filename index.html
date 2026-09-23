@@ -1292,6 +1292,7 @@
             </div>
 
             <div id="menu-gestionnaire" class="mt-6 hidden">
+              <button type="button" onclick="showSection('transferts-stocks'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-teal-300"><i class="fas fa-exchange-alt mr-2"></i> Transferts entre mes stocks</button>
               <p
                 class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50"
               >
@@ -1664,7 +1665,8 @@
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
     <script src="assets/control-core.js?v=20260919-tabs"></script>
     <script src="assets/company-users.js?v=20260919-cities"></script>
-    <script src="assets/supabase-store.js?v=20260919-workflow"></script>
+    <script src="assets/supabase-store.js?v=20260923-manual"></script>
+    <script src="assets/manager-stock.js?v=20260923"></script>
     <script src="assets/validator-workflow.js?v=20260919-bureaus"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js"></script>
@@ -2626,6 +2628,7 @@
         // On transforme le rôle en MAJUSCULES pour éviter les erreurs de saisie
         const r = currentUser.role.trim().toUpperCase();
         const isSuperAdmin = r === "SUPER_ADMIN";
+        window.ManagerStock.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection});
         window.ValidatorWorkflow.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection});
         window.ValidatorWorkflow.menu();
         window.CableOffcuts.setup({profile: () => secureStore.profile});
@@ -6636,6 +6639,8 @@
       }
 
       function showSection(id) {
+        if (window.ManagerStock?.isBusy()) return;
+        window.ManagerStock?.stop();
         if (window.ValidatorWorkflow?.isBusy()) return;
         if (window.StockControl?.isBusy() || window.CableOffcuts?.isBusy()) return;
         window.ValidatorWorkflow?.stop();
@@ -6659,7 +6664,10 @@
         if (id === "stock-itc-b01") {
           viewTitle.innerText = "STOCK ITC BUREAU 01";
         }
-        if (id === "validation-bons") {
+        if (id === "transferts-stocks") {
+          viewTitle.innerText = "TRANSFERTS ENTRE MES STOCKS";
+          window.ManagerStock.enter(container);
+        } else if (id === "validation-bons") {
           viewTitle.innerText = "VALIDATION DES BONS";
           window.ValidatorWorkflow.enter(container);
         } else if (id === "stocks-chutes") {
@@ -8757,34 +8765,6 @@
         container.innerHTML = parts.join("");
         renderCockpitCharts(totalsByOp, perOperatorAlerts);
       }
-      async function ouvrirModifStock(op, label) {
-        const item = appData.stock.find(
-          (s) => s.label === label && s.op === op,
-        );
-        if (!item) return;
-
-        // Sauvegarde de l'état initial pour l'audit
-        const ancienneQty = item.qty;
-        const ancienNom = item.label;
-
-        const nouveauNom = prompt("MODIFIER LE NOM DE L'ARTICLE :", item.label);
-        if (nouveauNom === null) return;
-
-        const nouvelleQty = prompt("MODIFIER LA QUANTITÉ EN STOCK :", item.qty);
-        if (nouvelleQty === null) return;
-
-        // Mise à jour
-        item.label = nouveauNom.toUpperCase();
-        item.qty = parseInt(nouvelleQty) || 0;
-
-        // ALERTE AUDIT POUR LE SUPERVISEUR (ID 1)
-        const messageAudit = `ALERTE MODIFICATION STOCK : L'article "${ancienNom}" (${ancienneQty}U) a été renommé en "${item.label}" avec une nouvelle quantité de (${item.qty}U) par le gestionnaire.`;
-        addNotification(1, messageAudit);
-
-        if (!(await save())) return;
-        showSection("cockpit");
-      }
-
       function renderTechMesDemandes(container) {
         // 1. SÉCURITÉ CRUCIALE : "Gilet de sauvetage"
         // On vérifie que la liste existe avant de filtrer pour éviter le crash
@@ -11206,7 +11186,7 @@
         // 2. FILTRAGE : On garde ta logique (userId === 1) mais on sécurise le tout
         // Tri explicite pour garantir les événements récents en premier
         const notifs = sourceNotifications
-          .filter((n) => n.userId === 1)
+          .filter((n) => String(n.userId) === String(currentUser?.id) && (!n.company_id || n.company_id === secureStore.profile?.company_id))
           .map((n) => ({
             ...n,
             auditFlux: normalizeAuditFlux(n.auditFlux),
@@ -11618,59 +11598,12 @@
         showSection("cockpit");
       }
 
-      // Nouvelle version robuste de la fonction d'édition de stock.
-      // Accepts either (op, label) or (label) for backward compatibility.
       async function ouvrirModifStock(a, b) {
-        let op = "ITC";
-        let label = "";
-        if (b === undefined) {
-          // appeler avec (label)
-          label = String(a || "").toUpperCase();
-        } else {
-          op = String(a || "").toUpperCase();
-          label = String(b || "").toUpperCase();
-        }
-
-        const item = (appData.stock || []).find(
-          (s) =>
-            String(s.op || "").toUpperCase() === op &&
-            String(s.label || "").toUpperCase() === label,
-        );
+        const op = normalizeOperatorKey(b === undefined ? "ITC" : a);
+        const label = String(b === undefined ? a : b).trim().toUpperCase();
+        const item = (appData.stock || []).find(s => normalizeOperatorKey(s.op) === op && String(s.label || "").trim().toUpperCase() === label);
         if (!item) return alert("Article introuvable en stock.");
-
-        const ancienNom = item.label;
-        const ancienneQty = Number(item.qty) || 0;
-
-        const nouveauNom = prompt("MODIFIER LE NOM DE L'ARTICLE :", item.label);
-        if (nouveauNom === null) return; // annulation
-
-        const nouvelleQtyRaw = prompt(
-          "MODIFIER LA QUANTITÉ EN STOCK :",
-          String(item.qty || 0),
-        );
-        if (nouvelleQtyRaw === null) return; // annulation
-
-        const nouvelleQty = parseInt(nouvelleQtyRaw);
-        if (Number.isNaN(nouvelleQty) || nouvelleQty < 1) {
-          return alert(
-            "La quantité doit être un nombre entier supérieur ou égal à 1.",
-          );
-        }
-
-        const confirmation = confirm(
-          `Confirmer la modification de ${ancienNom} (${ancienneQty}U) → ${nouveauNom.toUpperCase()} (${nouvelleQty}U) ?`,
-        );
-        if (!confirmation) return;
-
-        // Appliquer les modifications
-        item.label = String(nouveauNom || item.label).toUpperCase();
-        item.qty = nouvelleQty;
-
-        const messageAudit = `ALERTE MODIFICATION STOCK : L'article "${ancienNom}" (${ancienneQty}U) a été renommé en "${item.label}" avec une nouvelle quantité de (${item.qty}U) par le gestionnaire.`;
-        addNotification(1, messageAudit, op);
-        if (!(await save())) return;
-        alert("Modification enregistrée.");
-        showSection("cockpit");
+        return window.ManagerStock.edit(item);
       }
 
         const handleActiveAuthState = async (user) => {

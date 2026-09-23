@@ -1,8 +1,9 @@
-const CACHE_NAME = "itc-gestion-materiels-v29-cities";
+const CACHE_NAME = "itc-gestion-materiels-v30-manager-transfers";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./assets/profile.js",
+  "./assets/manager-stock.js?v=20260923",
   "./assets/company-users.js?v=20260919-cities",
   "./assets/secure-store.js",
   "./assets/control-core.js",
@@ -16,7 +17,7 @@ const APP_SHELL = [
   "./assets/supabase-config.js?v=20260918-shared1",
   "./assets/cable-offcuts-transport.js?v=20260918-shared1",
   "./assets/supabase-store.js",
-  "./assets/supabase-store.js?v=20260919-workflow",
+  "./assets/supabase-store.js?v=20260923-manual",
   "./assets/validator-workflow.js?v=20260919-bureaus",
   "./assets/validator-workflow.js",
   "./assets/assistant-knowledge.js",
