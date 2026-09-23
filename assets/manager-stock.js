@@ -4,7 +4,8 @@
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const op=v=>global.ControlCore.operator(v);
   const allowed=()=>env.profile()?.role==='Gestionnaire';
-  const stocks=()=>Object.keys(env.profile()?.controlScopes||{}).filter(k=>env.profile().controlScopes[k]===true);
+  const stocks=()=>global.ControlCore.managerStocks(env.profile());
+  const destinations=()=>global.ControlCore.transferDestinations(env.profile());
   async function execute(args) {
     const {data,error}=await env.client().rpc('manager_stock_operation',args);
     if(error)throw error;
@@ -44,10 +45,11 @@
     container.innerHTML='<p class="p-6">Chargement des stocks…</p>';
     try {
       await env.refresh();if(token!==generation)return;
-      const ops=stocks(),items=(env.data().stock||[]).filter(i=>ops.includes(op(i.op)));
-      const history=(env.data().sorties||[]).filter(b=>b.type==='TRANSFERT'&&ops.includes(op(b.op))&&ops.includes(op(b.destination))).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+      const ops=stocks(),targets=destinations(),items=(env.data().stock||[]).filter(i=>ops.includes(op(i.op)));
+      const canTransfer=ops.some(source=>targets.some(target=>target!==source));
+      const history=(env.data().sorties||[]).filter(b=>b.type==='TRANSFERT'&&(ops.includes(op(b.op))||ops.includes(op(b.destination)))).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
       const options=ops.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
-      container.innerHTML=`<div class="p-4 space-y-5"><h2 class="text-xl font-bold">Transfert entre mes stocks dédiés</h2><p>Le transfert débite le stock source, crédite le destinataire et génère un bon de sortie avec les deux mouvements et votre signature.</p><button id="transfer-refresh" class="border p-3 rounded-xl">Actualiser</button><form class="bg-white p-5 rounded-2xl space-y-4">
+      container.innerHTML=`<div class="p-4 space-y-5"><h2 class="text-xl font-bold">Transferts de matériel</h2><p>Le transfert débite votre stock source, crédite le destinataire et génère un bon de sortie avec les deux mouvements et votre signature.</p>${ops.includes('ITC-B02')?'<p class="bg-blue-50 p-3 rounded-xl">Bouaké, Yamoussoukro et San-Pédro : consultation et alimentation par transfert. Seul le gestionnaire affecté à chaque stock peut en modifier les articles.</p>':''}<button id="transfer-refresh" class="border p-3 rounded-xl">Actualiser</button><form class="bg-white p-5 rounded-2xl space-y-4">
         <label class="block">Stock source<select name="source" class="border p-3 w-full">${options}</select></label>
         <label class="block">Stock destinataire<select name="destination" class="border p-3 w-full" required></select></label>
         <label class="block">Article<select name="article" class="border p-3 w-full" required></select></label>
@@ -55,12 +57,12 @@
         <label class="block">Service<select name="service" class="border p-3 w-full"><option>B2B</option><option>DEP</option><option>MAIN</option></select></label>
         <label class="block">Motif<textarea name="reason" maxlength="1000" required class="border p-3 w-full"></textarea></label>
         <label class="block">Signature du gestionnaire<input name="signature" maxlength="500" required value="${esc(env.profile()?.name)}" class="border p-3 w-full"></label>
-        <p role="status" id="transfer-status"></p><button type="submit" class="bg-indigo-700 text-white rounded-xl p-3" ${ops.length<2?'disabled':''}>Confirmer le transfert et créer le bon</button>
-        ${ops.length<2?'<p>Au moins deux stocks dédiés sont nécessaires.</p>':''}</form>
+        <p role="status" id="transfer-status"></p><button type="submit" class="bg-indigo-700 text-white rounded-xl p-3" ${!canTransfer?'disabled':''}>Confirmer le transfert et créer le bon</button>
+        ${!canTransfer?'<p>Aucune destination de transfert disponible.</p>':''}</form>
         <section class="bg-white p-5 rounded-2xl"><h3 class="font-bold">Historique et bons de sortie</h3>${history.map((b,i)=>`<div class="border-b py-4"><b>${esc(b.ref)}</b><p>${esc(b.op)} → ${esc(b.destination)} · ${esc(b.before.label)} · ${esc(b.quantity)} unités</p><p>${esc(new Date(b.date).toLocaleString('fr-FR'))} · ${esc(b.byName)} · ${esc(b.reason)}</p><p>Source : ${esc(b.before.qty)} → ${esc(b.after.qty)} ; destination : ${esc(b.destinationBeforeQty)} → ${esc(b.destinationAfterQty)}</p><button data-bon="${i}" class="border p-2 rounded-lg">Télécharger le bon PDF</button></div>`).join('')||'<p>Aucun transfert.</p>'}</section></div>`;
       const form=container.querySelector('form'),fields=form.elements;
       const fill=()=>{
-        fields.destination.innerHTML=ops.filter(o=>o!==fields.source.value).map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
+        fields.destination.innerHTML=targets.filter(o=>o!==fields.source.value).map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
         fields.article.innerHTML=items.filter(i=>op(i.op)===fields.source.value&&Number(i.qty)>0).map(i=>`<option value="${esc(i._dbKey)}">${esc(i.label)} — ${esc(i.qty)} disponibles</option>`).join('');
       };
       fields.source.onchange=fill;fill();
@@ -71,7 +73,7 @@
         event.preventDefault();if(busy)return;
         const item=items.find(i=>i._dbKey===fields.article.value),quantity=Number(fields.quantity.value);
         if(!item||!Number.isFinite(quantity)||quantity<=0||quantity>Number(item.qty))return global.alert('Quantité invalide ou stock insuffisant.');
-        if(!fields.destination.value||fields.destination.value===op(item.op))return global.alert('Choisissez un autre stock dédié.');
+        if(!targets.includes(fields.destination.value)||fields.destination.value===op(item.op))return global.alert('Choisissez un stock destinataire autorisé.');
         if(!global.confirm('Confirmer le transfert physique et la création du bon de sortie ?'))return;
         const args={stock_key:item._dbKey,expected:item,new_label:null,quantity,destination:fields.destination.value,reason:fields.reason.value.trim(),signature:fields.signature.value.trim(),service:fields.service.value};
         const fingerprint=JSON.stringify(args);if(attempt&&attempt!==fingerprint)operationId=global.crypto.randomUUID();attempt=fingerprint;

@@ -1,0 +1,62 @@
+const fs=require('fs'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite');
+const uuid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
+const cities=['ITC-BOUAKE','ITC-SAN-PEDRO','ITC-YAMOUSSOUKRO'];
+(async()=>{
+ const db=new PGlite();
+ await db.exec(`CREATE ROLE authenticated;CREATE ROLE anon;CREATE ROLE service_role;CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('test.uid',true),'')::uuid $$;GRANT USAGE ON SCHEMA auth TO authenticated;`);
+ const migration=n=>fs.readFileSync('supabase/migrations/'+n,'utf8');
+ await db.exec(migration('202609180002_app_backend.sql').split('DO $$')[0]);
+ await db.exec('GRANT SELECT,INSERT,UPDATE,DELETE ON app_records,app_settings TO authenticated;GRANT SELECT ON app_profiles TO authenticated;');
+ for(const n of ['202609180005_validator_workflow.sql','202609190004_unconditional_workflow.sql','202609190005_city_stocks.sql','202609230001_manager_stock_operations.sql'])await db.exec(migration(n));
+ const add=async(id,ops,company='A',active=true)=>{
+  await db.query('INSERT INTO auth.users VALUES($1,$2) ON CONFLICT DO NOTHING',[uuid(id),id+'@test']);
+  const scopes=Object.fromEntries(ops.map(op=>[op,true])),keys=Object.fromEntries(ops.map(op=>[company+'|'+op,true]));
+  const profile={id,uid:uuid(id),name:'Manager '+id,managedOps:ops,controlScopes:scopes,controlScopeKeys:keys};
+  await db.query("INSERT INTO app_profiles(user_id,company_id,role,is_active,control_scopes,control_scope_keys,profile) VALUES($1,$2,'Gestionnaire',$3,$4,$5,$6)",[uuid(id),company,active,JSON.stringify(scopes),JSON.stringify(keys),JSON.stringify(profile)]);
+  await db.query("INSERT INTO app_records VALUES('users',$1,$2,$3,now())",[uuid(id),company,JSON.stringify(profile)]);
+ };
+ await add(1,['ITC-B02','MOOV',...cities]);
+ for(let i=0;i<cities.length;i++)await add(i+2,[cities[i]]);
+ await add(5,['ITC-B01']);await add(6,['ITC-B02'],'B');
+ await db.query("INSERT INTO app_records VALUES('stock','source','A',$1,now())",[JSON.stringify({company_id:'A',op:'ITC-B02',label:'CABLE',qty:100,type:'FIBRE'})]);
+ await db.exec(migration('202609230002_regional_stock_transfers.sql'));
+ await db.exec(migration('202609230002_regional_stock_transfers.sql'));
+ const repaired=(await db.query('SELECT * FROM app_profiles WHERE user_id=$1',[uuid(1)])).rows[0];
+ assert.deepEqual(repaired.control_scopes,{'ITC-B02':true,MOOV:true});
+ assert.deepEqual(repaired.profile.managedOps,['ITC-B02','MOOV']);
+ assert.deepEqual((await db.query("SELECT payload->'controlScopes' scopes FROM app_records WHERE collection='users' AND record_key=$1",[uuid(1)])).rows[0].scopes,repaired.control_scopes);
+ await assert.rejects(add(7,['ITC-BOUAKE']),/gestionnaire actif/);
+ await assert.rejects(add(8,['ITC-B02','ITC-BOUAKE'],'C'),/consultation et transfert/);
+ await add(9,['ITC-BOUAKE'],'C'); // ownership is tenant-scoped
+ await add(10,['ITC-BOUAKE'],'A',false);
+ await assert.rejects(db.query('UPDATE app_profiles SET is_active=true WHERE user_id=$1',[uuid(10)]),/gestionnaire actif/);
+ const as=async id=>{await db.exec('RESET ROLE');await db.query("SELECT set_config('test.uid',$1,false)",[uuid(id)]);await db.exec('SET ROLE authenticated');};
+ const stock=async key=>(await db.query("SELECT payload FROM app_records WHERE collection='stock' AND record_key=$1",[key])).rows[0]?.payload;
+ let sequence=20;
+ const call=async(key,dest,qty=5)=>db.query('SELECT manager_stock_operation($1,$2,$3,$4,$5,$6,$7,$8,$9) result',[uuid(sequence++),key,JSON.stringify(await stock(key)),null,qty,dest,'Alimentation','Manager B02','DEP']);
+ await as(1);
+ for(const city of cities){
+  const result=(await call('source',city)).rows[0].result;
+  assert.equal(result.quantity,5);assert.equal(result.destination,city);
+  const local=(await db.query("SELECT record_key,payload FROM app_records WHERE collection='stock' AND payload->>'op'=$1",[city])).rows[0];
+  assert.equal(local.payload.qty,5);
+  await assert.rejects(call(local.record_key,null,99),/affectation/);
+  await assert.rejects(call(local.record_key,'ITC-B02',1),/affectation/);
+  await assert.rejects(db.query("UPDATE app_records SET payload=payload||'{\"label\":\"HACK\",\"qty\":50}'::jsonb WHERE collection='stock' AND record_key=$1",[local.record_key]),/affectation/);
+  await as(cities.indexOf(city)+2);
+  await call(local.record_key,null,7);assert.equal((await stock(local.record_key)).qty,7);
+  await assert.rejects(call('source',null,50),/affectation/);
+  await assert.rejects(call(local.record_key,'ITC-B02',1),/destinataire/);
+  await as(1);
+ }
+ assert.equal((await stock('source')).qty,85);
+ await assert.rejects(call('source','ITC-B01'),/destinataire/);
+ await as(6);await assert.rejects(call('source','ITC-BOUAKE'),/affectation/);
+ await as(5);await assert.rejects(call('source','ITC-BOUAKE'),/affectation/);
+ await as(1);
+ assert.equal((await db.query("SELECT count(*)::int n FROM app_records WHERE collection='sorties'")).rows[0].n,3);
+ assert.equal((await db.query("SELECT count(*)::int n FROM app_records WHERE collection='notifications'")).rows[0].n,3,'local managers notified of incoming transfers');
+ assert.equal((await db.query("SELECT count(*)::int n FROM app_records WHERE collection='stockMovements' AND payload->>'type'='in'")).rows[0].n,3);
+ await db.close();
+ console.log('PASS: B02 supplies all three cities, local-only edits, no regional debits by B02, migration repair, tenant isolation, unique active assignments, incoming notifications and bons.');
+})().catch(e=>{console.error(e);process.exitCode=1});

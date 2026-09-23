@@ -1292,7 +1292,7 @@
             </div>
 
             <div id="menu-gestionnaire" class="mt-6 hidden">
-              <button type="button" onclick="showSection('transferts-stocks'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-teal-300"><i class="fas fa-exchange-alt mr-2"></i> Transferts entre mes stocks</button>
+              <button type="button" onclick="showSection('transferts-stocks'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-teal-300"><i class="fas fa-exchange-alt mr-2"></i> Transferts de matériel</button>
               <p
                 class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50"
               >
@@ -1663,10 +1663,10 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0"></script>
     <script src="assets/supabase-public-config.js?v=20260918-shared1"></script>
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
-    <script src="assets/control-core.js?v=20260919-tabs"></script>
-    <script src="assets/company-users.js?v=20260919-cities"></script>
+    <script src="assets/control-core.js?v=20260923-regional"></script>
+    <script src="assets/company-users.js?v=20260923-regional"></script>
     <script src="assets/supabase-store.js?v=20260923-manual"></script>
-    <script src="assets/manager-stock.js?v=20260923"></script>
+    <script src="assets/manager-stock.js?v=20260923-regional"></script>
     <script src="assets/validator-workflow.js?v=20260919-bureaus"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js"></script>
@@ -2788,7 +2788,7 @@
         for (const op of ['ITC-BOUAKE','ITC-SAN-PEDRO','ITC-YAMOUSSOUKRO']) {
           const id='menu-stock-'+op.toLowerCase();let button=document.getElementById(id);
           if(!button){button=document.createElement('button');button.id=id;button.className='w-full text-left p-3 rounded-xl text-xs font-bold';button.textContent='STOCK '+op;button.setAttribute('onclick',"showSection('stock-"+op.toLowerCase()+"'); toggleSidebarMobile()");document.getElementById('section-stock-disponible')?.append(button);}
-          button.classList.toggle('hidden',isStockScopedUser(currentUser)&&!isOperatorAllowedForUser(currentUser,op));
+          button.classList.toggle('hidden',!canViewStockForUser(currentUser,op));
         }
         console.log("Mise à jour des menus terminée.");
       }
@@ -2896,6 +2896,12 @@
         );
       }
 
+      function canViewStockForUser(user, opValue) {
+        if (!isStockScopedUser(user)) return true;
+        if (user?.role === 'Gestionnaire') return ControlCore.transferDestinations(user).includes(normalizeOperatorKey(opValue));
+        return isOperatorAllowedForUser(user, opValue);
+      }
+
       function isOperatorAllowedForUser(user, opValue) {
         if (!isStockScopedUser(user)) return true;
 
@@ -2946,7 +2952,7 @@
       function getManagedOpsNormalized(user) {
         if (!user) return [];
 
-        if (user.role === 'Gestionnaire' && user.controlScopes && typeof user.controlScopes === 'object') return ControlCore.scopes(user.controlScopes);
+        if (user.role === 'Gestionnaire') return ControlCore.managerStocks(user);
         if (user.stockScopeMode === 'explicit') return ControlCore.scopes(user.managedOps);
         const raw = user.managedOps;
         let ops = [];
@@ -4454,6 +4460,24 @@
         );
       }
 
+      function filterSortieMaterials() {
+        const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        const query = normalize(document.getElementById('sortie-material-search')?.value);
+        const words = query.split(/\s+/).filter(Boolean);
+        const rows = Array.from(document.querySelectorAll('#sortie-material-picker .sortie-stock-row'));
+        let visible = 0;
+        rows.forEach(row => {
+          const text = normalize(`${row.dataset.label} ${row.dataset.op} ${getOperatorMeta(row.dataset.op).label}`);
+          const matches = words.every(word => text.includes(word));
+          row.classList.toggle('hidden', !matches);
+          if (matches) visible++;
+        });
+        const status = document.getElementById('sortie-material-search-status');
+        if (status) status.textContent = rows.length && !visible
+          ? 'Aucun matériel ne correspond à votre recherche. Les lignes cochées restent sélectionnées.'
+          : `${visible} / ${rows.length} matériel(s) affiché(s). Les lignes cochées restent sélectionnées.`;
+      }
+
       function renderSortieMaterialPicker(previousItems = getSelectedSortieItemsFromPicker()) {
         const container = document.getElementById("sortie-material-picker");
         if (!container) return;
@@ -4480,6 +4504,7 @@
               Choisissez au moins un stock dedie pour afficher le stock disponible.
             </div>`;
           updateSortieOperatorSummary();
+          filterSortieMaterials();
           saveSortieDraft();
           return;
         }
@@ -4509,6 +4534,7 @@
             }
           </div>`;
         updateSortieOperatorSummary();
+        filterSortieMaterials();
         saveSortieDraft();
       }
 
@@ -4612,6 +4638,9 @@
                               <i class="fas fa-list-check"></i> Choisir les materiels
                             </button>
                           </div>
+                          <label for="sortie-material-search" class="block text-xs text-slate-600">Rechercher un matériel</label>
+                          <input id="sortie-material-search" type="search" placeholder="Nom du matériel ou stock…" autocomplete="off" oninput="filterSortieMaterials()" class="w-full border-2 p-3 rounded-xl text-sm bg-white" aria-controls="sortie-material-picker" aria-describedby="sortie-material-search-status" />
+                          <p id="sortie-material-search-status" role="status" aria-live="polite" class="text-xs text-slate-500"></p>
                           <div id="sortie-material-picker"></div>
                       </div>
 
@@ -6665,7 +6694,7 @@
           viewTitle.innerText = "STOCK ITC BUREAU 01";
         }
         if (id === "transferts-stocks") {
-          viewTitle.innerText = "TRANSFERTS ENTRE MES STOCKS";
+          viewTitle.innerText = "TRANSFERTS DE MATÉRIEL";
           window.ManagerStock.enter(container);
         } else if (id === "validation-bons") {
           viewTitle.innerText = "VALIDATION DES BONS";
@@ -10838,8 +10867,7 @@
         // Si l'utilisateur a un périmètre stock, vérifier qu'il a le droit de voir ce stock
         try {
           if (currentUser && isStockScopedUser(currentUser)) {
-            const managedNorm = getManagedOpsNormalized(currentUser);
-            const allowed = managedNorm.includes(opNorm);
+            const allowed = canViewStockForUser(currentUser, opNorm);
             if (!allowed) {
               container.innerHTML = `
               <div class="bg-white rounded-3xl p-8 shadow-xl font-bold italic font-black">
@@ -10901,6 +10929,7 @@
                 </div>
               </div>
               <div class="p-6 space-y-5">
+                ${currentUser?.role === 'Gestionnaire' && !isOperatorAllowedForUser(currentUser, opNorm) ? '<p class="bg-blue-50 text-blue-900 p-3 rounded-xl text-xs">Consultation et alimentation par transfert uniquement. Les articles sont gérés par le gestionnaire de ce stock.</p><button type="button" onclick="showSection(\'transferts-stocks\')" class="bg-indigo-700 text-white p-3 rounded-xl text-xs">Alimenter ce stock par transfert</button>' : ''}
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <div class="dashboard-hover-block dashboard-hover-kpi rounded-2xl bg-slate-50 border border-slate-200 p-4">
                     <p class="text-[8px] text-slate-500 uppercase">Références</p>
@@ -10975,7 +11004,7 @@
                                   currentUser &&
                                   String(
                                     currentUser.role || "",
-                                  ).toUpperCase() === "GESTIONNAIRE"
+                                  ).toUpperCase() === "GESTIONNAIRE" && isOperatorAllowedForUser(currentUser, opNorm)
                                     ? ` <div class="mt-2 flex justify-center gap-2">
                                           <button onclick="ouvrirModifStock('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 text-[9px] bg-white border px-2 py-1 rounded">Modifier</button>
                                           <button onclick="deleteMaterial('${s.op}','${s.label.replace(/'/g, "\\'")}')" class="text-red-500 hover:text-red-700 text-[9px] bg-white border px-2 py-1 rounded">Supprimer</button>

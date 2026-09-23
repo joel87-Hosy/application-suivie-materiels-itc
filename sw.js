@@ -1,13 +1,13 @@
-const CACHE_NAME = "itc-gestion-materiels-v30-manager-transfers";
+const CACHE_NAME = "itc-gestion-materiels-v31-regional-search";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./assets/profile.js",
-  "./assets/manager-stock.js?v=20260923",
-  "./assets/company-users.js?v=20260919-cities",
+  "./assets/manager-stock.js?v=20260923-regional",
+  "./assets/company-users.js?v=20260923-regional",
   "./assets/secure-store.js",
   "./assets/control-core.js",
-  "./assets/control-core.js?v=20260919-tabs",
+  "./assets/control-core.js?v=20260923-regional",
   "./assets/stock-control.js",
   "./assets/cable-offcuts.js",
   "./assets/cable-offcuts-transport.js",

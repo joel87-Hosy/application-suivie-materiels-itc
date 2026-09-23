@@ -2,6 +2,9 @@
   'use strict';
   const stocks=['ITC-B01','ITC-B02','OCI','CIC','MOOV','MTN','ITC-BOUAKE','ITC-SAN-PEDRO','ITC-YAMOUSSOUKRO'];
   const names={'ITC-BOUAKE':'ITC Bouaké','ITC-SAN-PEDRO':'ITC San-Pédro','ITC-YAMOUSSOUKRO':'ITC Yamoussoukro'};
+  function validateManagerStocks(role,ops) {
+    if(role==='Gestionnaire' && ops.includes('ITC-B02') && ops.some(op=>Object.hasOwn(names,op)))throw Error('Le bureau 02 peut déjà consulter et alimenter les trois villes. Affectez la modification de ces stocks à leurs gestionnaires locaux, sans les cocher pour le bureau 02.');
+  }
   const selector=(selected=[])=>`<fieldset id="cu-stock-selection" class="border rounded-xl p-3 space-y-2"><legend class="text-xs font-bold">Stocks dédiés</legend>${stocks.map(op=>`<label class="flex items-center gap-2 text-xs"><input type="checkbox" name="managedOps" value="${op}" ${selected.includes(op)?'checked':''}>${names[op]||op}</label>`).join('')}<p class="text-xs text-slate-500">Gestionnaire ou validateur : choisissez au moins un stock. Contrôleur : accès à tous les stocks de l’entreprise.</p></fieldset>`;
   async function create(event){
     event.preventDefault();if(!isCurrentCompanySupervisor())return;
@@ -10,6 +13,7 @@
       const companyId=isCurrentSuperAdmin()?getFormTextValue('cu-company-id'):secureStore.profile.company_id;
       const role=document.getElementById('cu-user-role').value;
       const managedOps=role==='Contrôleur'?[]:Array.from(event.target.querySelectorAll('[name=managedOps]:checked'),el=>el.value);
+      validateManagerStocks(role,managedOps);
       if(['Gestionnaire','Validateur','Validatrice'].includes(role)&&!managedOps.length)throw Error('Sélectionnez au moins un stock dédié.');
       const email=getFormTextValue('cu-user-email').toLowerCase(),password=getFormTextValue('cu-temp-password');
       const config=global.ITCSupabaseConfig;
@@ -28,6 +32,7 @@
     document.body.append(modal);modal.querySelector('[type=button]').onclick=()=>modal.close();modal.onclose=()=>modal.remove();
     modal.querySelector('form').onsubmit=async event=>{event.preventDefault();const button=modal.querySelector('[type=submit]');button.disabled=true;try{
       const ops=Array.from(modal.querySelectorAll('[name=managedOps]:checked'),el=>el.value);if(!ops.length)throw Error('Sélectionnez au moins un stock.');
+      validateManagerStocks('Gestionnaire',ops);
       const {error}=await global.ITCSupabaseConfig.client.rpc('assign_manager_stocks',{target_uid:user.uid,stock_ops:ops});if(error)throw error;
       await refreshAppDataFromServer();modal.close();renderCompanyUsersAdmin(document.getElementById('app-container'));
     }catch(error){modal.querySelector('[role=status]').textContent=error.message;}finally{button.disabled=false;}};

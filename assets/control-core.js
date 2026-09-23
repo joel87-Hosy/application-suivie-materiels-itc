@@ -14,6 +14,16 @@
   function scopeMap(value) { return Object.fromEntries(scopes(value).map(op => [op, true])); }
   function scopeKeys(company, value) { return Object.fromEntries(scopes(value).map(op => [scopeKey(company,op), true])); }
   function scopeKey(company, op) { return company + '|' + operator(op); }
+  const regionalStocks = ['ITC-BOUAKE', 'ITC-SAN-PEDRO', 'ITC-YAMOUSSOUKRO'];
+  function managerStocks(user) {
+    const assigned = scopes(user?.controlScopes ?? user?.managedOps);
+    return assigned.includes('ITC-B02') ? assigned.filter(op => !regionalStocks.includes(op)) : assigned;
+  }
+  function transferDestinations(user) {
+    if (user?.role !== 'Gestionnaire') return [];
+    const owned = managerStocks(user);
+    return [...new Set([...owned, ...(owned.includes('ITC-B02') ? regionalStocks : [])])];
+  }
   function quantity(value) {
     if (value === '' || value === null || value === undefined) throw new Error('Saisissez une quantité.');
     const n = Number(value);
@@ -46,7 +56,7 @@
       return result.snapshot.val();
     } finally { ref.off('value', keep); }
   }
-  const api = {operator, scopes, scopeMap, scopeKey, scopeKeys, scopedCollections, quantity, adjustment, applyAdjustment};
+  const api = {operator, scopes, scopeMap, scopeKey, scopeKeys, scopedCollections, regionalStocks, managerStocks, transferDestinations, quantity, adjustment, applyAdjustment};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.ControlCore = api;
 })(typeof window === 'undefined' ? globalThis : window);
