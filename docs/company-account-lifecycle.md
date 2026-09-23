@@ -6,6 +6,8 @@ Déployer dans cet ordre :
 2. Déployer l'Edge Function `company-users` : `supabase functions deploy company-users --project-ref ufstydudgffhbkkjtbbg`.
 3. Publier le front généré par `npm.cmd run build`.
 
+Si une suppression renvoie exactement « Rôle non autorisé. », ce message provient de l'ancien contrôle du rôle du compte à créer, pas du contrôle des permissions du superviseur. Vérifier le déploiement de `company-users` : publier seulement le site ne met pas à jour l'Edge Function. La version actuelle traite `delete`, `suspend`, `disable` et `activate` avant toute validation du formulaire de création. Elle autorise le rôle `Superviseur` et renvoie `{updated:true, action:...}` après confirmation par Supabase Auth et la base. Le client exige cette confirmation et signale explicitement un serveur ancien.
+
 Le rôle Superviseur (directeur), ainsi que le rôle DG, peut suspendre, désactiver, réactiver et supprimer les comptes de son entreprise. Les comptes de direction, le super administrateur et le compte courant sont protégés ; seul le super administrateur peut agir sur un autre directeur. Le serveur vérifie les permissions et résout l'identifiant Supabase même lorsque la fiche conserve un ancien identifiant Firebase.
 
 L'action commence par désactiver `app_profiles.is_active`. Les jetons encore valides perdent ainsi leur accès aux données via `current_app_profile()`. L'Edge Function bloque ou rétablit ensuite l'authentification avec [l'API d'administration Supabase](https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid). La suppression utilise [deleteUser](https://supabase.com/docs/reference/javascript/auth-admin-deleteuser), puis supprime les fiches utilisateurs. Les bons, mouvements et audits métier sont conservés.

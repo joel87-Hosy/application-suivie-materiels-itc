@@ -1666,11 +1666,11 @@
     <script src="assets/supabase-public-config.js?v=20260918-shared1"></script>
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
     <script src="assets/control-core.js?v=20260923-regional"></script>
-    <script src="assets/company-users.js?v=20260923-lifecycle"></script>
+    <script src="assets/company-users.js?v=20260923-actions"></script>
     <script src="assets/notification-tabs.js?v=20260923-receipts"></script>
     <script src="assets/supabase-store.js?v=20260923-receipts"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
-    <script src="assets/validator-workflow.js?v=20260923-tabs"></script>
+    <script src="assets/validator-workflow.js?v=20260923-corrections"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js?v=20260923-tabs"></script>
     <script src="assets/cable-offcuts-transport.js?v=20260918-shared1"></script>
@@ -6158,6 +6158,7 @@
         if (sortie?.managerSignatureText) {
           return String(sortie.managerSignatureText).trim();
         }
+        if (sortie?.correctionHistory?.length) return 'Signature en attente sur le bon corrigé';
         return formatAutomaticSignature(
           sortie?.validatedBy || sortie?.signedBy || sortie?.createdBy || fallbackName,
           sortie?.validatedAt || sortie?.signedAt || sortie?.date,
@@ -6168,6 +6169,7 @@
         if (sortie?.technicianSignatureText) {
           return String(sortie.technicianSignatureText).trim();
         }
+        if (sortie?.correctionHistory?.length) return 'Signature de la version initiale conservée dans l’historique';
         return formatAutomaticSignature(
           sortie?.tech || sortie?.demandeurName || sortie?.technicien || "TECHNICIEN",
           sortie?.validatedAt || sortie?.signedAt || sortie?.dateLivraison || sortie?.date,
@@ -6182,6 +6184,7 @@
         if (sortie?.coordinationSignatureText) {
           return String(sortie.coordinationSignatureText).trim();
         }
+        if (sortie?.correctionHistory?.length) return 'Signature de la version initiale conservée dans l’historique';
         return formatAutomaticSignature(
           sortie?.coordinateurNom || sortie?.coordinationBy || "COORDINATION",
           sortie?.validatedAt || sortie?.signedAt || sortie?.dateLivraison || sortie?.date,
@@ -6755,7 +6758,7 @@
           viewTitle.innerText = "HISTORIQUE DES BONS SIGNES";
           loadSignedBonsHistory(container);
         } else if (id === "demandes-coordonnatrice") {
-          renderDemandesGestionnaire(container);
+          loadManagerCommands(container);
         } else if (id === "reception") {
           renderReceptionForm(container);
         } else if (id === "livraison") {
@@ -6798,7 +6801,7 @@
         enhanceSectionUX(id);
 
         // 5. GESTION DES NOTIFICATIONS (Après le rendu)
-        if (window.NotificationTabs.sections.includes(id) && !['validation-bons','transferts-stocks','bons-signes'].includes(id)) {
+        if (window.NotificationTabs.sections.includes(id) && !['validation-bons','transferts-stocks','bons-signes','demandes-coordonnatrice'].includes(id)) {
           markNotificationsAsRead(id);
         }
       }
@@ -9873,22 +9876,44 @@
       }
 
       // --- GESTION MAGASIN ---
+      async function loadManagerCommands(container) {
+        const generation = secureStore.generation;
+        container.innerHTML = '<p class="p-8">Chargement des commandes...</p>';
+        try {
+          if (pendingSave) await pendingSave;
+          if (secureStore.generation !== generation) return;
+          await secureStore.read(generation, {notify:false});
+          if (secureStore.generation !== generation || currentSectionId !== 'demandes-coordonnatrice') return;
+          appData = normalizeAppData(secureStore.value());
+          renderDemandesGestionnaire(container);
+          await markNotificationsAsRead('demandes-coordonnatrice');
+        } catch (error) {
+          if (secureStore.generation !== generation || currentSectionId !== 'demandes-coordonnatrice') return;
+          container.innerHTML = '<p class="p-8 text-red-700">Chargement impossible. Rouvrez cet onglet pour r\u00e9essayer.</p>';
+          console.error(error);
+        }
+      }
+
+      function getManagerCommandGroups() {
+        const uid = secureStore.uid;
+        const owned = new Set(getManagedOpsNormalized(currentUser));
+        const scoped = (appData.demandes || []).filter(d =>
+          (!d.company_id || d.company_id === currentUser?.company_id) &&
+          (d.assignedGestionnaireUid === uid || (d.correctionHistory || []).some(c => c.by === uid) ||
+           (!d.validatorDecision && !d.assignedGestionnaireUid && getDemandeOps(d).length > 0 && getDemandeOps(d).every(op => owned.has(op)) &&
+            (!d.assignedGestionnaireId || String(d.assignedGestionnaireId) === String(currentUser.id)))));
+        return {
+          pending: scoped.filter(d => d.status === 'EN ATTENTE GESTIONNAIRE' && (!d.assignedGestionnaireUid || d.assignedGestionnaireUid === uid)),
+          rejected: scoped.filter(d => d.status === 'REFUSEE VALIDATEUR' && d.assignedGestionnaireUid === uid),
+          history: scoped.filter(d => d.status !== 'REFUSEE VALIDATEUR' && (d.correctionHistory || []).length)
+            .sort((a,b) => String(b.correctionHistory.at(-1)?.at || '').localeCompare(String(a.correctionHistory.at(-1)?.at || '')))
+        };
+      }
+
       function renderDemandesGestionnaire(container) {
-        // 1. SÉCURITÉ : On vérifie que appData existe et on crée une liste vide si demandes est absent
         if (!appData) return;
-        const toutesLesDemandes = appData.demandes || [];
-
-        // 2. FILTRAGE : On récupère uniquement les bons en attente
-        const isSuperAdmin = String(currentUser?.role || "").toUpperCase() === "SUPER_ADMIN";
-        const data = toutesLesDemandes.filter(
-          (d) =>
-            d.status === "EN ATTENTE GESTIONNAIRE" &&
-            (d.validatorDecision ? d.assignedGestionnaireUid === secureStore.uid : (isSuperAdmin ||
-              d.workflow !== "TECH_BON_SORTIE" ||
-              !d.assignedGestionnaireId ||
-              parseInt(d.assignedGestionnaireId) === parseInt(currentUser?.id))),
-        );
-
+        const groups = getManagerCommandGroups();
+        const data = groups.pending;
         const statsByOp = {};
         data.forEach((d) => {
           const op = normalizeOperatorKey(d?.op || "ITC");
@@ -9909,7 +9934,7 @@
                       <div class="flex items-center justify-between gap-4 flex-wrap">
                           <div>
                               <p class="text-[8px] opacity-80 tracking-[0.2em]">WORKFLOW MAGASIN</p>
-                              <h3 class="uppercase text-xl font-black mt-1"><i class="fas fa-clipboard-check mr-2"></i>Préparation Commandes</h3>
+                              <h3 class="uppercase text-xl font-black mt-1"><i class="fas fa-clipboard-check mr-2"></i>Commandes</h3><button type="button" onclick="loadManagerCommands(document.getElementById('app-container'))" class="border rounded-lg p-2 mt-3">Actualiser les commandes</button>
                           </div>
                           <div class="bg-white/20 px-4 py-2 rounded-xl text-center min-w-[120px]">
                               <p class="text-[8px] uppercase opacity-90">En attente</p>
@@ -9919,6 +9944,13 @@
                       <div class="mt-3 flex flex-wrap gap-2">${opsSummary || '<span class="text-[8px] opacity-80">AUCUN FLUX EN ATTENTE</span>'}</div>
                   </div>
 
+                  <section class="mb-8 space-y-3"><h3 class="text-lg font-bold">Bons rejet\u00e9s \u00e0 corriger (${groups.rejected.length})</h3>
+                    ${groups.rejected.map(d => `<div class="border border-red-200 rounded-xl p-4"><b>${escapeHtml(getBonReference(d))}</b><p class="text-red-700">${escapeHtml(d.validatorDecision?.reason || '')}</p><p>${escapeHtml(window.ValidatorWorkflow.trace(d))}</p>${window.ValidatorWorkflow.corrections(d)}<button class="bg-indigo-700 text-white p-3 rounded-lg mt-2" onclick="ValidatorWorkflow.correct(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))">Corriger et renvoyer</button></div>`).join('') || '<p>Aucun bon rejet\u00e9 en attente de correction.</p>'}
+                  </section>
+                  <section class="mb-8 space-y-3"><h3 class="text-lg font-bold">Anciens rejets et corrections (${groups.history.length})</h3>
+                    ${groups.history.map(d => `<details class="border rounded-xl p-4"><summary class="cursor-pointer"><b>${escapeHtml(getBonReference(d))}</b> ? ${escapeHtml(d.status || '')}</summary>${window.ValidatorWorkflow.corrections(d)}<p>${escapeHtml(window.ValidatorWorkflow.trace(d))}</p></details>`).join('') || '<p>Aucun ancien rejet corrig\u00e9.</p>'}
+                  </section>
+                  <h3 class="text-lg font-bold mb-3">Commandes valid\u00e9es \u00e0 pr\u00e9parer (${data.length})</h3>
                   <div class="space-y-3">
                       ${data
                         .map(
@@ -9927,12 +9959,13 @@
                               <div class="flex items-center justify-between gap-3 flex-wrap">
                                 <div>
                                   <p class="font-black text-indigo-900 flex items-center gap-2"><i class="fas fa-file-signature text-indigo-500"></i>${escapeHtml(getBonReference(d))} | ${escapeHtml(d.demandeurName)}</p>
-                                  <p class="text-[7px] text-orange-600 uppercase italic mt-1">MOTIF : ${d.motif || "NON PRÉCISÉ"}</p>
+                                  <p class="text-[7px] text-orange-600 uppercase italic mt-1">MOTIF : ${escapeHtml(d.motif || "NON PRÉCISÉ")}</p>
+                                  ${d.status === 'REFUSEE VALIDATEUR' ? `<p class="text-sm text-red-700 mt-2">À corriger : ${escapeHtml(d.validatorDecision?.reason || '')}</p>` : ''}
                                   <p class="text-[7px] text-slate-500 uppercase mt-1">Opérateur : ${escapeHtml(getOperatorMeta(d?.op || "ITC").label)}</p>
                                 </div>
-                                <button onclick="prepSortie('${d.id}')" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-indigo-700 transition inline-flex items-center gap-2">
+                                <button onclick="${d.status === 'REFUSEE VALIDATEUR' ? `ValidatorWorkflow.correct(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))` : `prepSortie('${d.id}')`}" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-indigo-700 transition inline-flex items-center gap-2">
                                     <i class="fas fa-boxes-stacked"></i>
-                                    Réserver
+                                    ${d.status === 'REFUSEE VALIDATEUR' ? 'Corriger et renvoyer' : 'Réserver'}
                                 </button>
                               </div>
                           </div>

@@ -14,7 +14,7 @@ Deno.serve(async request=>{
   if(actorError||!actor?.is_active||!['Superviseur','DG','SUPER_ADMIN'].includes(actor.role))return json({error:'Gestion des comptes réservée au directeur.'},403);
   const c=await request.json();
   if(typeof c.companyId!=='string'||(actor.role!=='SUPER_ADMIN'&&c.companyId!==actor.company_id))return json({error:'Entreprise non autorisée.'},403);
-  if(c.action && c.action!=='create'){
+  if(c.action!==undefined && c.action!=='create'){
    if(!['suspend','disable','activate','delete'].includes(c.action)||typeof c.targetUid!=='string'||!c.targetUid||c.targetUid.length>200||typeof c.operationId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.operationId))return json({error:'Action ou compte invalide.'},400);
    const {data:operation,error:prepareError}=await admin.rpc('prepare_company_account_action',{actor_id:auth.user.id,target_key:c.targetUid,action:c.action,operation_id:c.operationId});
    if(prepareError||!operation)return json({error:prepareError?.message||'Action refusée.'},400);
@@ -27,7 +27,7 @@ Deno.serve(async request=>{
    if(finishError)return json({error:'Synchronisation à terminer. Réessayez la même action : '+finishError.message},503);
    return json({updated:true,action:c.action});
   }
-  if(!['Gestionnaire','Contrôleur','Coordinateur','Coordinatrice','Superviseur Terrain','Technicien','Validateur','Validatrice'].includes(c.role))return json({error:'Rôle non autorisé.'},400);
+  if(!['Gestionnaire','Contrôleur','Coordinateur','Coordinatrice','Superviseur Terrain','Technicien','Validateur','Validatrice'].includes(c.role))return json({error:'Le rôle choisi pour le nouveau compte n’est pas autorisé.'},400);
   if(typeof c.email!=='string'||!/^\S+@\S+\.\S+$/.test(c.email)||typeof c.name!=='string'||!c.name.trim()||c.name.length>120||typeof c.password!=='string'||c.password.length<12||c.password.length>128)return json({error:'Nom, email ou mot de passe invalide (12 caractères minimum).'},400);
   if(!Array.isArray(c.managedOps)||c.managedOps.some((op:unknown)=>typeof op!=='string'))return json({error:'Liste de stocks invalide.'},400);
   const ops=c.role==='Contrôleur'?[]:[...new Set(c.managedOps)];

@@ -55,7 +55,12 @@
       const config=global.ITCSupabaseConfig;
       const {data,error}=await config.client.auth.getSession();if(error||!data.session)throw Error('Reconnectez-vous pour gérer ce compte.');
       const response=await fetch(config.projectUrl+'/functions/v1/company-users',{method:'POST',headers:{'Content-Type':'application/json',apikey:config.publishableKey,Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({action,targetUid:user.uid,companyId:user.company_id,operationId:operations.get(key)})});
-      const result=await response.json();if(!response.ok||result.error)throw Error(result.error||'Action refusée.');
+      const result=await response.json();
+      // Old deployments only implement account creation and reject a delete
+      // request as a missing creation role. Do not misreport the actor's rights.
+      if(result.error==='Rôle non autorisé.')throw Error('Le serveur Supabase utilise encore une ancienne version de la gestion des comptes. Le rôle Superviseur est autorisé, mais la fonction company-users doit être mise à jour pour permettre cette action.');
+      if(!response.ok||result.error)throw Error(result.error||'Action refusée.');
+      if(result.updated!==true||result.action!==action)throw Error('Le serveur n’a pas confirmé cette action. Mettez à jour la fonction Supabase company-users, puis réessayez.');
       operations.delete(key);
       await refreshAppDataFromServer({render:false});
       if(currentSectionId==='company-users')renderCompanyUsersAdmin(document.getElementById('app-container'));

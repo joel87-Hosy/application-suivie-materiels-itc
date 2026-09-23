@@ -1,11 +1,11 @@
-const CACHE_NAME = "itc-gestion-materiels-v36-signed-receipts";
+const CACHE_NAME = "itc-gestion-materiels-v39-command-history";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./assets/profile.js",
   "./assets/notification-tabs.js?v=20260923-receipts",
   "./assets/manager-stock.js?v=20260923-tabs",
-  "./assets/company-users.js?v=20260923-lifecycle",
+  "./assets/company-users.js?v=20260923-actions",
   "./assets/secure-store.js",
   "./assets/control-core.js",
   "./assets/control-core.js?v=20260923-regional",
@@ -19,7 +19,7 @@ const APP_SHELL = [
   "./assets/cable-offcuts-transport.js?v=20260918-shared1",
   "./assets/supabase-store.js",
   "./assets/supabase-store.js?v=20260923-receipts",
-  "./assets/validator-workflow.js?v=20260923-tabs",
+  "./assets/validator-workflow.js?v=20260923-corrections",
   "./assets/validator-workflow.js",
   "./assets/assistant-knowledge.js",
   "./assets/assistant-reports.js",

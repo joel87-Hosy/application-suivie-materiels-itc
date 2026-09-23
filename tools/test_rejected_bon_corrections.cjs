@@ -1,0 +1,60 @@
+const fs=require('fs'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite');
+const uuid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
+(async()=>{
+ const db=new PGlite();
+ await db.exec(`CREATE ROLE authenticated; CREATE ROLE anon; CREATE ROLE service_role; CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('test.uid',true),'')::uuid $$; GRANT USAGE ON SCHEMA auth TO authenticated;`);
+ await db.exec(fs.readFileSync('supabase/migrations/202609180002_app_backend.sql','utf8').split('DO $$')[0]);
+ await db.exec('GRANT SELECT,INSERT,UPDATE,DELETE ON app_records,app_settings TO authenticated; GRANT SELECT ON app_profiles TO authenticated;');
+ await db.exec(fs.readFileSync('supabase/migrations/202609180003_cable_offcuts.sql','utf8').split('DO $$')[0]);
+ await db.exec(fs.readFileSync('supabase/migrations/202609180005_validator_workflow.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/202609190001_validator_bureaus.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/202609190004_unconditional_workflow.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/202609190004_unconditional_workflow.sql','utf8'));
+ for(const [id,role,company,scopes] of [[1,'Coordinateur','A',{}],[2,'Validateur','A',{'ITC-B01':true,CIC:true,MTN:true,OCI:true}],[3,'Gestionnaire','A',{'ITC-B01':true}],[4,'Gestionnaire','A',{'ITC-B02':true,MOOV:true}],[5,'Validatrice','B',{}],[6,'Technicien','A',{}],[7,'Validateur','A',{'ITC-B02':true,MOOV:true}],[8,'Validatrice','A',{}]]){
+  await db.query('INSERT INTO auth.users VALUES($1)',[uuid(id)]);
+  await db.query("INSERT INTO app_profiles(user_id,company_id,role,control_scopes,profile) VALUES($1,$2,$3,$4,$5)",[uuid(id),company,role,JSON.stringify(scopes),JSON.stringify({id,name:role+' '+id})]);
+ }
+ await db.exec("INSERT INTO stock_workflow_config VALUES('A',true),('B',true)");
+ const as=async id=>{await db.exec('RESET ROLE');await db.query("SELECT set_config('test.uid',$1,false)",[uuid(id)]);await db.exec('SET ROLE authenticated');};
+ const read=async(collection,key)=>{await db.exec('RESET ROLE');return (await db.query('SELECT payload FROM app_records WHERE collection=$1 AND record_key=$2',[collection,key])).rows[0]?.payload;};
+ const insert=async(collection,key,payload)=>db.query('INSERT INTO app_records(collection,record_key,company_id,payload) VALUES($1,$2,$3,$4)',[collection,key,'A',JSON.stringify(payload)]);
+ await insert('stock','stock1',{op:'ITC-B01',label:'Cable',qty:100});
+
+ await db.exec(fs.readFileSync('supabase/migrations/202609230005_rejected_bon_corrections.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/202609230005_rejected_bon_corrections.sql','utf8'));
+ const request={id:'R1',op:'ITC-B01',company_id:'A',demandeurOriginalId:1,coordinationSignatureText:'Original signature',items:[{label:'Cable',qty:20}],status:'EN ATTENTE VALIDATEUR'};
+ await as(1);await insert('demandes','r1',request);
+ await as(2);await assert.rejects(db.query("SELECT decide_stock_request('r1',false,$1,'Quantity')",[uuid(4)]),/ne g/);
+ await assert.rejects(db.query("SELECT decide_stock_request('r1',false,$1,'')",[uuid(3)]),/Motif/);
+ await db.query("SELECT decide_stock_request('r1',false,$1,'Quantity incorrect')",[uuid(3)]);
+ let rejected=await read('demandes','r1');assert.equal(rejected.assignedGestionnaireUid,uuid(3));
+ assert.ok((await db.query("SELECT payload FROM app_records WHERE collection='notifications'")).rows.some(r=>r.payload.userId===3&&r.payload.message.includes('Quantity incorrect')));
+ let correction={items:[{stockKey:'stock1',qty:5}],motif:'Installation',demandeurName:'Team',serviceAbbreviation:'DEP',note:'Quantity corrected'};
+ const submit=(decision=rejected.validatorDecision,patch=correction)=>db.query("SELECT resubmit_stock_request('r1',$1,$2)",[JSON.stringify(decision),JSON.stringify(patch)]);
+ await as(4);await assert.rejects(submit(),/autre gestionnaire/);
+ await as(5);await assert.rejects(submit(),/gestionnaire/);
+ await as(3);await assert.rejects(db.exec("SELECT issue_validated_request('r1','Manager','DEP')"),/requise/);
+ await assert.rejects(submit({},correction),/modifi/);
+ await assert.rejects(submit(rejected.validatorDecision,{...correction,items:[{stockKey:'stock1',qty:-2}]}),/Quantit/);
+ await assert.rejects(submit(rejected.validatorDecision,{...correction,items:[{stockKey:'unknown',qty:2}]}),/stocks/);
+ await submit();await assert.rejects(submit(),/modifi/);
+ let revised=await read('demandes','r1');assert.equal(revised.status,'EN ATTENTE VALIDATEUR');assert.equal(revised.validatorDecision,undefined);assert.equal(revised.coordinationSignatureText,undefined);assert.equal(revised.correctionHistory[0].before.coordinationSignatureText,'Original signature');assert.equal(revised.items[0].qty,5);
+ assert.equal((await read('stock','stock1')).qty,100);
+ await as(3);await assert.rejects(db.exec("SELECT issue_validated_request('r1','Manager','DEP')"),/requise/);
+ await as(2);await db.query("SELECT decide_stock_request('r1',false,$1,'Recipient incorrect')",[uuid(3)]);
+ rejected=await read('demandes','r1');await as(3);correction.demandeurName='Corrected team';await submit();
+ revised=await read('demandes','r1');assert.equal(revised.correctionHistory.length,2);
+ await as(2);await db.query("SELECT decide_stock_request('r1',true,$1,'OK')",[uuid(3)]);
+ await as(3);await db.exec("SELECT issue_validated_request('r1','Manager','DEP')");
+ assert.equal((await read('stock','stock1')).qty,95);
+ const issued=(await db.query("SELECT payload FROM app_records WHERE collection='sorties'")).rows[0].payload;assert.equal(issued.correctionHistory.length,2);
+
+ await db.exec('RESET ROLE');
+ await insert('demandes','legacy',{...request,id:'OLD',status:'REFUSEE VALIDATEUR',validatorDecision:{approved:false,reason:'Legacy',at:'2026-01-01'}});
+ await insert('demandes','unassigned',{...request,id:'NO-MANAGER',op:'UNKNOWN',status:'REFUSEE VALIDATEUR'});
+ const recovery=fs.readFileSync('supabase/migrations/202609230006_legacy_rejected_bons.sql','utf8');await db.exec(recovery);await db.exec(recovery);
+ assert.equal((await read('demandes','legacy')).assignedGestionnaireUid,uuid(3));
+ assert.equal((await read('demandes','unassigned')).assignedGestionnaireUid,undefined);
+ assert.equal((await db.query("SELECT count(*)::int n FROM app_records WHERE collection='platformAuditLogs' AND payload->>'action'='RECOVER_REJECTED_BON'")).rows[0].n,1);
+ await db.close();console.log('PASS: rejection assigned/notified, manager-only correction, immutable prior signatures, repeated correction history, stale retry, validation mandatory, no debit before final issue.');
+})().catch(error=>{console.error(error);process.exitCode=1});

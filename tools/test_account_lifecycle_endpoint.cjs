@@ -12,6 +12,16 @@ const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict'),{st
   assert.equal(calls[1].id,'supabase-target');assert.equal(calls[1].attributes.ban_duration,action==='activate'?'none':'876000h');
  }
  assert.equal((await call('delete')).status,200);assert.equal(calls[1].name,'deleteAuth');
+ actor.role='Superviseur';
+ for(const action of ['delete','suspend','disable','activate']){
+  const response=await call(action);assert.equal(response.status,200);
+  const body=await response.json();assert.equal(body.updated,true);assert.equal(body.action,action);
+  assert.equal(calls[0].name,'prepare_company_account_action');
+ }
+ for(const action of ['',null,false]){
+  assert.equal((await call(action)).status,400);assert.equal(calls.length,0,'invalid action must not enter account creation');
+ }
+ actor.role='DG';
  prepareError={message:'Compte protégé'};assert.equal((await call('delete')).status,400);assert.equal(calls.length,1);prepareError=null;
  authError={message:'Unavailable'};assert.equal((await call('delete')).status,503);assert.equal(calls.length,2,'never finalize a failed Auth mutation');
  authError={code:'user_not_found'};assert.equal((await call('delete')).status,200);assert.equal(calls.length,3,'resume a successful deletion whose response was lost');authError=null;
