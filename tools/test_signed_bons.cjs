@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const html=fs.readFileSync('index.html','utf8');
 function extract(name){const start=html.indexOf('      function '+name+'(');return html.slice(start,html.indexOf('\n      }',start)+8);}
-const context={currentUser:{company_id:'A'},appData:{demandes:[
+const context={secureStore:{profile:null},ControlCore:require('../assets/control-core'),currentUser:{company_id:'A'},appData:{demandes:[
  {id:1,company_id:'A',workflow:'TECH_BON_SORTIE',op:'ITC-B02',technicianSignatureText:'Tech',coordinationSignatureText:'Coord',validatorDecision:{approved:true,name:'Validator'}},
  {id:2,company_id:'A',workflow:'COORD_DIRECT_BON',op:'ITC-B02',coordinationSignatureText:'Coord'},
  {id:3,company_id:'A',op:'ITC-B01',validatorDecision:{approved:true,name:'Validator'}},
@@ -11,7 +11,7 @@ const context={currentUser:{company_id:'A'},appData:{demandes:[
  {id:11,company_id:'A',op:'ITC-B02',managerSignatureText:'Physical'},
  {id:12,company_id:'A',op:'ITC-B02',sourceDemandeId:'missing',managerSignatureText:'Archived'}]},
  getAllowedOpsForFluxUser:()=>null,getDemandeOps:bon=>bon.ops||[bon.op],normalizeOperatorKey:v=>v,getSortieTimestamp:()=>0};
-vm.createContext(context);vm.runInContext(extract('getBonSignatureChain')+'\n'+extract('getSignedBonsHistory'),context);
+vm.createContext(context);vm.runInContext(extract('getBonSignatureChain')+'\n'+extract('canViewSignedBon')+'\n'+extract('getSignedBonsHistory'),context);
 let rows=context.getSignedBonsHistory();assert.equal(rows.length,5);
 assert.equal(rows.filter(r=>r.id===1).length,0,'linked request not duplicated');
 assert.equal(context.getBonSignatureChain(rows.find(r=>r.id===10)).length,4,'all chain signatures retained');
@@ -19,4 +19,17 @@ assert.equal(rows.find(r=>r.id===10).historySource,'SORTIE');
 assert.equal(rows.find(r=>r.id===2).historySource,'DEMANDE');
 context.getAllowedOpsForFluxUser=()=>new Set(['ITC-B02']);rows=context.getSignedBonsHistory();assert.equal(rows.length,4);
 assert.ok(!rows.some(r=>[3,4,5].includes(r.id)),'unassigned, unsigned and other tenant excluded');
+for(const role of ['Gestionnaire','Validateur','Validatrice']) {
+ context.secureStore.profile={role,company_id:'A',controlScopes:{'ITC-B02':true}};
+ assert.equal(context.getSignedBonsHistory().length,4);
+ assert.equal(context.canViewSignedBon({company_id:'A',op:'ITC-B01',destination:'ITC-B02'}),false);
+ assert.equal(context.canViewSignedBon({company_id:'A',ops:['ITC-B01','ITC-B02']}),false);
+ context.secureStore.profile.controlScopes={};assert.equal(context.getSignedBonsHistory().length,0);
+ context.secureStore.profile.controlScopes={'ITC-B01':true};assert.deepEqual(Array.from(context.getSignedBonsHistory(),r=>r.id),[3]);
+}
+for(const role of ['Superviseur','DG','Contrôleur']) {
+ context.secureStore.profile={role,company_id:'A',controlScopes:{'ITC-B02':true}};
+ assert.equal(context.getSignedBonsHistory().length,5,'oversight roles see all company stocks despite assigned scopes');
+ assert.equal(context.canViewSignedBon({company_id:'B',op:'ITC-B01'}),false);
+}
 console.log('PASS: full signature chain, direct/physical/legacy bons, linked deduplication, archived request, tenant and stock scope.');

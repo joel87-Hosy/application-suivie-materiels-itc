@@ -8856,6 +8856,24 @@
         return chain;
       }
 
+      function canViewSignedBon(bon) {
+        const profile = secureStore.profile || currentUser;
+        if (!profile || (bon.company_id && bon.company_id !== profile.company_id)) return false;
+        const role = String(profile.role || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+        if (['SUPERVISEUR','DG','SUPER_ADMIN','CONTROLEUR'].includes(role)) return true;
+        let allowed;
+        if (role === 'GESTIONNAIRE') allowed = new Set(ControlCore.managerStocks(profile));
+        else if (['VALIDATEUR','VALIDATRICE'].includes(role)) allowed = new Set(ControlCore.scopes(profile.controlScopes));
+        else allowed = getAllowedOpsForFluxUser();
+        if (!allowed) return true;
+        // Only the issuing stocks count. A transfer destination does not grant
+        // access to the issuing warehouse's complete signed document.
+        const sources = [...new Set([...getDemandeOps(bon), bon.sourceOp,
+          ...(Array.isArray(bon.items) ? bon.items : []).map(item => item.op)]
+          .map(ControlCore.operator).filter(Boolean))];
+        return sources.length > 0 && sources.every(op => allowed.has(op));
+      }
+
       function getSignedBonsHistory() {
         if (!currentUser) return [];
         const company = currentUser.company_id;
@@ -8879,8 +8897,7 @@
         for (const demande of demandes) {
           if (!linked.has(demande) && getBonSignatureChain(demande).length) result.push({...demande, historySource:'DEMANDE'});
         }
-        const allowed = getAllowedOpsForFluxUser();
-        return result.filter(bon => !allowed || [...getDemandeOps(bon), bon.sourceOp, bon.destinationOp, bon.destination, ...(Array.isArray(bon.items) ? bon.items : []).map(item => item.op)].some(op => allowed.has(normalizeOperatorKey(op))))
+        return result.filter(canViewSignedBon)
           .sort((a,b) => getSortieTimestamp(b.managerSignedAt || b.validatedAt || b.validatorDecision?.at || b.coordinationSignedAt || b.technicianSignedAt || b.date) - getSortieTimestamp(a.managerSignedAt || a.validatedAt || a.validatorDecision?.at || a.coordinationSignedAt || a.technicianSignedAt || a.date));
       }
 
