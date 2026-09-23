@@ -82,6 +82,7 @@
         catch(error){container.querySelector('#transfer-status').textContent=error.message;}
         finally{busy=false;form.querySelectorAll('button,input,select,textarea').forEach(e=>e.disabled=false);}
       };
+      env.readNotifications?.('transferts-stocks');
     }catch(error){if(token===generation)container.textContent=error.message;}
   }
   global.ManagerStock={setup:config=>{env=config;},edit,enter,pdf,isBusy:()=>busy,stop:()=>{generation++;}};

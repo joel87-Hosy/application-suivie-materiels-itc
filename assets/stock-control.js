@@ -46,6 +46,7 @@
     stop(); state = {}; summaries = {}; message = ''; draw();
     if (!op) return;
     const token = generation;
+    let notificationVisitRead = false;
     const subscriptions = [];
     for (const stockOp of ops()) {
     const target = db.ref(`stock_control/${company}/${stockOp}`);
@@ -55,6 +56,10 @@
       if (stockOp === op) state = summaries[stockOp];
       // Preserve a form being edited; listeners update the data model only.
       if (!detail && !document.querySelector('#app-container .ctl-editor')) draw();
+      if (stockOp === op && section === 'notifications' && !notificationVisitRead) {
+        notificationVisitRead = true;
+        markControlNotificationsRead();
+      }
     };
     const fail = error => { if (token === generation) { message = 'Chargement impossible : ' + error.message; draw(); } };
     target.on('value', callback, fail); subscriptions.push([target,callback]);
@@ -75,12 +80,19 @@
     finally { busy = false; writeContext = null; lockedElements.forEach(el=>{el.disabled=false;}); }
   }
   async function log(text, recordId) { await ref('events').push({actorUid: writeContext?.uid || uid, at: now(), message: text, recordId: recordId || ''}); }
+  function controlUnreadCount() {
+    return rows('events').filter(ev => ev.at > (state.preferences?.[uid]?.lastSeen || '')).length;
+  }
+  function markControlNotificationsRead() {
+    const lastSeen = rows('events').reduce((latest,ev) => ev.at > latest ? ev.at : latest, state.preferences?.[uid]?.lastSeen || '');
+    if (lastSeen && controlUnreadCount()) return run(()=>ref('preferences/'+uid).update({lastSeen}));
+  }
   function draw() {
     const container = document.getElementById('app-container');
     if (!container || !String(currentSectionId).startsWith('control-')) return;
     document.getElementById('view-title').textContent = labels[section];
     container.innerHTML = `<div class="ctl-workspace"><header class="ctl-hero"><div><p>ESPACE CONTRÔLE DES STOCKS</p><h2>${e(labels[section])}</h2><p>${e(currentUser.name || currentUser.email)} · ${e(role())}</p></div><label>Stock<select id="ctl-op">${ops().map(v => `<option ${v === op ? 'selected' : ''}>${e(v)}</option>`).join('')}</select></label></header>
-      <nav class="ctl-tabs" aria-label="Modules de contrôle">${Object.entries(labels).map(([key,title]) => `<button type="button" data-page="${key}" aria-current="${key === section ? 'page' : 'false'}">${e(title)}${key === 'notifications' ? ' ('+rows('events').filter(ev => ev.at > (state.preferences?.[uid]?.lastSeen || '')).length+')' : ''}</button>`).join('')}</nav>
+      <nav class="ctl-tabs" aria-label="Modules de contrôle">${Object.entries(labels).map(([key,title]) => `<button type="button" data-page="${key}" aria-current="${key === section ? 'page' : 'false'}">${e(title)}${key === 'notifications' && controlUnreadCount() ? ' <span class="notification-badge" aria-live="polite">'+controlUnreadCount()+'</span>' : ''}</button>`).join('')}</nav>
       <p id="ctl-message" role="status" aria-live="polite">${e(message)}</p>
       ${!op ? `<div class="ctl-card">${isController() ? 'Aucun stock disponible dans votre entreprise.' : 'Aucun stock affecté. Le superviseur doit renseigner les accès du compte.'}</div>` : `${section === 'dashboard' && isController() ? '' : `<div class="ctl-toolbar">${field('search','Recherche','search',search,false)}${field('from','Du','date',from,false)}${field('to','Au','date',to,false)}${button('filter','Filtrer')}${button('clear','Réinitialiser')}</div>`}${state.lock ? `<div class="ctl-warning">Inventaire en cours : les modifications du stock ${e(op)} sont gelées jusqu’à sa clôture ou son annulation.</div>` : ''}${detail ? renderDetail() : renderPage()}`}</div>`;
     container.onclick = event => { const b = event.target.closest('button'); if (!b) return; if (b.dataset.page) { showSection('control-' + b.dataset.page); return; } if (b.dataset.action) handle(b.dataset.action, b.dataset); };
@@ -351,7 +363,7 @@
     if (action === 'print') { window.print(); return; }
     if (action === 'csv') { exportCSV(); return; }
     if (action === 'new-transfer') { detail={mode:'create',kind:'checks',source:'transfer'};draw();return; }
-    if (action === 'mark-read') { run(()=>ref('preferences/'+uid).set({lastSeen:now()}));return; }
+    if (action === 'mark-read') { markControlNotificationsRead();return; }
     if (action === 'download') {
       const attachment = state[detail.kind]?.[detail.id]?.attachments?.[data.id];
       if (!attachment || !['image/png','image/jpeg','application/pdf'].includes(attachment.type)) return;

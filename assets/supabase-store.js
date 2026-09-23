@@ -29,6 +29,7 @@
       this.uid = null;
       this.pending = null;
       this.raw = {};
+      this.notificationCompanies = {};
       this.ready = false;
     }
     async connect(user) {
@@ -72,9 +73,11 @@
       if (settingsError) throw settingsError;
       if (generation !== this.generation) return;
       this.raw = {};
+      this.notificationCompanies = {};
       for (const row of records || []) {
         this.raw[row.collection] ||= {};
         this.raw[row.collection][row.record_key] = row.payload;
+        if (row.collection === 'notifications') this.notificationCompanies[row.record_key] = row.company_id;
       }
       this.raw.settings = Object.fromEntries((settingRows || []).map(row => [row.setting_key, row.value]));
       if (this.ready) this.onChange(this.value());
@@ -116,11 +119,13 @@
       for (const setting of settings) data[setting] = clone(this.raw.settings?.[setting] ?? (['materialTypes', 'scansDuJour'].includes(setting) ? [] : null));
       return data;
     }
-    async markNotificationsRead() {
+    async markNotificationsRead(recordKeys) {
       if (!this.ready || !this.profile || this.profile.id == null) return [];
       const generation = this.generation;
+      const selected = recordKeys === undefined ? null : new Set(recordKeys);
       const changes = Object.entries(this.raw.notifications || {})
-        .filter(([, row]) => String(row.userId) === String(this.profile.id) && !row.lu && row.company_id === this.profile.company_id)
+        .filter(([recordKey, row]) => (!selected || selected.has(recordKey)) && String(row.userId) === String(this.profile.id) && !row.lu &&
+          (this.notificationCompanies[recordKey] ?? row.company_id) === this.profile.company_id)
         .map(([record_key, row]) => ({collection:'notifications', record_key, company_id:this.profile.company_id,
           previous:clone(row), payload:{...clone(row), lu:true}}));
       if (!changes.length) return [];

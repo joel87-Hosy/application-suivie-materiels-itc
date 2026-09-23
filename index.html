@@ -86,6 +86,8 @@
         z-index: 9999;
       }
 
+      .notification-badge.hidden { display: none; }
+
       /* UX premium: reveal animations + responsive text rhythm */
       @keyframes sectionFadeIn {
         from {
@@ -1665,11 +1667,12 @@
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
     <script src="assets/control-core.js?v=20260923-regional"></script>
     <script src="assets/company-users.js?v=20260923-regional"></script>
-    <script src="assets/supabase-store.js?v=20260923-manual"></script>
-    <script src="assets/manager-stock.js?v=20260923-regional"></script>
-    <script src="assets/validator-workflow.js?v=20260919-bureaus"></script>
+    <script src="assets/notification-tabs.js?v=20260923-tabs"></script>
+    <script src="assets/supabase-store.js?v=20260923-tabs"></script>
+    <script src="assets/manager-stock.js?v=20260923-tabs"></script>
+    <script src="assets/validator-workflow.js?v=20260923-tabs"></script>
     <script src="assets/secure-store.js"></script>
-    <script src="assets/stock-control.js"></script>
+    <script src="assets/stock-control.js?v=20260923-tabs"></script>
     <script src="assets/cable-offcuts-transport.js?v=20260918-shared1"></script>
     <script src="assets/cable-offcuts.js"></script>
     <script src="assets/assistant-knowledge.js"></script>
@@ -2628,8 +2631,8 @@
         // On transforme le rôle en MAJUSCULES pour éviter les erreurs de saisie
         const r = currentUser.role.trim().toUpperCase();
         const isSuperAdmin = r === "SUPER_ADMIN";
-        window.ManagerStock.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection});
-        window.ValidatorWorkflow.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection});
+        window.ManagerStock.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
+        window.ValidatorWorkflow.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
         window.ValidatorWorkflow.menu();
         window.CableOffcuts.setup({profile: () => secureStore.profile});
         let chuteMenu = document.getElementById("menu-cable-offcuts");
@@ -6780,16 +6783,8 @@
         enhanceSectionUX(id);
 
         // 5. GESTION DES NOTIFICATIONS (Après le rendu)
-        const sectionsANotifs = [
-          "coord-demandes-tech",
-          "demandes-coordonnatrice",
-          "tech-mes-demandes",
-          "coord-excel",
-          "trafic-audit",
-          "rapport-hebdo",
-        ];
-        if (sectionsANotifs.includes(id)) {
-          markNotificationsAsRead();
+        if (window.NotificationTabs.sections.includes(id) && !['validation-bons','transferts-stocks'].includes(id)) {
+          markNotificationsAsRead(id);
         }
       }
       // --- AUTOMATISATION EXCEL (COORDINATRICE) ---
@@ -11472,26 +11467,34 @@
         }, 500);
       }
       let markingNotifications = false;
-      async function markNotificationsAsRead() {
-        if (markingNotifications || !currentUser || !Array.isArray(appData?.notifications)) return;
+      async function markNotificationsAsRead(section) {
+        if (!currentUser || !Array.isArray(appData?.notifications)) return;
         const userId = currentUser.id;
-        const unread = appData.notifications.filter(n => String(n.userId) === String(userId) && !n.lu);
+        const sessionUid = secureStore.uid;
+        const unread = window.NotificationTabs.unread(appData.notifications,currentUser,section);
         if (!unread.length) return;
-        markingNotifications = true;
+        while (markingNotifications) await markingNotifications;
+        if (currentUser?.id !== userId || secureStore.uid !== sessionUid) return;
+        let finishMark;
+        markingNotifications = new Promise(resolve => { finishMark = resolve; });
         try {
           if (typeof secureStore.markNotificationsRead === 'function') {
-            const updated = new Set(await secureStore.markNotificationsRead());
-            if (currentUser?.id !== userId) return;
+            const updated = new Set(await secureStore.markNotificationsRead(unread.map(n => n._dbKey).filter(Boolean)));
+            if (currentUser?.id !== userId || secureStore.uid !== sessionUid) return;
             appData.notifications.forEach(n => { if (updated.has(n._dbKey)) n.lu = true; });
           } else {
             unread.forEach(n => { n.lu = true; });
-            if (!(await save())) return;
+            if (!(await save())) {
+              unread.forEach(n => { n.lu = false; });
+              updateNotifications();
+              return;
+            }
           }
           updateNotifications();
         } catch (error) {
           // An unread notification must never prevent opening an operational tab.
           console.warn('Lecture des notifications non synchronisée ; nouvel essai au prochain onglet.', error);
-        } finally { markingNotifications = false; }
+        } finally { markingNotifications = false; finishMark(); }
       }
       function addNotification(u, m, auditFlux = "ITC") {
         if (!appData.notifications) appData.notifications = [];
@@ -11549,9 +11552,7 @@
         const notifications = appData.notifications || [];
 
         // 3. Calcul du nombre de notifs non lues pour cet utilisateur précis
-        const count = notifications.filter(
-          (n) => n.userId === currentUser.id && !n.lu,
-        ).length;
+        const count = window.NotificationTabs.unread(notifications,currentUser).length;
 
         // 3.1 Détecter nouvelles notifications : si le compteur a augmenté,
         // jouer un bip et activer vibration si possible (mobile).
@@ -11581,21 +11582,7 @@
         }
 
         // 4. Mise à jour des pastilles (badges) dans l'interface
-        const badgeIds = [
-          "notif-coord",
-          "notif-tech",
-          "notif-superviseur",
-          "notif-gest-coord",
-        ];
-
-        badgeIds.forEach((id) => {
-          const el = document.getElementById(id);
-          if (el) {
-            el.innerText = count;
-            // On affiche le badge seulement si count > 0, sinon on le cache
-            el.classList.toggle("hidden", count === 0);
-          }
-        });
+        window.NotificationTabs.update(document, notifications, currentUser);
 
         // 4. Mettre à jour le compteur local
         lastNotificationCount = count;

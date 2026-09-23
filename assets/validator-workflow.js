@@ -15,6 +15,7 @@
       element = document.createElement('div'); element.id='menu-validator';
       element.innerHTML='<button type="button" class="w-full text-left p-3 rounded-xl bg-indigo-800 text-white font-bold">Validation des bons</button>';
       element.firstChild.onclick=()=>env.navigate('validation-bons');
+      element.firstChild.dataset.notificationSection='validation-bons';
       document.getElementById('menu-cockpit')?.before(element);
     }
     element.classList.toggle('hidden',!isValidator());
@@ -61,6 +62,7 @@
         catch(error){container.querySelector('#validation-message').textContent=error.message;}
         finally{busy=false;container.querySelectorAll('button').forEach(b=>b.disabled=false);}
       };
+      env.readNotifications?.('validation-bons');
     }catch(error){if(token===generation)container.textContent=error.message;}
   }
   async function issue(request) {
