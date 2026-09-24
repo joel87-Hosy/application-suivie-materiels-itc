@@ -26,6 +26,18 @@
       await env.refresh();busy=false;env.navigate('cockpit');global.alert('Modification enregistrée et tracée.');
     }catch(error){global.alert(error.message);}finally{busy=false;}
   }
+  async function remove(item) {
+    if(busy)return;
+    if(!allowed()||!stocks().includes(op(item.op)))return global.alert('Stock hors de votre affectation.');
+    if(!global.confirm(`Supprimer définitivement « ${item.label} » du stock ${item.op} ? Quantité actuelle : ${item.qty}. La fiche et sa quantité seront retirées ; une trace sera conservée dans l’audit.`))return;
+    busy=true;
+    try {
+      const {error}=await env.client().rpc('delete_manager_stock_item',{operation_id:global.crypto.randomUUID(),stock_key:item._dbKey,expected:item});
+      if(error)throw error;
+      await env.refresh();env.navigate('cockpit');global.alert('Article supprimé du stock.');
+    }catch(error){global.alert(error.code==='PGRST202'?'La suppression nécessite la migration Supabase 202609240003_delete_manager_stock_item.sql.':error.message);}
+    finally{busy=false;}
+  }
   function pdf(bon) {
     const doc=new global.jspdf.jsPDF();
     doc.setFontSize(16);doc.text('BON DE SORTIE — TRANSFERT',14,20);
@@ -85,5 +97,5 @@
       env.readNotifications?.('transferts-stocks');
     }catch(error){if(token===generation)container.textContent=error.message;}
   }
-  global.ManagerStock={setup:config=>{env=config;},edit,enter,pdf,isBusy:()=>busy,stop:()=>{generation++;}};
+  global.ManagerStock={setup:config=>{env=config;},edit,remove,enter,pdf,isBusy:()=>busy,stop:()=>{generation++;}};
 })(window);

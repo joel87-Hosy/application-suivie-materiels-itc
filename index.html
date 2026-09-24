@@ -11418,30 +11418,9 @@
         lastNotificationCount = count;
       }
       async function deleteMaterial(op, label) {
-        if (
-          !confirm(
-            "ATTENTION : VOULEZ-VOUS SUPPRIMER DÉFINITIVEMENT CET ARTICLE DU STOCK ?",
-          )
-        )
-          return;
-
-        const itemASupprimer = appData.stock.find(
-          (s) => s.op === op && s.label === label,
-        );
-        const qteAuMomentSuppr = itemASupprimer
-          ? itemASupprimer.qty
-          : "Inconnue";
-
-        appData.stock = appData.stock.filter(
-          (s) => !(s.op === op && s.label === label),
-        );
-
-        // ALERTE CRITIQUE POUR LE SUPERVISEUR (ID 1)
-        const messageAudit = `ALERTE SUPPRESSION CRITIQUE : Le gestionnaire a supprimé l'article "${label}" de l'opérateur ${op}. (Quantité au moment de la suppression : ${qteAuMomentSuppr}U)`;
-        addNotification(1, messageAudit);
-
-        if (!(await save())) return;
-        showSection("cockpit");
+        const item = (appData.stock || []).find(s => normalizeOperatorKey(s.op) === normalizeOperatorKey(op) && s.label === label && s.company_id === secureStore.profile?.company_id);
+        if (!item) return alert('Article introuvable. Actualisez la liste.');
+        return window.ManagerStock.remove(item);
       }
 
       async function ouvrirModifStock(a, b) {
