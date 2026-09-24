@@ -2466,6 +2466,7 @@
       }
 
       async function signOutActiveAuth() {
+        await window.disablePushNotifications?.();
         if (useSupabaseBackend) {
           const result = await supabaseBackend.auth.signOut();
           if (result.error) throw result.error;
@@ -11284,7 +11285,7 @@
         if (pendingSave) await pendingSave;
         if (currentUser?.id !== userId || secureStore.uid !== sessionUid) return;
         const unread = window.NotificationTabs.unread(appData.notifications,currentUser,section);
-        if (!unread.length) return;
+        if (!unread.length) { updateNotifications(); return; }
         let finishMark;
         markingNotifications = new Promise(resolve => { finishMark = resolve; });
         try {
@@ -11304,6 +11305,14 @@
         } catch (error) {
           // An unread notification must never prevent opening an operational tab.
           console.warn('Lecture des notifications non synchronisée ; nouvel essai au prochain onglet.', error);
+          const container = typeof currentSectionId !== 'undefined' && currentSectionId === section ? document.getElementById('app-container') : null;
+          if (container && !container.querySelector('[data-notification-read-error]')) {
+            const warning = document.createElement('p');
+            warning.dataset.notificationReadError = 'true';
+            warning.className = 'p-3 text-red-700';
+            warning.textContent = 'La lecture des notifications n’a pas pu être enregistrée. Actualisez cet onglet pour réessayer.';
+            container.prepend(warning);
+          }
         } finally { markingNotifications = false; finishMark(); }
       }
       function addNotification(u, m, auditFlux = "ITC") {

@@ -10,6 +10,11 @@ de l'application actuelle sont écrites dans `public.app_records` sur Supabase :
 ce déclencheur ne les reçoit pas. Il n'existe pas de relais Supabase vers ce
 service. Ne pas le déployer pour résoudre un problème de notification Supabase.
 
+Le nouveau relais Supabase est préparé dans `supabase/functions/notification-push`.
+Sa mise en service (secrets, webhook, abonnements) est décrite dans
+[`docs/notification-push.md`](../docs/notification-push.md). Il doit être déployé
+séparément du site ; le build statique ne l’active pas.
+
 Le dossier reste présent pour identifier et maintenir l'ancien déploiement.
 Le supprimer du dépôt ne supprimerait pas les fonctions déjà déployées.
 

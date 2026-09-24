@@ -31,6 +31,7 @@ function renderMonProfil(container) {
     <section class="bg-white rounded-2xl p-6 border space-y-3"><h3 class="font-bold text-lg">Notifications sur cet appareil</h3>
     <p class="text-sm text-slate-600">Recevez une notification système lorsque l’application est fermée : bon à signer, à valider ou matériel disponible.</p>
     <button type="button" onclick="enablePushNotifications(this)" class="bg-indigo-600 text-white rounded-xl px-5 py-3">Activer les notifications</button>
+    <p class="text-sm text-slate-600">Autorisez aussi le son dans les réglages de notification de votre appareil. Le mode silencieux peut empêcher le bip.</p>
     <p id="push-notification-status" class="text-sm text-slate-600" role="status" aria-live="polite"></p></section></div>`;
 }
 

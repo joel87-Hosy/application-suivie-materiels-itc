@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v41-signed-bon-scopes";
+const CACHE_NAME = "itc-gestion-materiels-v42-notification-push";
 const APP_SHELL = [
   "./",
   "./index.html",

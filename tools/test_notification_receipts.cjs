@@ -35,5 +35,24 @@ const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict'),{PG
  await store.read(store.generation);assert.equal(store.value().notifications[0].lu,true);
  store.raw.settings={...stale};for(const key of Object.keys(store.raw.settings))if(!['materialTypes','scansDuJour','derniereDateScan','lastConsumptionArchiveKey'].includes(key))delete store.raw.settings[key];
  store.read=async()=>{};await store.save(stale);assert.equal(saves,0,'stale form does not write lu=false');
- console.log('PASS: atomic receipts, replay, empty selection, tenant/recipient isolation, suspended/anonymous denial, stale client/read protection and unseen arrival.');
+ // A missing RPC must not leave a permanent cumulative badge.
+ let fallbackCalls=0, fallbackError=null;
+ store.raw.notifications={old:{userId:7,company_id:'A',lu:false}};
+ store.client.rpc=async(name,args)=>{
+   if(name==='mark_app_notifications_read')return {error:{code:'PGRST202'}};
+   assert.equal(name,'save_app_changes');fallbackCalls++;
+   assert.equal(args.changes[0].previous.lu,false);
+   assert.equal(args.changes[0].payload.lu,true);
+   return {error:fallbackError};
+ };
+ fallbackError=Error('Concurrent update');
+ await assert.rejects(store.markNotificationsRead(['old']),/Concurrent/);
+ assert.equal(store.raw.notifications.old.lu,false);
+ fallbackError=null;
+ assert.deepEqual(Array.from(await store.markNotificationsRead(['old'])),['old']);
+ assert.equal(store.raw.notifications.old.lu,true);assert.equal(fallbackCalls,2);
+ store.raw.notifications.denied={userId:7,company_id:'A',lu:false};
+ store.client.rpc=async()=>({error:{code:'42501'}});
+ await assert.rejects(store.markNotificationsRead(['denied']));assert.equal(fallbackCalls,2);
+ console.log('PASS: atomic receipts, missing-RPC fallback, persistence errors, tenant/recipient isolation and stale read protection.');
 })().catch(error=>{console.error(error);process.exitCode=1});

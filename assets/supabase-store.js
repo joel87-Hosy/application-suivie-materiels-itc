@@ -131,7 +131,14 @@
         .map(([record_key, row]) => ({collection:'notifications', record_key, company_id:this.profile.company_id,
           previous:clone(row), payload:{...clone(row), lu:true}}));
       if (!changes.length) return [];
-      const {data, error} = await this.client.rpc('mark_app_notifications_read', {record_keys:changes.map(row => row.record_key)});
+      let {data, error} = await this.client.rpc('mark_app_notifications_read', {record_keys:changes.map(row => row.record_key)});
+      // Compatibility with databases where the read-receipt migration is missing.
+      // Keep the existing server authorization and optimistic concurrency checks.
+      if (error?.code === 'PGRST202') {
+        const saved = await this.client.rpc('save_app_changes', {changes});
+        error = saved.error;
+        if (!error) data = changes.map(row => row.record_key);
+      }
       if (error) throw error;
       if (generation !== this.generation) return [];
       const updated = [];

@@ -32,6 +32,9 @@ function extract(name){const start=html.search(new RegExp('^      (?:async )?fun
  assert.equal(rows.find(r=>r.record_key==='other').payload.lu,false);
  await store.read(store.generation);context.updateNotifications();assert.equal(badge.innerText,0,'read state survives reload');
  await context.markNotificationsAsRead();assert.equal(writes,2,'reopening does not write again');
+ badge.innerText=27;badge.hidden=false;
+ await context.markNotificationsAsRead('demandes-coordonnatrice');
+ assert.equal(badge.innerText,0,'a refreshed all-read snapshot clears a stale cumulative badge');assert.equal(badge.hidden,true);
  rows.push({record_key:'latest',company_id:'A',payload:{userId:7,company_id:'A',lu:false}});
  await store.read(store.generation);context.updateNotifications();assert.equal(badge.innerText,1);assert.equal(badge.hidden,false);
  fail=true;await context.markNotificationsAsRead();assert.equal(badge.innerText,1,'failed persistence leaves notification unread');
