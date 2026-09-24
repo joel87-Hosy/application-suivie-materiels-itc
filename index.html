@@ -1679,6 +1679,7 @@
     <script src="assets/assistant-reports.js"></script>
     <script src="assets/voice-assistant.js"></script>
     <script src="assets/bon-reference.js"></script>
+    <script src="assets/manager-flux.js"></script>
     <script src="assets/push-config.js"></script>
     <script src="assets/push-notifications.js"></script>
     <script>
@@ -10471,6 +10472,15 @@
           appData.stock.push(mat);
         }
 
+        // Persist each stock reception alongside its quantity change on Supabase.
+        if (typeof useSupabaseBackend !== 'undefined' && useSupabaseBackend) {
+          const receiptId = crypto.randomUUID();
+          (appData.stockMovements ||= []).push({
+            id:receiptId, _dbKey:receiptId, company_id:companyId, op:mat.op,
+            label:mat.label, qty:mat.qty, type:'in', source:'reception',
+            actorUid:secureStore.uid, createdAt:new Date().toISOString(), reference:receiptId,
+          });
+        }
         // 3. AUDIT & SAUVEGARDE
         addNotification(
           1,
@@ -13170,6 +13180,12 @@
       }
 
       function renderFluxMateriels(container) {
+        if (typeof currentUser !== 'undefined' && currentUser?.role === 'Gestionnaire' && window.ManagerFlux) {
+          window.ManagerFlux.setup({data:()=>appData,profile:()=>secureStore.profile,uid:()=>secureStore.uid,
+            op:normalizeOperatorKey,timestamp:getSortieTimestamp,itemsFor:getSortieItems,
+            refresh:async()=>{await secureStore.read(secureStore.generation,{notify:false});appData=normalizeAppData(secureStore.value());}});
+          return window.ManagerFlux.render(container);
+        }
         if (!container) return;
         
         const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
@@ -13404,6 +13420,7 @@
       }
 
       function renderFluxMaterielDetail(container, designation) {
+        if (typeof currentUser !== 'undefined' && currentUser?.role === 'Gestionnaire' && window.ManagerFlux) return window.ManagerFlux.render(container, designation);
         if (!container) return;
         
         const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
@@ -13752,6 +13769,7 @@
 
       // ===== EXPORTS PDF/EXCEL =====
       async function exportFluxMaterielsPDF() {
+        if (typeof currentUser !== 'undefined' && currentUser?.role === 'Gestionnaire' && window.ManagerFlux) return window.ManagerFlux.exportFile('pdf');
         const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
         const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
         
@@ -13899,6 +13917,7 @@
       }
 
       async function exportFluxMaterielDetailPDF(designation) {
+        if (typeof currentUser !== 'undefined' && currentUser?.role === 'Gestionnaire' && window.ManagerFlux) return window.ManagerFlux.exportFile('pdf',designation);
         const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
         const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
         
@@ -14002,6 +14021,7 @@
       }
 
       async function exportFluxMaterielsExcel() {
+        if (typeof currentUser !== 'undefined' && currentUser?.role === 'Gestionnaire' && window.ManagerFlux) return window.ManagerFlux.exportFile('xlsx');
         const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
         const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
         
@@ -14112,6 +14132,7 @@
       }
 
       async function exportFluxMaterielDetailExcel(designation) {
+        if (typeof currentUser !== 'undefined' && currentUser?.role === 'Gestionnaire' && window.ManagerFlux) return window.ManagerFlux.exportFile('xlsx',designation);
         const sorties = Array.isArray(appData?.sorties) ? appData.sorties : [];
         const demandes = Array.isArray(appData?.demandes) ? appData.demandes : [];
         

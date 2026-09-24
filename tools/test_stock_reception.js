@@ -33,6 +33,18 @@ function setup(op = 'MOOV', stockOp = op, label = 'Câble réseau', qty = '5') {
   return {context,data,inputs,updates,alerts,button,submit};
 }
 (async () => {
+  // Supabase must persist an explicit receipt with the stock change (unlike Firebase's automatic ledger).
+  const supabaseReceipt = setup();
+  supabaseReceipt.context.useSupabaseBackend = true;
+  supabaseReceipt.context.crypto = require('node:crypto').webcrypto;
+  const saved=[];
+  supabaseReceipt.context.save=async()=>{saved.push(JSON.parse(JSON.stringify(supabaseReceipt.data)));return true;};
+  await supabaseReceipt.submit();
+  assert.equal(supabaseReceipt.data.stockMovements.length,1);
+  assert.equal(supabaseReceipt.data.stockMovements[0].qty,5);
+  assert.equal(supabaseReceipt.data.stockMovements[0].actorUid,'manager');
+  assert.equal(supabaseReceipt.data.stockMovements[0].source,'reception');
+  assert.ok(saved.every(snapshot=>snapshot.stock[0].qty===15&&snapshot.stockMovements.length===1),'stock and receipt are saved together');
   for (const [op, stored, expected] of [['MOOV','MOOV','MOOV'],['MTN','MTN','MTN'],['OCI-CIC','OCI','OCI'],['ITC-B01','ITC','ITC-B01'],['ITC','ITC-B02','ITC-B02']]) {
     const test = setup(op,stored);
     await test.submit();

@@ -1,5 +1,6 @@
-const CACHE_NAME = "itc-gestion-materiels-v42-notification-push";
+const CACHE_NAME = "itc-gestion-materiels-v43-manager-flux";
 const APP_SHELL = [
+  "./assets/manager-flux.js",
   "./",
   "./index.html",
   "./assets/profile.js",
