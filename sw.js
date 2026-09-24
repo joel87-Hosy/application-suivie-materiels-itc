@@ -1,6 +1,8 @@
-const CACHE_NAME = "itc-gestion-materiels-v44-flux-colors";
+const CACHE_NAME = "itc-gestion-materiels-v46-substock-selection";
 const APP_SHELL = [
   "./assets/manager-flux.js",
+  "./assets/stock-substocks.js",
+  "./assets/stock-substocks.css?v=20260924",
   "./assets/manager-flux.css?v=20260924",
   "./",
   "./index.html",

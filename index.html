@@ -1663,6 +1663,7 @@
 
     <link rel="stylesheet" href="assets/stock-control.css" />
     <link rel="stylesheet" href="assets/manager-flux.css?v=20260924" />
+    <link rel="stylesheet" href="assets/stock-substocks.css?v=20260924" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0"></script>
     <script src="assets/supabase-public-config.js?v=20260918-shared1"></script>
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
@@ -1681,6 +1682,7 @@
     <script src="assets/voice-assistant.js"></script>
     <script src="assets/bon-reference.js"></script>
     <script src="assets/manager-flux.js"></script>
+    <script src="assets/stock-substocks.js"></script>
     <script src="assets/push-config.js"></script>
     <script src="assets/push-notifications.js"></script>
     <script>
@@ -2638,6 +2640,9 @@
         const r = currentUser.role.trim().toUpperCase();
         const isSuperAdmin = r === "SUPER_ADMIN";
         window.ManagerStock.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
+        window.StockSubstocks.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
+          onClose:()=>{if(currentSectionId==='cockpit')renderCockpit(document.getElementById('app-container'));},
+          refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());}});
         window.ValidatorWorkflow.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
         window.ValidatorWorkflow.menu();
         window.CableOffcuts.setup({profile: () => secureStore.profile});
@@ -4430,6 +4435,7 @@
             return {
               op: row.dataset.op || "",
               label: row.dataset.label || "",
+              ...(row.dataset.substock ? {substock:row.dataset.substock} : {}),
               qty,
               checked,
             };
@@ -4481,7 +4487,7 @@
         const rows = Array.from(document.querySelectorAll('#sortie-material-picker .sortie-stock-row'));
         let visible = 0;
         rows.forEach(row => {
-          const text = normalize(`${row.dataset.label} ${row.dataset.op} ${getOperatorMeta(row.dataset.op).label}`);
+          const text = normalize(`${row.dataset.label} ${row.dataset.op} ${row.dataset.substock || ''} ${getOperatorMeta(row.dataset.op).label}`);
           const matches = words.every(word => text.includes(word));
           row.classList.toggle('hidden', !matches);
           if (matches) visible++;
@@ -4497,6 +4503,10 @@
         if (!container) return;
 
         const selectedOps = getCheckedSortieOperators();
+        if (window.StockSubstocks?.enabled()) {
+          container.innerHTML=window.StockSubstocks.pickerHtml(selectedOps,previousItems);
+          updateSortieOperatorSummary();filterSortieMaterials();saveSortieDraft();return;
+        }
         const previousByKey = new Map(
           (previousItems || []).map((item) => [
             getSortieMaterialRowKey(item.op, item.label),
@@ -7500,13 +7510,14 @@
           type: document.getElementById("r-type")?.value,
           mat: document.getElementById("r-mat")?.value,
           qty: document.getElementById("r-qty")?.value,
+          substock: document.getElementById("r-substock")?.value,
         };
         localStorage.setItem("draft_reception", JSON.stringify(draft));
       }
 
       // Écouteur global pour détecter la saisie
       document.addEventListener("input", (e) => {
-        if (["r-op", "r-type", "r-mat", "r-qty"].includes(e.target.id)) {
+        if (["r-op", "r-type", "r-mat", "r-qty", "r-substock"].includes(e.target.id)) {
           saveReceptionDraft();
         }
       });
@@ -8660,8 +8671,9 @@
         );
         totalsByOp.forEach((t) => {
           const meta = getOperatorMeta(t.op);
+          const substockClickable = window.StockSubstocks?.owns(t.op);
           parts.push(
-            `<div class="dashboard-hover-block dashboard-hover-kpi p-4 rounded-2xl shadow-lg bg-white text-center border ${meta.border}">`,
+            `<${substockClickable ? 'button type="button" onclick="StockSubstocks.open(this.dataset.operator)" data-operator="'+escapeHtml(t.op)+'"' : 'div'} class="dashboard-hover-block dashboard-hover-kpi p-4 rounded-2xl shadow-lg bg-white text-center border ${meta.border}">`,
           );
           parts.push(
             `<p class="text-[8px] text-slate-500 uppercase font-black flex items-center justify-center gap-2"><i class="fas ${meta.icon}"></i>${escapeHtml(meta.label)}</p>`,
@@ -8669,7 +8681,7 @@
           parts.push(
             `<p class="text-2xl font-black text-indigo-900 mt-1">${t.total} U</p>`,
           );
-          parts.push("</div>");
+          parts.push(substockClickable ? '<span class="text-xs text-blue-700 block mt-2">Voir et réorganiser les sous-stocks</span></button>' : '</div>');
         });
         parts.push("</div>");
 
@@ -10305,6 +10317,7 @@
                   </div>
 
                   <form onsubmit="handleRec(event)" class="space-y-5">
+                      ${window.StockSubstocks?.receptionField() || ''}
                       <div>
                           <label class="text-[8px] text-slate-400 uppercase ml-1">Opérateur</label>
                           <select id="r-op" onchange="toggleQtyField(this.value)" class="w-full border-2 p-3 rounded-xl uppercase text-xs bg-white outline-none focus:border-indigo-500">
@@ -10350,6 +10363,8 @@
         constrainOperatorSelectForCurrentUser("r-op");
 
         const matInput = document.getElementById("r-mat");
+        const substockSelect = document.getElementById('r-substock');
+        if (substockSelect) substockSelect.value = saved.substock || '';
         if (matInput) {
           matInput.value = String(saved.mat || "");
         }
@@ -10455,6 +10470,14 @@
         const companyId = secureStore.profile.company_id;
         mat.op = normalizeOperatorKey(mat.op);
         mat.company_id = companyId;
+        if (typeof window !== 'undefined' && window.StockSubstocks?.enabled()) {
+          try {
+            await window.StockSubstocks.receive(mat,document.getElementById('r-substock')?.value);
+            localStorage.removeItem('draft_reception');
+            alert('Entrée enregistrée dans le sous-stock choisi.');showSection('cockpit');
+          } catch(error) { alert(error.message); }
+          return;
+        }
         const existing = appData.stock.find(
           (s) => s.company_id === companyId &&
             normalizeOperatorKey(s.op) === mat.op &&

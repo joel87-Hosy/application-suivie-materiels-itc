@@ -74,7 +74,11 @@
     if(!signature?.trim())return;
     if(!global.confirm('Confirmer la remise physique du matériel et le débit du stock ?'))return;
     busy=true;
-    try {await rpc('issue_validated_request',{request_key:request._dbKey,signature,service:request.serviceAbbreviation});await env.refresh();global.alert('Sortie physique enregistrée et tracée.');busy=false;env.navigate('demandes-coordonnatrice');}
+    try {
+      const explicit=global.StockSubstocks?.enabled();
+      const selections=explicit?await global.StockSubstocks.chooseIssue(request):null;
+      if(explicit&&!selections)return;
+      await rpc(explicit?'issue_validated_request_substocks':'issue_validated_request',{request_key:request._dbKey,signature,service:request.serviceAbbreviation,...(explicit?{selections}:{})});await env.refresh();global.alert('Sortie physique enregistrée et tracée.');busy=false;env.navigate('demandes-coordonnatrice');}
     catch(error){global.alert(error.message);}finally{busy=false;}
   }
   async function removeRejected(requestKey) {
