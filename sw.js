@@ -1,6 +1,7 @@
-const CACHE_NAME = "itc-gestion-materiels-v43-manager-flux";
+const CACHE_NAME = "itc-gestion-materiels-v44-flux-colors";
 const APP_SHELL = [
   "./assets/manager-flux.js",
+  "./assets/manager-flux.css?v=20260924",
   "./",
   "./index.html",
   "./assets/profile.js",
