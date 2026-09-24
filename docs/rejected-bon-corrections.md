@@ -9,3 +9,9 @@ Le bon revient au statut « EN ATTENTE VALIDATEUR ». Le stock reste inchangé j
 Appliquer ensuite `202609230006_legacy_rejected_bons.sql` pour rattacher les anciens refus sans affectation lorsqu'un unique gestionnaire actif couvre leurs stocks. Cette reprise est auditée, notifiée et réexécutable sans doublon. Les affectations ambiguës restent à résoudre par l'administrateur.
 
 L'onglet Commandes se recharge à l'ouverture et propose un bouton Actualiser. Il distingue les rejets à corriger, l'historique des rejets corrigés (y compris les bons à nouveau en validation ou déjà livrés), et les commandes validées à préparer. Aucun rechargement périodique n'est ajouté.
+
+## Renvoi et suppression des refus
+
+Appliquer dans l’éditeur SQL Supabase le fichier complet `supabase/migrations/202609240001_repair_rejected_bon_actions.sql`, puis publier le site (`npm.cmd run build`). Ce script peut être rejoué : il réinstalle le circuit de correction et recharge le cache PostgREST.
+
+Le bouton de suppression demande confirmation. Le serveur contrôle le rôle actif, l’entreprise, l’affectation et le refus inchangé sous verrou. Le bon complet reste dans l’audit SUPPRESSION_BON_REFUSE. Aucun stock ne change ; les suppressions directes restent interdites.

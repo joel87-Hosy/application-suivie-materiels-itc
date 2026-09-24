@@ -5,7 +5,7 @@
   let env, busy = false, generation = 0;
   const enabled = () => env?.profile()?.validatorWorkflowEnabled === true;
   const isValidator = () => roles.includes(env?.profile()?.role);
-  const rpc = async (name, args) => {const {data,error} = await env.client().rpc(name,args); if(error) throw error; return data;};
+  const rpc = async (name, args) => {const {data,error} = await env.client().rpc(name,args); if(error) {if(error.code==='PGRST202') throw new Error('La base doit être mise à jour : appliquez la migration 202609240001_repair_rejected_bon_actions.sql dans Supabase, puis réessayez.'); throw error;} return data;};
   const op = value => String(value || '').trim().toUpperCase() === 'ITC' ? 'ITC-B01' : String(value || '').trim().toUpperCase();
   const covers = request => Array.isArray(request?.items) && request.items.length > 0 && request.items.every(item => env?.profile()?.controlScopes?.[op(item.op || request.op)] === true);
   function setup(config) {env=config;}
@@ -77,6 +77,18 @@
     try {await rpc('issue_validated_request',{request_key:request._dbKey,signature,service:request.serviceAbbreviation});await env.refresh();global.alert('Sortie physique enregistrée et tracée.');busy=false;env.navigate('demandes-coordonnatrice');}
     catch(error){global.alert(error.message);}finally{busy=false;}
   }
+  async function removeRejected(requestKey) {
+    if(busy)return;
+    const request=(env.data().demandes||[]).find(r=>r._dbKey===requestKey);
+    if(!request||request.status!=='REFUSEE VALIDATEUR'||env.profile()?.role!=='Gestionnaire')return;
+    if(!global.confirm('Supprimer définitivement le bon refusé '+(request.ref||request.id)+' ? Une trace sera conservée dans l’audit.'))return;
+    busy=true;
+    try {
+      await rpc('delete_rejected_stock_request',{request_key:request._dbKey,expected_decision:request.validatorDecision??null});
+      await env.refresh();env.navigate('demandes-coordonnatrice');
+      global.alert('Bon refusé supprimé.');
+    }catch(error){global.alert(error.message);}finally{busy=false;}
+  }
   function correct(requestKey) {
     const request=(env.data().demandes||[]).find(r=>r._dbKey===requestKey);
     if(!request||request.status!=='REFUSEE VALIDATEUR'||env.profile()?.role!=='Gestionnaire')return;
@@ -107,5 +119,5 @@
       finally{busy=false;modal.querySelectorAll('button').forEach(b=>b.disabled=false);}
     };
   }
-  global.ValidatorWorkflow={setup,menu,enter,enabled,isValidator,covers,trace,corrections,correct,issue,stop:()=>{generation++;},isBusy:()=>busy};
+  global.ValidatorWorkflow={setup,menu,enter,enabled,isValidator,covers,trace,corrections,correct,removeRejected,issue,stop:()=>{generation++;},isBusy:()=>busy};
 })(window);
