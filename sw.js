@@ -1,5 +1,6 @@
-const CACHE_NAME = "itc-gestion-materiels-v46-substock-selection";
+const CACHE_NAME = "itc-gestion-materiels-v47-manager-locations";
 const APP_SHELL = [
+  "./assets/manager-locations.js",
   "./assets/manager-flux.js",
   "./assets/stock-substocks.js",
   "./assets/stock-substocks.css?v=20260924",

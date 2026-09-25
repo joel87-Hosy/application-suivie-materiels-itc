@@ -5,7 +5,7 @@
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let env,busy=false,pendingReceipt=null;
   const enabled=()=>env?.profile()?.role==='Gestionnaire'&&env.profile().controlScopes?.['ITC-B02']===true;
-  const owns=operator=>enabled()&&global.ControlCore.managerStocks(env.profile()).includes(global.ControlCore.operator(operator));
+  const owns=operator=>enabled()&&!global.ControlCore.operator(operator).startsWith('STK-')&&global.ControlCore.managerStocks(env.profile()).includes(global.ControlCore.operator(operator));
   function quantities(item){const b=item.subStocks||{};return {...Object.fromEntries(Object.keys(names).filter(k=>k!=='unallocated').map(k=>[k,Number(b[k])||0])),unallocated:Math.max(0,Number(item.qty||0)-Object.values(b).reduce((s,v)=>s+Number(v||0),0))};}
   const entries=operator=>(env.data().stock||[]).filter(s=>s.company_id===env.profile().company_id&&global.ControlCore.operator(s.op)===global.ControlCore.operator(operator));
   async function rpc(name,args){const {data,error}=await env.client().rpc(name,args);if(error)throw new Error(error.code==='PGRST202'?'Appliquez la migration 202609240004_bureau02_substocks.sql dans Supabase pour activer les sous-stocks.':error.message);return data;}

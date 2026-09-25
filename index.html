@@ -1277,23 +1277,10 @@
                 <i class="fas fa-clock-rotate-left w-5 text-emerald-400"></i>
                 Bons Signes
               </div>
-              <input
-                type="file"
-                id="excel-upload"
-                accept=".xlsx, .xls"
-                class="hidden"
-                onchange="processExcel(event)"
-              />
-              <button
-                onclick="document.getElementById('excel-upload').click()"
-                class="bg-green-600 text-white py-4 rounded-2xl text-[10px] uppercase font-black shadow-lg hover:bg-green-700 transition w-full mb-4"
-              >
-                <i class="fas fa-file-excel mr-2"></i> Importer Commande via
-                Excel
-              </button>
             </div>
 
             <div id="menu-gestionnaire" class="mt-6 hidden">
+              <button type="button" onclick="showSection('mes-stocks'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-teal-300"><i class="fas fa-boxes-stacked mr-2"></i> Mes stocks et sous-stocks</button>
               <button type="button" onclick="showSection('transferts-stocks'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-teal-300"><i class="fas fa-exchange-alt mr-2"></i> Transferts de matériel</button>
               <p
                 class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50"
@@ -1672,6 +1659,7 @@
     <script src="assets/notification-tabs.js?v=20260923-receipts"></script>
     <script src="assets/supabase-store.js?v=20260923-receipts"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
+    <script src="assets/manager-locations.js"></script>
     <script src="assets/validator-workflow.js?v=20260923-corrections"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js?v=20260923-tabs"></script>
@@ -2640,6 +2628,9 @@
         const r = currentUser.role.trim().toUpperCase();
         const isSuperAdmin = r === "SUPER_ADMIN";
         window.ManagerStock.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
+        window.ManagerLocations.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,navigate:showSection,
+          refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());},
+          reloadProfile:async()=>{const generation=secureStore.generation;await secureStore.load(generation);if(generation!==secureStore.generation)throw new Error('Session remplacée.');currentUser={...currentUser,...secureStore.profile};appData=normalizeAppData(secureStore.value());updateMenuVisibility();updateUserInfo();}});
         window.StockSubstocks.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
           onClose:()=>{if(currentSectionId==='cockpit')renderCockpit(document.getElementById('app-container'));},
           refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());}});
@@ -6702,6 +6693,8 @@
       }
 
       function showSection(id) {
+        if (window.ManagerLocations?.isBusy()) return;
+        window.ManagerLocations?.stop();
         if (window.ManagerStock?.isBusy()) return;
         window.ManagerStock?.stop();
         if (window.ValidatorWorkflow?.isBusy()) return;
@@ -6727,7 +6720,10 @@
         if (id === "stock-itc-b01") {
           viewTitle.innerText = "STOCK ITC BUREAU 01";
         }
-        if (id === "transferts-stocks") {
+        if (id === "mes-stocks") {
+          viewTitle.innerText = "MES STOCKS ET SOUS-STOCKS";
+          window.ManagerLocations.enter(container);
+        } else if (id === "transferts-stocks") {
           viewTitle.innerText = "TRANSFERTS DE MATÉRIEL";
           window.ManagerStock.enter(container);
         } else if (id === "validation-bons") {
@@ -6765,8 +6761,6 @@
           renderCoordFluxTech(container);
         } else if (id === "coord-creation-directe") {
           renderCoordCreationDirecte(container);
-        } else if (id === "coord-excel") {
-          renderCoordExcelUpload(container);
         } else if (id === "bons-signes") {
           viewTitle.innerText = "HISTORIQUE DES BONS SIGNES";
           loadSignedBonsHistory(container);
@@ -7366,7 +7360,9 @@
       async function handleScanSuccess(id) {
         const beep = document.getElementById("beep-sound");
         if (beep) beep.play();
-        if (navigator.vibrate) navigator.vibrate(100);
+        if (navigator.userActivation?.hasBeenActive && navigator.vibrate) {
+          navigator.vibrate(100);
+        }
 
         const d = appData.demandes.find((x) => x.id === id);
         if (d) {
@@ -11422,7 +11418,8 @@
               }
             }
 
-            if (navigator && navigator.vibrate) {
+            // La vibration exige une interaction préalable dans cette page.
+            if (navigator.userActivation?.hasBeenActive && navigator.vibrate) {
               try {
                 navigator.vibrate([200, 100, 150]);
               } catch (e) {

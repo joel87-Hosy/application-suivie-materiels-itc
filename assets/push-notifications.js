@@ -20,7 +20,7 @@
         if(session.data.user?.id!==payload.data?.recipientUid)return;
         const audio=document.getElementById('beep-sound');
         if(audio){audio.currentTime=0;audio.play()?.catch(()=>{});}
-        navigator.vibrate?.([200,100,150]);
+        if(navigator.userActivation?.hasBeenActive) navigator.vibrate?.([200,100,150]);
       });
       foregroundBound=true;
     }

@@ -1,0 +1,57 @@
+const fs=require('fs'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite');
+const uuid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
+(async()=>{
+ const db=new PGlite();
+ await db.exec(`CREATE ROLE authenticated;CREATE ROLE anon;CREATE ROLE service_role;CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('test.uid',true),'')::uuid $$;GRANT USAGE ON SCHEMA auth TO authenticated;`);
+ const migration=n=>fs.readFileSync('supabase/migrations/'+n,'utf8');
+ await db.exec(migration('202609180002_app_backend.sql').split('DO $$')[0]);
+ await db.exec('GRANT SELECT,INSERT,UPDATE,DELETE ON app_records,app_settings TO authenticated;GRANT SELECT ON app_profiles TO authenticated;');
+ for(const file of ['202609180005_validator_workflow.sql','202609190004_unconditional_workflow.sql','202609190005_city_stocks.sql','202609230001_manager_stock_operations.sql','202609230002_regional_stock_transfers.sql','202609240004_bureau02_substocks.sql','202609240005_explicit_substock_issues.sql','202609250001_manager_stock_locations.sql','202609250001_manager_stock_locations.sql'])await db.exec(migration(file));
+ for(const [id,role,company,scopes] of [[1,'Gestionnaire','A',{'ITC-B02':true}],[2,'Gestionnaire','A',{}],[3,'Gestionnaire','B',{}],[4,'Coordinateur','A',{}]]){
+  await db.query('INSERT INTO auth.users(id) VALUES($1)',[uuid(id)]);
+  const profile={id,uid:uuid(id),name:'Person '+id,company_id:company,role};
+  await db.query('INSERT INTO app_profiles(user_id,company_id,role,control_scopes,profile) VALUES($1,$2,$3,$4,$5)',[uuid(id),company,role,scopes,profile]);
+  await db.query("INSERT INTO app_records(collection,record_key,company_id,payload) VALUES('users',$1,$2,$3)",[uuid(id),company,profile]);
+ }
+ await db.exec("INSERT INTO stock_locations(company_id,op,name) VALUES('A','ITC-B02','Bureau 02')");
+ const as=async id=>{await db.exec('RESET ROLE');await db.query("SELECT set_config('test.uid',$1,false)",[uuid(id)]);await db.exec('SET ROLE authenticated');};
+ const create=async(id,name,parent=null)=>(await db.query('SELECT create_manager_stock_location($1,$2,$3) result',[uuid(id),name,parent])).rows[0].result;
+ const receive=(id,op,label='CABLE',quantity=5,type='FIBRE')=>db.query('SELECT receive_manager_location_item($1,$2,$3,$4,$5)',[uuid(id),op,label,type,quantity]);
+ const stock=async op=>(await db.query("SELECT payload FROM app_records WHERE collection='stock' AND payload->>'op'=$1",[op])).rows[0]?.payload;
+ await as(4);await assert.rejects(create(10,'Interdit'),/gestionnaire/);
+ await as(1);await assert.rejects(create(10,' '),/Nom/);
+ await assert.rejects(create(10,'Inconnu','MISSING'),/affectation/);
+ const root=await create(10,'Réserve');assert.equal(root.created_by,uuid(1));assert.equal(root.parent_op,null);
+ assert.deepEqual(await create(10,'Réserve'),root,'retry reuses the persisted stock');
+ await assert.rejects(create(10,'Autre'),/déjà utilisé/);
+ await assert.rejects(create(11,'réserve'),/déjà ce nom/);
+ const child=await create(12,'Câbles',root.op);assert.equal(child.parent_op,root.op);
+ const grandchild=await create(13,'Bobines',child.op);assert.equal(grandchild.parent_op,child.op);
+ const profile=(await db.query('SELECT * FROM current_app_profile()')).rows[0];
+ assert.equal(profile.control_scopes[root.op],true);assert.equal(profile.control_scopes[child.op],true);assert.equal(profile.control_scopes['ITC-B02'],true);
+ assert.equal(profile.control_scope_keys['A|'+child.op],true);
+ const user=(await db.query("SELECT payload FROM app_records WHERE collection='users' AND record_key=$1",[uuid(1)])).rows[0].payload;
+ assert.ok(user.managedOps.includes(child.op));assert.equal(user.controlScopes[child.op],true);
+ await assert.rejects(db.query("INSERT INTO stock_locations(company_id,op,name) VALUES('A','BAD','Bypass')"),/permission/);
+ await receive(20,child.op);await receive(20,child.op);assert.equal((await stock(child.op)).qty,5);
+ await receive(21,child.op,' cable ',2);assert.equal((await stock(child.op)).qty,7);assert.equal(await stock(root.op),undefined,'child quantities are independent');
+ for(const q of [-1,0,'NaN','Infinity'])await assert.rejects(receive(22,child.op,'CABLE',q));
+ await assert.rejects(receive(20,child.op,'CABLE',6),/déjà utilisé/);
+ await assert.rejects(receive(22,child.op,'CABLE',1,'AUTRE'),/autre type/);
+ assert.equal((await stock(child.op)).qty,7);
+ assert.equal((await db.query('SELECT bureau02_owns_stock(current_app_profile(),$1) owned',[child.op])).rows[0].owned,false);
+ assert.equal((await db.query("SELECT bureau02_owns_stock(current_app_profile(),'ITC-B02') owned")).rows[0].owned,true);
+ await as(2);await assert.rejects(create(30,'Vol',root.op),/affectation/);await assert.rejects(receive(30,child.op),/affectation/);
+ await as(3);await assert.rejects(create(30,'Vol',root.op),/affectation/);await assert.rejects(receive(30,child.op),/affectation/);
+ assert.equal((await db.query('SELECT count(*)::int n FROM stock_locations WHERE company_id=\'A\'')).rows[0].n,0,'tenant isolation');
+ await create(30,'Réserve');
+ await as(1);
+ // Failure writing history rolls back the inventory as well.
+ await db.exec('RESET ROLE');await db.exec("CREATE FUNCTION reject_location_movement() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.collection='stockMovements' THEN RAISE EXCEPTION 'test history failure'; END IF; RETURN NEW; END $$;CREATE TRIGGER reject_location_movement BEFORE INSERT ON app_records FOR EACH ROW EXECUTE FUNCTION reject_location_movement();");
+ await as(1);await assert.rejects(receive(25,child.op),/test history failure/);assert.equal((await stock(child.op)).qty,7);
+ await db.exec('RESET ROLE;DROP TRIGGER reject_location_movement ON app_records;');
+ await db.query('UPDATE app_profiles SET is_active=false WHERE user_id=$1',[uuid(1)]);await as(1);
+ await assert.rejects(create(40,'Inactif'),/gestionnaire/);await assert.rejects(receive(40,child.op),/gestionnaire/);
+ await db.close();
+ console.log('PASS: persistent stock hierarchy, automatic assignment, receipts, replay safety, rollback, roles, ownership and tenant isolation.');
+})().catch(e=>{console.error(e);process.exitCode=1});
