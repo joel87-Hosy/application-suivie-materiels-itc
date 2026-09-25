@@ -10,6 +10,7 @@ let chrome,ws;const pause=ms=>new Promise(r=>setTimeout(r,ms));
  let sequence=0;const pending=new Map();ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id){pending.get(m.id)?.(m);pending.delete(m.id)}};
  const evaluate=async expression=>{const id=++sequence;const result=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Browser timeout')),20000);pending.set(id,m=>{clearTimeout(timer);resolve(m)});ws.send(JSON.stringify({id,method:'Runtime.evaluate',params:{expression,awaitPromise:true,returnByValue:true}}))});if(result.result?.exceptionDetails)throw Error(result.result.exceptionDetails.exception?.description||'Browser exception');return result.result?.result?.value;};
  for(const file of ['assets/bon-reference.js','assets/bon-scanner.js','.tools/report-libs/qrcode.js','.tools/report-libs/jspdf.js','.tools/report-libs/autotable.js','.tools/report-libs/jsqr.js'])await evaluate(fs.readFileSync(file,'utf8'));
+ await evaluate(fs.readFileSync('assets/validator-workflow.js','utf8')+'\nwindow.TestValidatorWorkflow=window.ValidatorWorkflow;');
  const source=fs.readFileSync('index.html','utf8');
  for(const name of ['getPdfSafeDateParts','drawSortieBonBesoinPdf']){const start=source.indexOf('      '+(name==='drawSortieBonBesoinPdf'?'async ':'')+'function '+name+'(');await evaluate(source.slice(start,source.indexOf('\n      }',start)+8));}
  const result=await evaluate(`(async()=>{
@@ -35,7 +36,15 @@ let chrome,ws;const pause=ms=>new Promise(r=>setTimeout(r,ms));
  const before=calls.length;await BonScanner.scan('ITC-BON:1:B:BS-TEST-1',container);check(calls.length===before,'foreign company rejected before query');
  set('VALIDE');await BonScanner.scan(decoded.data,container);const button=container.querySelector('[data-issue]');set('DEJA_LIVRE');button.click();await new Promise(r=>setTimeout(r,30));check(issued===0,'late delivery detected by fresh check');
  release='wait';const late=BonScanner.scan(decoded.data,container);await Promise.resolve();await BonScanner.stop();container.innerHTML='SIGNED OUT';release({data:response});await late;check(container.innerHTML==='SIGNED OUT','late result cannot reopen scanner');
- return {message:'PASS: real QR encode/decode and PDF generation; valid/expired/delivered/pending/offline UI; ownership, recheck and session cancellation.',pdf:doc.output('datauristring').split(',')[1]};
+ // Exercise the actual validator renewal form with an isolated backend.
+ window.ValidatorWorkflow=window.TestValidatorWorkflow;
+ const validator={uid:'legacy-validator-id',role:'Validateur',company_id:'A',validatorWorkflowEnabled:true,controlScopes:{OCI:true}},renewalCalls=[];
+ let pendingBon={...bon,validatorDecision:{uid:'auth-validator-id',name:'Validateur',at:'2026-09-24T10:10:00Z',approved:true},bonRenewalRequestedAt:'2026-09-26T10:00:00Z',assignedGestionnaireName:'Magasinier'};
+ ValidatorWorkflow.setup({profile:()=>validator,uid:()=> 'auth-validator-id',data:()=>({demandes:[pendingBon]}),refresh:async()=>{},client:()=>({rpc:async(name,args)=>{if(name==='workflow_managers')return {data:[]};renewalCalls.push({name,args});pendingBon={...pendingBon,bonRenewalRequestedAt:null,bonValidUntil:'2026-09-27T10:00:00Z'};return {data:pendingBon}}})});
+ await ValidatorWorkflow.enter(container);const form=container.querySelector('[data-renewal]');check(form,'attached validator sees renewal queue');
+ form.elements.reason.value='Identité du technicien confirmée';await form.onsubmit({preventDefault(){},stopPropagation(){},submitter:{value:'approve'}});
+ check(renewalCalls[0]?.name==='confirm_bon_renewal'&&renewalCalls[0].args.approve===true,'renewal action sent to protected RPC');check(renewalCalls[0].args.expected_valid_until===bon.bonValidUntil,'renewal uses loaded expiry for concurrency check');check(!container.querySelector('[data-renewal]'),'confirmed request leaves queue');
+ return {message:'PASS: real QR/PDF; scanner statuses, offline and late responses; attached-validator renewal form and confirmation.',pdf:doc.output('datauristring').split(',')[1]};
 })()`);
  fs.writeFileSync('.tools/bon-validity-sample.pdf',Buffer.from(result.pdf,'base64'));console.log(result.message);
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{ws?.close();chrome?.kill()});

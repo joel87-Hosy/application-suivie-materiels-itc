@@ -11,12 +11,13 @@ function extract(name) {
 const demande = {id:'BS-1234',_dbKey:'d1',company_id:'A',workflow:'TECH_BON_SORTIE',status:'LIVREE',demandeurOriginalId:1,demandeurName:'Equipe',motif:'Chantier Abobo',sortieId:'SORTIE-12345'};
 const sortie = {id:'SORTIE-12345',_dbKey:'s1',company_id:'A',sourceDemandeId:demande.id,date:'17/09/2026',ref:demande.motif,items:[{label:'Cable',qty:2}],managerSignatureText:'Signature originale'};
 const calls = [], alerts = [];
-const ctx = vm.createContext({BonReference,console,appData:{demandes:[demande],sorties:[sortie]},currentUser:{id:1},secureStore:{uid:'manager',profile:{role:'Gestionnaire',company_id:'A'}},
+const ctx = vm.createContext({BonReference,ControlCore:require('../assets/control-core'),console,appData:{demandes:[demande],sorties:[sortie]},currentUser:{id:1,company_id:'A'},secureStore:{uid:'manager',profile:{role:'Gestionnaire',company_id:'A',controlScopes:{'ITC-B01':true}}},
+  getDemandeOps:()=>['ITC-B01'],getAllowedOpsForFluxUser:()=>new Set(['ITC-B01']),
   canCurrentUserManageSortie:()=>true,escapeHtml:s=>String(s ?? ''),alert:s=>alerts.push(s),showSection:()=>{},currentSectionId:'bons-signes',
   supabaseBackend:{rpc:async(name,args)=>{calls.push({name,args});return {error:null};}},refreshAppDataFromServer:async()=>{},
   window:{ValidatorWorkflow:{trace:()=>''},BonScanner:{pdf:async(doc,record,data,y)=>y+34}},
   isBonSignedByCurrentUser:()=>true,getBonSignatureRoleForCurrentUser:()=>'Gestionnaire',getSortieTimestamp:()=>0,formatDemandeOps:()=>'ITC-B01',getSortieItems:s=>s.items||[],addLogoToPdf:async()=>{},getDemandItemOperator:()=> 'ITC-B01',getOperatorMeta:()=>({label:'ITC-B01'})});
-for(const name of ['getBonReference','bonServiceField','canAssignBonService','bonServiceEditor','saveBonService','renderSignedBonsHistory','renderTechMesDemandes','getPdfSafeDateParts','formatAutomaticSignature','getSortieSignatureText','getSortieTechnicianSignatureText','getBonEquipeName','getSortieCoordinationSignatureText','drawValidatedStamp','drawSortieBonBesoinPdf']) vm.runInContext(extract(name),ctx);
+for(const name of ['getBonReference','bonServiceField','canAssignBonService','bonServiceEditor','saveBonService','getBonSignatureChain','canViewSignedBon','getSignedBonsHistory','renderSignedBonsHistory','renderTechMesDemandes','getPdfSafeDateParts','formatAutomaticSignature','getSortieSignatureText','getSortieTechnicianSignatureText','getBonEquipeName','getSortieCoordinationSignatureText','drawValidatedStamp','drawSortieBonBesoinPdf']) vm.runInContext(extract(name),ctx);
 async function main(){
   const select={value:'DEP'};
   await ctx.saveBonService('sorties','s1',select);
@@ -31,7 +32,8 @@ async function main(){
   for(const render of ['renderSignedBonsHistory','renderTechMesDemandes']) {
     const container={};ctx[render](container);
     assert.ok(container.innerHTML.includes(ctx.getBonReference(sortie)),render);
-    assert.ok(container.innerHTML.includes("downloadPDF('BS-1234')"),'Existing download target');
+    const target=render==='renderSignedBonsHistory'?"exportSortiePDF('SORTIE-12345')":"downloadPDF('BS-1234')";
+    assert.ok(container.innerHTML.includes(target),'Existing download target');
   }
   ctx.secureStore.profile.company_id='B';
   await ctx.saveBonService('sorties','s1',{value:'MAIN'});
