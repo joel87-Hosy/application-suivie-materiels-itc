@@ -36,11 +36,13 @@
       const managers=await rpc('workflow_managers',{});
       if(!container.isConnected||token!==generation)return;
       const requests=(env.data().demandes||[]).filter(r=>r.status==='EN ATTENTE VALIDATEUR' && covers(r));
+      const renewals=(env.data().demandes||[]).filter(r=>r.status==='EN ATTENTE GESTIONNAIRE' && r.bonRenewalRequestedAt && covers(r) && r.validatorDecision?.uid===(env.uid?.()||env.profile()?.uid));
       const history=(env.data().demandes||[]).filter(r=>r.validatorDecision && covers(r)).sort((a,b)=>b.validatorDecision.at.localeCompare(a.validatorDecision.at));
       container.innerHTML=`<div class="space-y-5 p-4"><header class="bg-indigo-800 text-white p-6 rounded-2xl"><h2 class="text-xl font-bold">Validation des bons</h2><p>${requests.length} bon(s) à traiter. Une validation transmet le bon au gestionnaire dédié ; le stock sera débité à la remise physique.</p><button type="button" id="validation-refresh" class="border rounded-lg p-2 mt-3">Actualiser les bons</button></header>
         <p class="font-bold">Bureau de validation : ${esc(env.profile()?.validationBureau || 'Non affecté')} · Stocks : ${esc(Object.keys(env.profile()?.controlScopes || {}).filter(key=>env.profile().controlScopes[key]===true).join(', ') || 'Aucun')}</p>
         ${enabled()?'':'<p>Le nouveau circuit est en cours de préparation.</p>'}
         <p role="status" id="validation-message"></p>
+        ${renewals.length?`<section class="bg-amber-50 border border-amber-300 rounded-2xl p-5"><h3 class="font-bold">Bons expirés à confirmer (${renewals.length})</h3><p>Une confirmation autorise la récupération pendant 24 heures supplémentaires. La date de création et les articles restent conservés.</p>${renewals.map((r,index)=>`<form data-renewal="${index}" class="bg-white rounded-xl p-4 my-3 space-y-3"><b>${esc(r.ref||r.id)} · ${esc(r.demandeurName||r.tech)}</b><p>Créé le ${esc(global.BonScanner.date(r.bonCreatedAt))} · Expiré le ${esc(global.BonScanner.date(r.bonValidUntil))}</p><p>Gestionnaire : ${esc(r.assignedGestionnaireName)}</p><ul>${(r.items||[]).map(i=>`<li>${esc(i.label)} : ${esc(i.qty)} · ${esc(i.op||r.op)}</li>`).join('')}</ul><label class="block">Observation obligatoire<textarea name="reason" maxlength="1000" required class="border p-3 w-full"></textarea></label><button type="submit" value="approve" class="bg-green-700 text-white p-3 rounded-xl">Confirmer pour 24 heures</button><button type="submit" value="reject" class="bg-red-700 text-white p-3 rounded-xl">Refuser la remise</button></form>`).join('')}</section>`:''}
         ${requests.map((r,index)=>{
           const ops=[...new Set((r.items||[]).map(i=>op(i.op||r.op)))];
           const eligible=managers.filter(m=>ops.every(o=>m.scopes?.[o]===true));
@@ -56,6 +58,15 @@
         }).join('') || '<p>Aucun bon en attente de validation.</p>'}
         <section class="bg-white border p-5 rounded-2xl"><h3 class="font-bold">Décisions et suivi</h3>${history.map(r=>`<div class="border-b py-3"><b>${esc(r.ref||r.id)}</b> — ${esc(r.status)}<p>${esc(trace(r))}</p>${corrections(r)}${r.validatedAt?`<p>Sortie physique : ${esc(r.validatedBy)} · ${esc(new Date(r.validatedAt).toLocaleString('fr-FR'))}</p>`:''}</div>`).join('')||'<p>Aucune décision.</p>'}</section></div>`;
       container.querySelector('#validation-refresh').onclick=()=>{if(!busy)enter(container);};
+      container.querySelectorAll('[data-renewal]').forEach(form=>{form.onsubmit=async event=>{
+        event.preventDefault();event.stopPropagation();if(busy)return;
+        const request=renewals[Number(form.dataset.renewal)],reason=form.elements.reason.value.trim();
+        if(!reason)return global.alert('Indiquez une observation.');
+        busy=true;container.querySelectorAll('button').forEach(b=>b.disabled=true);
+        try{await rpc('confirm_bon_renewal',{request_key:request._dbKey,expected_valid_until:request.bonValidUntil??null,approve:event.submitter?.value==='approve',reason});await enter(container);}
+        catch(error){container.querySelector('#validation-message').textContent=error.message;}
+        finally{busy=false;container.querySelectorAll('button').forEach(b=>b.disabled=false);}
+      };});
       container.onsubmit=async event=>{
         const form=event.target.closest('[data-index]'); if(!form)return;event.preventDefault();if(busy)return;
         const approve=event.submitter?.value==='approve',values=new FormData(form),request=requests[Number(form.dataset.index)];

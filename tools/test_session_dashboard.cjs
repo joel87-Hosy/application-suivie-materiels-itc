@@ -6,7 +6,7 @@ const auth=source.slice(source.indexOf('      let authStateGeneration = 0;'),sou
  const elements=Object.fromEntries(['app-container','main-app','login-screen'].map(id=>[id,{innerHTML:'old dashboard',textContent:'',classList:{add(){},remove(){}}}]));
  let profile,authUser,fail=false,logouts=0;const renders=[];
  const context={console:{warn(){},error(){}},window:{ValidatorWorkflow:{isValidator:()=>false}},ControlCore:require('../assets/control-core'),
-  currentUser:null,currentSectionId:'cockpit',appData:{},useSupabaseBackend:true,
+  currentUser:null,currentSectionId:'cockpit',appData:{},useSupabaseBackend:true,logoutRequested:false,
   document:{getElementById:id=>elements[id]},normalizeAppData:data=>data,refreshDesignationsDatalists(){},updateMenuVisibility(){},updateUserInfo(){},updateNotifications(){},clearPrivateLocalData(){},emptyAppData:()=>({}),logout:()=>{logouts++;},
   getActiveAuthUser:async()=>authUser,escapeHtml:value=>String(value),getOperatorMeta:op=>({label:op,icon:'',border:'',badge:''}),
   renderCockpitCharts:(totals,alerts)=>renders.push({role:context.currentUser.role,ops:Array.from(totals,t=>t.op)}),

@@ -1660,6 +1660,7 @@
     <script src="assets/supabase-store.js?v=20260923-receipts"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
+    <script src="assets/bon-scanner.js"></script>
     <script src="assets/validator-workflow.js?v=20260923-corrections"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js?v=20260923-tabs"></script>
@@ -2034,8 +2035,13 @@
       // Force une lecture fraîche côté serveur pour s'assurer d'afficher
       // l'état le plus récent après un changement d'utilisateur/connexion.
       function refreshAppDataFromServer({ render = true } = {}) {
-        return getActiveAuthUser().then(user => secureStore.connect(user))
+        const generation = authStateGeneration;
+        return getActiveAuthUser().then(user => {
+          if (generation !== authStateGeneration || logoutRequested) throw new Error('Session fermée.');
+          return secureStore.connect(user);
+        })
           .then(() => {
+            if (generation !== authStateGeneration || logoutRequested) throw new Error('Session fermée.');
             const data = secureStore.value();
             if (!data) return;
             appData = normalizeAppData(data);
@@ -2458,16 +2464,25 @@
       }
 
       async function signOutActiveAuth() {
-        await window.disablePushNotifications?.();
-        if (useSupabaseBackend) {
-          const result = await supabaseBackend.auth.signOut();
-          if (result.error) throw result.error;
-          await firebase.auth().signOut();
-          return;
-        }
-        await firebase.auth().signOut();
+        // Notification cleanup must never prevent authentication from closing.
+        Promise.resolve().then(() => window.disablePushNotifications?.())
+          .catch(error => console.warn('Nettoyage des notifications différé', error));
+        const results = await Promise.allSettled([
+          Promise.resolve().then(async () => {
+            if (!useSupabaseBackend) return;
+            try {
+              const result = await supabaseBackend.auth.signOut({scope:'local'});
+              if (result.error) throw result.error;
+            } finally { window.ITCSupabaseConfig?.clearLocalSession?.(); }
+          }),
+          Promise.resolve().then(() => firebase.auth().signOut()),
+        ]);
+        for (const result of results) if (result.status === 'rejected') console.warn('Déconnexion distante indisponible', result.reason);
       }
 
+      let logoutPromise = null;
+      let logoutRequested = false;
+      try { logoutRequested = sessionStorage.getItem('itc_signed_out') === '1'; } catch (_) {}
       let manualLoginInProgress = false;
       async function handleLogin(e) {
         e.preventDefault();
@@ -2484,6 +2499,11 @@
         const password = document.getElementById("login-password").value;
 
         try {
+          // A previous sign-out must finish before a new session is created.
+          if (logoutPromise) await logoutPromise;
+          ++authStateGeneration;
+          logoutRequested = false;
+          try { sessionStorage.removeItem('itc_signed_out'); } catch (_) {}
           let authUser;
           if (useSupabaseBackend) {
             const result = await supabaseBackend.auth.signInWithPassword({email, password});
@@ -2553,32 +2573,27 @@
       }
 
       function logout() {
-        stopVoiceAssistant();
-        window.CableOffcuts?.stop();
-        window.StockControl?.reset();
-        secureStore.stop();
+        if (logoutPromise) return logoutPromise;
+        logoutRequested = true;
+        ++authStateGeneration;
+        try { sessionStorage.setItem('itc_signed_out', '1'); } catch (_) {}
+        // Hide private content synchronously, before any network operation.
+        document.getElementById("main-app").classList.add("hidden");
+        document.getElementById("login-screen").classList.remove("hidden");
+        document.getElementById("app-container").innerHTML = "";
+        const password = document.getElementById('login-password');
+        if (password) password.value = '';
+        for (const cleanup of [() => stopVoiceAssistant(), () => window.CableOffcuts?.stop(),
+          () => window.StockControl?.reset(), () => window.ManagerLocations?.stop(),
+          () => window.ManagerStock?.stop(), () => window.ValidatorWorkflow?.stop(), () => window.BonScanner?.stop(), () => secureStore.stop()]) {
+          try { cleanup(); } catch (error) { console.warn('Nettoyage de session', error); }
+        }
         appData = emptyAppData();
         currentUser = null;
         clearPrivateLocalData();
-        document.getElementById("app-container").innerHTML = "";
-        // 1. Déconnexion du fournisseur d'authentification actif
-        signOutActiveAuth().then(() => {
-            // 2. Nettoyage des données locales
-            appData.currentUserId = null;
-            currentUser = null;
-
-            // 3. Optionnel : Nettoyer le localStorage si tu l'utilises pour le backup
-            localStorage.removeItem("itc_erp_local_backup");
-
-            // 4. Redirection forcée vers le login (sans recharger forcément toute la page)
-            document.getElementById("main-app").classList.add("hidden");
-            document.getElementById("login-screen").classList.remove("hidden");
-
-            console.log("Déconnexion réussie.");
-          })
-          .catch((error) => {
-            console.error("Erreur lors de la déconnexion :", error);
-          });
+        logoutPromise = signOutActiveAuth().catch(error => console.warn('Déconnexion', error))
+          .finally(() => { logoutPromise = null; });
+        return logoutPromise;
       }
       function clearPrivateLocalData() {
         try {
@@ -2628,13 +2643,14 @@
         const r = currentUser.role.trim().toUpperCase();
         const isSuperAdmin = r === "SUPER_ADMIN";
         window.ManagerStock.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
+        window.BonScanner.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend});
         window.ManagerLocations.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,navigate:showSection,
           refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());},
           reloadProfile:async()=>{const generation=secureStore.generation;await secureStore.load(generation);if(generation!==secureStore.generation)throw new Error('Session remplacée.');currentUser={...currentUser,...secureStore.profile};appData=normalizeAppData(secureStore.value());updateMenuVisibility();updateUserInfo();}});
         window.StockSubstocks.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
           onClose:()=>{if(currentSectionId==='cockpit')renderCockpit(document.getElementById('app-container'));},
           refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());}});
-        window.ValidatorWorkflow.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
+        window.ValidatorWorkflow.setup({profile:()=>secureStore.profile,uid:()=>secureStore.uid,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
         window.ValidatorWorkflow.menu();
         window.CableOffcuts.setup({profile: () => secureStore.profile});
         let chuteMenu = document.getElementById("menu-cable-offcuts");
@@ -6135,21 +6151,12 @@
       }
 
       function getPdfSafeDateParts(dateValue) {
-        const raw = String(dateValue || "").trim();
-        const match = raw.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
-        if (!match) {
-          const now = new Date();
-          return {
-            day: String(now.getDate()).padStart(2, "0"),
-            month: String(now.getMonth() + 1).padStart(2, "0"),
-            year: String(now.getFullYear()),
-          };
-        }
-        return {
-          day: match[1].padStart(2, "0"),
-          month: match[2].padStart(2, "0"),
-          year: match[3],
-        };
+        const raw = String(dateValue || "").trim()
+          .replace(/^(\d{1,2})[.-](\d{1,2})[.-](\d{4})(?=$|\D)/, '$1/$2/$3');
+        // Parse the saved calendar date, without timezone conversion or today's date.
+        const code = BonReference.dateCode(raw);
+        return code ? {day:code.slice(6,8),month:code.slice(4,6),year:code.slice(0,4)}
+          : {day:'--',month:'--',year:'----'};
       }
 
       function formatAutomaticSignature(name, dateValue) {
@@ -6225,7 +6232,11 @@
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
         const items = getSortieItems(sortie);
-        const dateParts = getPdfSafeDateParts(sortie.date);
+        const savedBon = BonReference.resolve(sortie, appData);
+        const dateParts = [savedBon.dateBon, savedBon.bonCreatedAt, savedBon.date, savedBon.createdAt, savedBon.enteredAt]
+          .map(getPdfSafeDateParts).find(parts => parts.year !== '----') || getPdfSafeDateParts(null);
+        const creationDate = dateParts.year === '----' ? 'Non renseignee'
+          : `${dateParts.day}/${dateParts.month}/${dateParts.year}`;
         const totalQty = items.reduce(
           (sum, item) => sum + (parseInt(item.qty, 10) || 0),
           0,
@@ -6267,7 +6278,7 @@
             [
               "",
               { content: "SERVICE LOGISTIQUE", styles: { fontSize: 10 } },
-              "Cree le 26 janv. 2026\nRevise le ........",
+              `Cree le ${creationDate}\nRevise le ........`,
             ],
             [
               "",
@@ -6286,6 +6297,7 @@
         const referenceLines = doc.splitTextToSize(`Code : ${getBonReference(sortie)}`, pageWidth - margin * 2);
         doc.text(referenceLines, margin, y);
         y += referenceLines.length * 4 + 4;
+        y = await window.BonScanner.pdf(doc, sortie, appData, y);
         doc.setFontSize(8);
         doc.text(
           "Pour etre dans les delais, toutes les demandes doivent etre formulees deux (02) semaines avant la date de livraison",
@@ -6700,6 +6712,7 @@
         if (window.ValidatorWorkflow?.isBusy()) return;
         if (window.StockControl?.isBusy() || window.CableOffcuts?.isBusy()) return;
         window.ValidatorWorkflow?.stop();
+        window.BonScanner?.stop();
         if (secureStore.profile?.role === "Contrôleur" && !id.startsWith("control-") && id !== "mon-profil" && id !== "stocks-chutes") id = "control-dashboard";
         window.StockControl?.stop();
         window.CableOffcuts?.stop();
@@ -6920,138 +6933,7 @@
               </div>`;
       }
       function renderScanner(container) {
-        // Vérification de la date à l'ouverture du scanner
-        verifierReinitialisationQuotidienne();
-
-        // Sécurité : On s'assure que appData existe
-        if (!appData) return;
-
-        // On récupère la liste des demandes de manière sécurisée
-        const demandes = appData.demandes || [];
-
-        container.innerHTML = `
-              <div class="max-w-md mx-auto space-y-4">
-                  <div class="bg-white p-6 rounded-3xl shadow-xl text-center">
-                      <h3 class="mb-4 uppercase text-pink-600 font-black italic">Scanner de Bons ITC</h3>
-                      <div id="reader" class="rounded-2xl overflow-hidden border-4 border-slate-100 bg-black"></div>
-                      ${
-                        demandes.length === 0
-                          ? '<p class="mt-3 text-[8px] text-amber-600 uppercase font-black">Aucune demande en attente pour le moment, mais le scanner reste disponible.</p>'
-                          : ""
-                      }
-                      <div class="flex justify-center gap-4 mt-4">
-                          <button id="torch-button" class="bg-yellow-400 text-slate-900 px-4 py-2 rounded-xl text-[8px] font-black uppercase">
-                              <i class="fas fa-lightbulb"></i> Lampe
-                          </button>
-                      </div>
-                      <div id="scanner-result" class="mt-4 p-4 hidden bg-green-50 rounded-xl border border-green-200">
-                          <p class="text-[9px] text-green-700 font-black italic uppercase" id="scan-id-text"></p>
-                      </div>
-                  </div>
-
-                  <div class="bg-slate-900 text-white p-6 rounded-3xl shadow-xl">
-                      <div class="flex justify-between items-center border-b border-slate-700 pb-2 mb-4">
-                          <h4 class="text-[9px] font-black uppercase italic text-slate-400">Scans du jour</h4>
-                          <span class="text-[8px] bg-slate-700 px-2 py-0.5 rounded">${new Date().toLocaleDateString()}</span>
-                      </div>
-                      <div class="space-y-3 max-h-40 overflow-y-auto custom-scrollbar">
-                          ${
-                            // J'ai aussi ajouté la sécurité (|| []) ici pour éviter une autre erreur potentielle
-                            (appData.scansDuJour || []).length === 0
-                              ? '<p class="text-center py-4 text-slate-600 text-[8px] uppercase">Aucun scan aujourd\'hui</p>'
-                              : (appData.scansDuJour || [])
-                                  .map(
-                                    (s) => `
-                                  <div class="flex justify-between items-center bg-slate-800 p-3 rounded-xl border-l-2 border-pink-500">
-                                      <div>
-                                          <p class="text-pink-400 text-[9px] font-black">${s.id}</p>
-                                          <p class="text-[7px] text-slate-400 uppercase">${s.technicien}</p>
-                                      </div>
-                                      <span class="text-[8px] font-black text-slate-500">${s.heure}</span>
-                                  </div>
-                              `,
-                                  )
-                                  .join("")
-                          }
-                      </div>
-                  </div>
-
-                  <button onclick="showSection('cockpit')" class="w-full text-slate-400 text-[8px] uppercase font-black text-center py-2 transition hover:text-slate-600">Retour au tableau de bord</button>
-              </div>`;
-
-        if (typeof Html5Qrcode === "undefined") {
-          container.innerHTML = `
-            <div class="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-8 text-center">
-              <h3 class="text-red-600 font-black uppercase mb-3">Scanner indisponible</h3>
-              <p class="text-[10px] text-slate-600 uppercase">La librairie caméra n'a pas été chargée. Vérifiez la connexion internet puis rechargez la page.</p>
-            </div>`;
-          return;
-        }
-
-        // --- Initialisation de la caméra (ne s'exécute que si le 'return' plus haut n'a pas été déclenché) ---
-        const html5QrCode = new Html5Qrcode("reader");
-        let isTorchOn = false;
-        const qrCodeSuccessCallback = (decodedText) => {
-          html5QrCode
-            .stop()
-            .then(() => {
-              handleScanSuccess(decodedText);
-            })
-            .catch((err) => console.error(err));
-        };
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-        html5QrCode
-          .start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
-          .then(() => {
-            const torchBtn = document.getElementById("torch-button");
-            if (!torchBtn) return;
-
-            let torchSupported = false;
-            try {
-              const capabilities = html5QrCode.getRunningTrackCapabilities
-                ? html5QrCode.getRunningTrackCapabilities()
-                : null;
-              torchSupported = !!(capabilities && capabilities.torch);
-            } catch (e) {
-              torchSupported = false;
-            }
-
-            if (!torchSupported) {
-              torchBtn.disabled = true;
-              torchBtn.classList.add("opacity-40", "cursor-not-allowed");
-              torchBtn.innerHTML =
-                '<i class="fas fa-lightbulb"></i> Lampe indisponible';
-              return;
-            }
-
-            torchBtn.addEventListener("click", async () => {
-              const nextState = !isTorchOn;
-              try {
-                // Certains navigateurs acceptent `torch` directement,
-                // d'autres préfèrent le format advanced.
-                await html5QrCode.applyVideoConstraints({
-                  torch: nextState,
-                  advanced: [{ torch: nextState }],
-                });
-                isTorchOn = nextState;
-                torchBtn.innerHTML = isTorchOn
-                  ? '<i class="fas fa-lightbulb"></i> Éteindre'
-                  : '<i class="fas fa-lightbulb"></i> Allumer';
-                showTempToast(
-                  isTorchOn ? "Lampe activée" : "Lampe désactivée",
-                  1200,
-                );
-              } catch (e) {
-                console.warn("Impossible d'activer la lampe", e);
-                showTempToast("Lampe non supportée sur cet appareil", 1800);
-              }
-            });
-          })
-          .catch((err) => {
-            // Gestion d'erreur si la caméra ne démarre pas
-            console.error("Erreur caméra:", err);
-            container.innerHTML = `<p class="text-red-500 text-center p-10 font-black">Impossible d'accéder à la caméra.</p>`;
-          });
+        return window.BonScanner.enter(container);
       }
 
       // 1. Variable globale pour le graphique (à placer au début de votre balise script)
@@ -7358,50 +7240,9 @@
       }
 
       async function handleScanSuccess(id) {
-        const beep = document.getElementById("beep-sound");
-        if (beep) beep.play();
-        if (navigator.userActivation?.hasBeenActive && navigator.vibrate) {
-          navigator.vibrate(100);
-        }
-
-        const d = appData.demandes.find((x) => x.id === id);
-        if (d) {
-          // 1. Vérifier la date avant d'ajouter
-          verifierReinitialisationQuotidienne();
-
-          // 2. Ajouter à l'historique du jour (si pas déjà présent pour éviter les doublons)
-          if (!appData.scansDuJour.some((s) => s.id === id)) {
-            appData.scansDuJour.unshift({
-              id: id,
-              heure: new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              technicien: d.demandeurName,
-            });
-            if (!(await save())) return;
-          }
-
-          const resultText = document.getElementById("scan-id-text");
-          const resultDiv = document.getElementById("scanner-result");
-          if (resultText && resultDiv) {
-            resultText.innerText = "BON DÉTECTÉ : " + id;
-            resultDiv.classList.remove("hidden");
-          }
-
-          setTimeout(() => {
-            if (d.status === "PRET" || d.status === "EN ATTENTE GESTIONNAIRE") {
-              prepSortie(id);
-            } else {
-              alert("STATUT : " + d.status);
-              showSection("scanner-physique");
-            }
-          }, 1000);
-        } else {
-          alert("QR CODE INCONNU.");
-          showSection("scanner-physique");
-        }
+        return window.BonScanner.scan(id);
       }
+
       function addRowEx() {
         const div = document.createElement("div");
         div.className =
@@ -8833,6 +8674,7 @@
                                       <span class="w-2 h-2 rounded-full bg-orange-500 inline-block mr-1"></span>
                                       STATUT : ${(bs.status || "").replace(/-/g, " ")}
                                   </p>
+                                  <p class="text-[8px] text-slate-600 mt-2">Validité : 24 heures après création. ${bs.bonValidUntil ? 'Échéance : '+escapeHtml(new Date(bs.bonValidUntil).toLocaleString('fr-FR')) : 'Échéance à vérifier au magasin.'} Après expiration, confirmation du validateur requise.</p>
 
                                   <p class="text-[7px] text-slate-400 mt-1 uppercase font-bold">
                                       <i class="fas fa-tools mr-1 opacity-50"></i>
@@ -11228,83 +11070,17 @@
       }
 
       async function downloadPDF(id) {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
         const d = appData.demandes.find((x) => x.id === id);
-        if (d?.workflow === "TECH_BON_SORTIE") {
+        if (!d) return alert("Bon introuvable.");
+        try {
+          const doc = new window.jspdf.jsPDF();
           await drawSortieBonBesoinPdf(doc, d);
           doc.save(`Bon_Sortie_${getBonReference(d)}.pdf`);
-          return;
+        } catch (error) {
+          alert("Generation du bon impossible : " + error.message);
         }
-
-        // Nettoyer et générer le QR Code en mémoire
-        const qrContainer = document.getElementById("qrcode-temp");
-        qrContainer.innerHTML = "";
-        new QRCode(qrContainer, { text: d.id, width: 100, height: 100 });
-
-        // Laisser 500ms au navigateur pour dessiner le QR Code
-        setTimeout(async () => {
-          try {
-            const qrCanvas = qrContainer.querySelector("canvas");
-            const qrImage = qrCanvas.toDataURL("image/jpeg");
-
-            // Design du PDF
-            await addLogoToPdf(doc, 15, 10, 40, 20);
-            doc.addImage(qrImage, "JPEG", 165, 10, 25, 25);
-
-            doc.setFontSize(16);
-            doc.text("BON DE SORTIE MATÉRIEL", 105, 22, { align: "center" });
-
-            doc.setFontSize(8);
-            doc.text(doc.splitTextToSize(`Code : ${getBonReference(d)}`, 180), 15, 43);
-
-            doc.autoTable({
-              startY: 85,
-              head: [["DÉSIGNATION", "DEMANDÉ", "REÇU"]],
-              body: d.items.map((i) => [
-                i.label,
-                i.qty,
-                d.status === "LIVREE" ? i.qty : "___",
-              ]),
-              theme: "grid",
-              headStyles: { fillColor: [102, 34, 119] },
-            });
-
-            const demandeSignature =
-              d.status === "LIVREE"
-                ? getSortieSignatureText(d, "GESTIONNAIRE")
-                : "Date et Signature";
-            doc.autoTable({
-              startY: (doc.lastAutoTable?.finalY || 105) + 12,
-              head: [["Technicien", "Logistique", "Coordination"]],
-              body: [
-                [
-                  d.status === "LIVREE"
-                    ? getSortieTechnicianSignatureText(d)
-                    : "Date et Signature",
-                  demandeSignature,
-                  d.status === "LIVREE"
-                    ? getSortieCoordinationSignatureText(d)
-                    : "Date et Signature",
-                ],
-              ],
-              theme: "grid",
-              styles: {
-                fontSize: 8,
-                cellPadding: 3,
-                halign: "center",
-                minCellHeight: 30,
-              },
-              headStyles: { fillColor: [102, 34, 119] },
-              didDrawCell: d.status === "LIVREE" ? drawValidatedStamp : undefined,
-            });
-
-            doc.save(`Bon_Sortie_${getBonReference(d)}.pdf`);
-          } catch (e) {
-            alert("Erreur PDF : vérifiez que le logo est accessible.");
-          }
-        }, 500);
       }
+
       let markingNotifications = false;
       async function markNotificationsAsRead(section) {
         if (!currentUser || !Array.isArray(appData?.notifications)) return;
@@ -11454,6 +11230,7 @@
       let authStateGeneration = 0;
       const handleActiveAuthState = async (user) => {
         const generation = ++authStateGeneration;
+        if (user && logoutRequested) return;
         if (user) {
           currentUser = null;
           document.getElementById("main-app").classList.add("hidden");
@@ -11505,7 +11282,9 @@
       if (useSupabaseBackend) {
         supabaseBackend.auth.onAuthStateChange((event, session) => {
           // Leave the auth callback before calling getUser; avoid simultaneous store connections.
+          const generation = authStateGeneration;
           setTimeout(() => {
+            if (generation !== authStateGeneration || (session?.user && logoutRequested)) return;
             if (!manualLoginInProgress && (event === 'SIGNED_OUT' || session?.user?.id !== secureStore.uid))
               handleActiveAuthState(session?.user || null);
           }, 0);

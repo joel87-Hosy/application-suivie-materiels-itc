@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm');
 const calls=[];let session={access_token:'test-session'},response={ok:true,status:200,json:async()=>({stores:{MOOV:{}}})};let clients=0;
 const context={window:{localStorage:{getItem(){throw Error('Storage unavailable');}},supabase:{createClient:(url,key)=>{clients++;assert.ok(key.startsWith('sb_publishable_'));return {auth:{getSession:async()=>({data:{session},error:null})}};}}},fetch:async(...args)=>{calls.push(args);return response;}};
+context.URL=URL;
 vm.createContext(context);
 for(const file of ['supabase-public-config.js','supabase-config.js','cable-offcuts-transport.js'])vm.runInContext(fs.readFileSync('assets/'+file,'utf8'),context);
 (async()=>{

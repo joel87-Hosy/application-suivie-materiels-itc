@@ -1,0 +1,67 @@
+const fs=require('fs'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite');
+const uuid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
+(async()=>{
+ const db=new PGlite();
+ await db.exec(`CREATE ROLE authenticated;CREATE ROLE anon;CREATE ROLE service_role;CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid PRIMARY KEY);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('test.uid',true),'')::uuid $$;GRANT USAGE ON SCHEMA auth TO authenticated;`);
+ const migration=n=>fs.readFileSync('supabase/migrations/'+n,'utf8');
+ await db.exec(migration('202609180002_app_backend.sql').split('DO $$')[0]);
+ await db.exec('GRANT SELECT,INSERT,UPDATE,DELETE ON app_records,app_settings TO authenticated;GRANT SELECT ON app_profiles TO authenticated;');
+ for(const file of ['202609180005_validator_workflow.sql','202609190001_validator_bureaus.sql','202609190004_unconditional_workflow.sql','202609240004_bureau02_substocks.sql','202609240005_explicit_substock_issues.sql'])await db.exec(migration(file));
+ for(const [id,role,company,scopes] of [[1,'Technicien','A',{}],[2,'Validateur','A',{'ITC-B01':true}],[3,'Gestionnaire','A',{'ITC-B01':true}],[4,'Validatrice','A',{'ITC-B01':true}],[5,'Gestionnaire','B',{'ITC-B01':true}],[6,'Gestionnaire','A',{'ITC-B02':true}],[7,'Validateur','A',{'ITC-B02':true}]]){
+  await db.query('INSERT INTO auth.users VALUES($1)',[uuid(id)]);
+  await db.query('INSERT INTO app_profiles(user_id,company_id,role,control_scopes,profile) VALUES($1,$2,$3,$4,$5)',[uuid(id),company,role,scopes,{id,name:'Person '+id}]);
+ }
+ const insert=(collection,key,payload)=>db.query('INSERT INTO app_records(collection,record_key,company_id,payload) VALUES($1,$2,\'A\',$3)',[collection,key,payload]);
+ const as=async id=>{await db.exec('RESET ROLE');await db.query("SELECT set_config('test.uid',$1,false)",[uuid(id)]);await db.exec('SET ROLE authenticated');};
+ const read=async key=>(await db.query("SELECT payload FROM app_records WHERE collection='demandes' AND record_key=$1",[key])).rows[0].payload;
+ const scan=async id=>(await db.query('SELECT inspect_stock_bon($1) result',[id])).rows[0].result;
+ const expire=async key=>{await db.exec('RESET ROLE');await db.query("UPDATE app_records SET payload=payload||jsonb_build_object('bonValidUntil',clock_timestamp()-interval '1 second') WHERE collection='demandes' AND record_key=$1",[key]);};
+ const base={company_id:'A',op:'ITC-B01',items:[{label:'CABLE',qty:5}],status:'EN ATTENTE GESTIONNAIRE',demandeurName:'Technicien',date:'2026-09-24T16:28:02Z',serviceAbbreviation:'B2B'};
+ await insert('demandes','legacy',{...base,id:'LEGACY'});
+ await insert('demandes','unknown',{...base,id:'UNKNOWN',date:'bad'});
+ await db.exec(migration('202609250002_bon_validity_scanner.sql'));await db.exec(migration('202609250002_bon_validity_scanner.sql'));
+ assert.equal((await read('legacy')).bonCreatedAt,'2026-09-24T16:28:02+00:00');assert.equal((await read('unknown')).bonValidUntil,null);
+ await insert('stock','stock1',{company_id:'A',op:'ITC-B01',label:'CABLE',qty:100});
+ await insert('stock','stock2',{company_id:'A',op:'ITC-B02',label:'CABLE',qty:100,subStocks:{production:100}});
+ await as(1);await insert('demandes','r1',{...base,id:'R1',bonCreatedAt:'2099-01-01',bonValidUntil:'2099-01-02'});
+ let request=await read('r1');assert.equal(Date.parse(request.bonValidUntil)-Date.parse(request.bonCreatedAt),86400000);assert.ok(Date.parse(request.bonCreatedAt)<Date.parse('2099-01-01'));
+ await assert.rejects(db.query("UPDATE app_records SET payload=jsonb_set(payload,'{bonValidUntil}','\"2099-01-01\"') WHERE record_key='r1'"),/validité/);
+ await assert.rejects(scan('R1'),/Scanner réservé/);
+ await as(2);await db.query('SELECT decide_stock_request($1,true,$2,\'Accord\')',['r1',uuid(3)]);
+ await as(3);assert.equal((await scan('R1')).state,'VALIDE');assert.equal((await scan('r1')).canIssue,true);assert.equal((await scan('R1')).scansToday.length,1,'repeated scans update one daily history line');
+ await as(5);await assert.rejects(scan('R1'),/inconnu/);
+ await as(6);await assert.rejects(scan('R1'),/hors de vos stocks/);
+ await expire('r1');await as(3);
+ assert.equal((await scan('R1')).state,'EXPIRE');
+ await assert.rejects(db.exec("SELECT issue_validated_request('r1','Signature','B2B')"),/expiré/);
+ assert.equal((await db.query("SELECT payload->>'qty' qty FROM app_records WHERE record_key='stock1'")).rows[0].qty,'100');
+ await assert.rejects(db.exec("SELECT issue_validated_request_before_validity('r1','Signature','B2B')"),/permission/);
+ await db.exec("SELECT request_bon_renewal('r1')");await db.exec("SELECT request_bon_renewal('r1')");
+ assert.equal((await db.query("SELECT count(*)::int n FROM app_records WHERE collection='notifications' AND payload->>'message' LIKE 'BON EXPIRÉ%'")).rows[0].n,1);
+ request=await read('r1');const expiry=request.bonValidUntil,created=request.bonCreatedAt;
+ await as(4);await assert.rejects(db.query("SELECT confirm_bon_renewal('r1',$1,true,'Accord')",[JSON.stringify(expiry)]),/affectation/);
+ await as(2);await assert.rejects(db.query("SELECT confirm_bon_renewal('r1',$1,true,'')",[JSON.stringify(expiry)]),/observation/);
+ await db.query("SELECT confirm_bon_renewal('r1',$1,true,'Technicien présent au magasin')",[JSON.stringify(expiry)]);
+ request=await read('r1');assert.equal(request.bonCreatedAt,created);assert.equal(request.bonRenewals.length,1);assert.equal(Date.parse(request.bonValidUntil)-Date.parse(request.bonRenewals[0].at),86400000);
+ await assert.rejects(db.query("SELECT confirm_bon_renewal('r1',$1,true,'Double clic')",[JSON.stringify(expiry)]),/déjà traité/);
+ await as(3);assert.equal((await scan('R1')).state,'VALIDE');
+ await db.exec("SELECT issue_validated_request('r1','Signature','B2B')");await db.exec("SELECT issue_validated_request('r1','Signature','B2B')");
+ let checked=await scan('R1');assert.equal(checked.state,'DEJA_LIVRE');assert.equal(checked.canIssue,false);assert.ok(checked.deliveredAt);assert.equal(checked.deliveredBy,'Person 3');
+ assert.equal((await scan(checked.bon.sortieId)).state,'DEJA_LIVRE');
+ assert.equal((await db.query("SELECT payload->>'qty' qty FROM app_records WHERE record_key='stock1'")).rows[0].qty,'95');
+ await assert.rejects(db.exec("SELECT request_bon_renewal('r1')"),/renouvelé/);
+ // First approval after expiration is an explicit confirmation, preserving creation.
+ await as(1);await insert('demandes','r2',{...base,id:'R2'});await expire('r2');await as(2);
+ await db.query('SELECT decide_stock_request($1,true,$2,\'Accord tardif\')',['r2',uuid(3)]);
+ request=await read('r2');assert.equal(request.bonRenewals.length,1);
+ await expire('r2');await as(3);await db.exec("SELECT request_bon_renewal('r2')");request=await read('r2');await as(2);
+ await db.query("SELECT confirm_bon_renewal('r2',$1,false,'Refus de remise')",[JSON.stringify(request.bonValidUntil)]);
+ await as(3);assert.equal((await scan('R2')).state,'REFUSE');await assert.rejects(db.exec("SELECT issue_validated_request('r2','Signature','B2B')"));
+ // The B02 alternate issue path cannot bypass expiration, and its edits roll back.
+ await as(1);await insert('demandes','r3',{...base,id:'R3',op:'ITC-B02'});await as(7);await db.query('SELECT decide_stock_request($1,true,$2,\'Accord\')',['r3',uuid(6)]);
+ await expire('r3');await as(6);
+ await assert.rejects(db.query("SELECT issue_validated_request_substocks('r3','Signature','B2B',$1)",[[{op:'ITC-B02',label:'CABLE',qty:5,substock:'production'}]]),/expiré/);
+ assert.equal((await read('r3')).items[0].substock,undefined);
+ assert.equal((await db.query("SELECT payload->>'qty' qty FROM app_records WHERE record_key='stock2'")).rows[0].qty,'100');
+ await db.close();console.log('PASS: server 24h validity, legacy dates, QR lookup, role/tenant checks, expiration enforcement, renewal authorization/history, refusal and single-use stock transaction.');
+})().catch(error=>{console.error(error);process.exitCode=1});

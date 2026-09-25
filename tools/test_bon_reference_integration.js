@@ -14,7 +14,7 @@ const calls = [], alerts = [];
 const ctx = vm.createContext({BonReference,console,appData:{demandes:[demande],sorties:[sortie]},currentUser:{id:1},secureStore:{uid:'manager',profile:{role:'Gestionnaire',company_id:'A'}},
   canCurrentUserManageSortie:()=>true,escapeHtml:s=>String(s ?? ''),alert:s=>alerts.push(s),showSection:()=>{},currentSectionId:'bons-signes',
   supabaseBackend:{rpc:async(name,args)=>{calls.push({name,args});return {error:null};}},refreshAppDataFromServer:async()=>{},
-  window:{ValidatorWorkflow:{trace:()=>''}},
+  window:{ValidatorWorkflow:{trace:()=>''},BonScanner:{pdf:async(doc,record,data,y)=>y+34}},
   isBonSignedByCurrentUser:()=>true,getBonSignatureRoleForCurrentUser:()=>'Gestionnaire',getSortieTimestamp:()=>0,formatDemandeOps:()=>'ITC-B01',getSortieItems:s=>s.items||[],addLogoToPdf:async()=>{},getDemandItemOperator:()=> 'ITC-B01',getOperatorMeta:()=>({label:'ITC-B01'})});
 for(const name of ['getBonReference','bonServiceField','canAssignBonService','bonServiceEditor','saveBonService','renderSignedBonsHistory','renderTechMesDemandes','getPdfSafeDateParts','formatAutomaticSignature','getSortieSignatureText','getSortieTechnicianSignatureText','getBonEquipeName','getSortieCoordinationSignatureText','drawValidatedStamp','drawSortieBonBesoinPdf']) vm.runInContext(extract(name),ctx);
 async function main(){

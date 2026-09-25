@@ -3,6 +3,7 @@
  * modification ici. Toute exclusion doit porter une raison. */
 const fs=require('fs'),path=require('path'),{spawnSync}=require('child_process');
 const EXCLUDED={
+ 'test_bon_scanner_browser.cjs':'Chrome headless + .tools/report-libs (non versionné)',
  'test_admin_dependencies.js':'émulateur Realtime Database (127.0.0.1:9000)',
  'test_database_security.js':'émulateur Realtime Database (firebase emulators:exec)',
  'test_migrated_dataset.js':'émulateur Realtime Database (firebase emulators:exec)',

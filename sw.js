@@ -1,5 +1,6 @@
-const CACHE_NAME = "itc-gestion-materiels-v47-manager-locations";
+const CACHE_NAME = "itc-gestion-materiels-v50-bon-validity-scanner";
 const APP_SHELL = [
+  "./assets/bon-scanner.js",
   "./assets/manager-locations.js",
   "./assets/manager-flux.js",
   "./assets/stock-substocks.js",
