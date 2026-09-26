@@ -20,6 +20,10 @@ let chrome,ws;const pause=ms=>new Promise(r=>setTimeout(r,ms));
  await evaluate(`AccountAffiliation.edit(3);document.querySelector('dialog [name=office]').value='B01';document.querySelector('dialog [name=accountService]').value='MAIN';document.querySelector('dialog form').requestSubmit();true`);
  assert.deepEqual(await evaluate(`rpcCalls[1]`),{name:'assign_account_affiliations',args:{target_uid:'coord',office_codes:['B01'],service_codes:['MAIN'],coordinator_ids:[],validator_ids:[]}});
  assert.equal(await evaluate(`document.querySelector('dialog')===null`),true);
+ // Editing a migrated technician targets the exact loaded record, not a stale UID.
+ await evaluate(`currentUser={id:30,uid:'stale-import-id',_dbKey:'arx-record',email:'arx-group@itc.ci',company_id:'A',role:'Technicien',office:'B01',serviceAbbreviation:'B2B'};appData.users=[currentUser];AccountAffiliation.edit(30);document.querySelector('dialog [name=office]').value='B02';document.querySelector('dialog [name=accountService]').value='MAIN';document.querySelector('dialog form').requestSubmit();true`);
+ assert.deepEqual(await evaluate(`rpcCalls[2]`),{name:'assign_account_affiliations_by_record',args:{target_key:'arx-record',office_codes:['B02'],service_codes:['MAIN'],coordinator_ids:[],validator_ids:[]}});
+ assert.equal(await evaluate(`document.querySelector('dialog')===null`),true);
  // Role changes enable required fields only for affected accounts.
  await evaluate(`document.getElementById('app-container').innerHTML='<form><select id="cu-user-role"><option>Contrôleur</option><option>Technicien</option><option>Superviseur Terrain</option><option>Validateur</option></select>'+AccountAffiliation.fields({role:'Contrôleur'})+'</form>';window.form=document.querySelector('form');AccountAffiliation.update(form);true`);
  assert.equal(await evaluate(`form.querySelector('[data-affiliation]').hidden`),true);
