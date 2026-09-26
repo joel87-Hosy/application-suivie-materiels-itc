@@ -21,5 +21,29 @@ de l'entreprise ou un super-administrateur peuvent modifier les rattachements.
 Appliquer la migration après `202609260004_multiple_affiliations_choices.sql`,
 puis publier le résultat de `npm.cmd run build` et actualiser l'application.
 Aucune modification de la fonction Edge `company-users` n'est nécessaire pour
-cette correction. Si le refus persiste, vérifier le rôle actif et l'entreprise
-du responsable connecté ainsi que la liaison de la fiche au profil authentifié.
+cette correction.
+
+## Fiche sans profil unique après la première correction
+
+Appliquer ensuite `202609260006_verified_affiliation_identity.sql`. L'ancienne
+résolution mélangeait les identifiants Auth et les numéros métier historiques,
+et ne cherchait pas le compte par son email Auth. La nouvelle résolution utilise
+l'email Auth lorsqu'il correspond à un profil de la même entreprise. Un UID Auth
+unique prime aussi sur les numéros métier qui peuvent se répéter. Un désaccord
+entre un UID Auth et un email Auth reste bloquant.
+
+La synchronisation des fiches utilise la même résolution, afin de ne pas modifier
+un autre technicien partageant un ancien numéro. Le rôle, les identifiants
+historiques, les accès aux stocks et l'état actif/suspendu sont conservés. Aucune
+nouvelle identité ni aucun profil manquant ne sont créés automatiquement.
+
+Cette correction est uniquement SQL : après application, réessayer le bouton
+« Bureaux et services » existant. Aucune nouvelle publication de l'application
+ou de la fonction `company-users` n'est nécessaire si la version précédente est
+déjà en ligne.
+
+Si le problème persiste, exécuter `scripts/diagnose_arx_affiliation.sql` dans
+l'éditeur SQL Supabase. Ce diagnostic est en lecture seule : il distingue compte
+Auth absent, profil applicatif manquant, entreprise différente et identifiants
+contradictoires. Il ne lit aucun mot de passe ni jeton. L'état du compte distant
+doit être vérifié avec ce résultat avant une éventuelle réparation de données.
