@@ -1657,6 +1657,7 @@
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
     <script src="assets/control-core.js?v=20260923-regional"></script>
     <script src="assets/account-affiliation.js"></script>
+    <script src="assets/request-routing.js"></script>
     <script src="assets/company-users.js?v=20260926-affiliations"></script>
     <script src="assets/notification-tabs.js?v=20260923-receipts"></script>
     <script src="assets/supabase-store.js?v=20260923-receipts"></script>
@@ -2171,7 +2172,7 @@
       }
 
       function getCoordinatorUsers() {
-        if (currentUser?.role === "Technicien") return AccountAffiliation.coordinators(currentUser, appData.users || []);
+        if (currentUser?.role === "Technicien") return AccountAffiliation.coordinators(AccountAffiliation.requestUser(currentUser,'t'), appData.users || []);
         return (appData.users || []).filter(u => ["Coordinateur", "Coordinatrice", "Superviseur Terrain"].includes(u.role));
       }
 
@@ -2201,7 +2202,7 @@
         return BonReference.format(bon,{data:appData});
       }
       function bonServiceField(id, selected='') {
-        if (id === 's-service' && ['Coordinateur','Coordinatrice'].includes(currentUser?.role) && window.AccountAffiliation) return `<label class="block text-xs font-bold">Service émetteur<input id="${id}" readonly value="${escapeHtml(currentUser.serviceAbbreviation || '')}" class="w-full border-2 p-3 rounded-xl text-xs bg-slate-100" /></label>`;
+        if (id === 's-service' && ['Coordinateur','Coordinatrice'].includes(currentUser?.role) && window.AccountAffiliation) return AccountAffiliation.requestFields(currentUser,'s')+AccountAffiliation.serviceField(currentUser,id);
         return `<label class="block text-xs font-bold">Service émetteur<select id="${id}" required class="w-full border-2 p-3 rounded-xl text-xs bg-white"><option value="">Choisir le service</option>${Object.entries(BonReference.services).map(([code,name])=>`<option value="${code}" ${code===selected?'selected':''}>${escapeHtml(name)} (${code})</option>`).join('')}</select></label>`;
       }
       function canAssignBonService(bon) {
@@ -4615,6 +4616,7 @@
                   </div>
                   ${direct ? '<p class="mb-4 text-sm text-indigo-800">Votre commande sera transmise au validateur, puis au gestionnaire dédié. Un bon sera créé par stock sélectionné ; le débit se fera à la remise physique.</p>' : ''}
                   <form onsubmit="${direct ? 'handleDirectSubmit(event)' : 'handleSortiePhysique(event)'}" class="space-y-6">
+                      ${direct?'<div data-request-routing></div>':''}
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border-2">
                           <div class="md:col-span-2">
                               <label class="text-[8px] text-slate-400 uppercase">Stocks dedies</label>
@@ -4699,6 +4701,7 @@
         refreshSortieEmetteursDatalist();
         refreshSortieReferencesDatalist();
         renderSortieMaterialPicker(savedItems);
+        if(direct)window.RequestRouting.mount(container);
       }
 
       // Fonction pour ajouter une ligne d'article dynamiquement
@@ -4828,6 +4831,8 @@
         }
 
         if (direct || window.ValidatorWorkflow.enabled()) {
+          let routing={};
+          try {if(direct)routing=window.RequestRouting?.values(e.target,selectedItems)||{};} catch(error){return alert(error.message);}
           const signingSession = secureStore.generation;
           const coordinationInk = direct ? await window.BonSignatures.capture('Signature du coordinateur', coordinationSignatureText) : null;
           if (direct && (!coordinationInk || signingSession !== secureStore.generation)) return;
@@ -4835,7 +4840,8 @@
           const groups = direct ? [...new Set(selectedItems.map(item => normalizeOperatorKey(item.op)))].map(op => ({ops:[op],items:selectedItems.filter(item => normalizeOperatorKey(item.op)===op)})) : [{ops:selectedOps,items:selectedItems}];
           groups.forEach(group => appData.demandes.push({id:`BON-${crypto.randomUUID()}`,ref,serviceAbbreviation,
             op:group.ops.join('/'),ops:group.ops,tech,emetteur,items:group.items,
-            originOffice: window.AccountAffiliation?.office(currentUser),
+            originOffice: document.getElementById('s-office')?.value || window.AccountAffiliation?.office(currentUser),
+            ...routing,
             demandeurName:tech,demandeurOriginalId:currentUser.id,createdBy:currentUser.name,createdByUid:secureStore.uid,
             ...(direct ? {workflow:'COORD_DIRECT_BON',coordinationSignatureText:coordinationInk.name,bonSignatures:{coordination:coordinationInk},coordinationSignedAt:new Date().toISOString(),coordinateurId:currentUser.id} : {}),
             date:new Date().toISOString(),dateBon:dateBonValue,motif:ref,
@@ -8238,7 +8244,7 @@
           : [];
         const companySelector = isSuperAdmin
           ? `
-                <select id="cu-company-id" class="w-full border rounded-xl p-3 text-xs" required>
+                <select id="cu-company-id" onchange="AccountAffiliation.update(this.form)" class="w-full border rounded-xl p-3 text-xs" required>
                   <option value="">Choisir l'entreprise</option>
                   ${selectableCompanies
                     .map(
@@ -8295,7 +8301,7 @@
                 </td>
                 <td class="py-3">
                   <div class="flex flex-wrap gap-1">
-                    ${AccountAffiliation.concerned(user.role) ? `<button type="button" data-user-id="${escapeHtml(user.id)}" onclick="AccountAffiliation.edit(this.dataset.userId)" class="bg-indigo-100 text-indigo-800 rounded-lg px-2 py-1 text-[8px] font-black">Bureau et service</button><span class="text-[9px]">${escapeHtml(AccountAffiliation.offices[AccountAffiliation.office(user)] || "Bureau à renseigner")} · ${escapeHtml(user.serviceAbbreviation || "Service à renseigner")}</span>` : ""}
+                    ${AccountAffiliation.concerned(user.role) ? `<button type="button" data-user-id="${escapeHtml(user.id)}" onclick="AccountAffiliation.edit(this.dataset.userId)" class="bg-indigo-100 text-indigo-800 rounded-lg px-2 py-1 text-[8px] font-black">Bureaux et services</button><span class="text-[9px]">${escapeHtml(AccountAffiliation.summary(user))}</span>` : ""}
                     ${['suspend','disable','activate','delete'].includes(user.account_action_pending) ? `<button type="button" onclick="manageCompanyUser('${escapeHtml(user.id)}', '${user.account_action_pending}')" class="bg-orange-100 text-orange-900 rounded-lg px-2 py-1 text-[8px] font-black">Terminer la synchronisation Supabase</button>` : ''}
                     ${user.role === "Gestionnaire" ? `<button type="button" data-user-id="${escapeHtml(user.id)}" onclick="editCompanyUserStockAccess(this.dataset.userId)" class="bg-teal-100 text-teal-800 rounded-lg px-2 py-1 text-[8px] font-black uppercase">Accès stock</button>` : ""}
                     ${
@@ -8338,7 +8344,7 @@
                   <option value="Coordinatrice">Coordinatrice</option>
                   <option value="Technicien">Technicien</option>
                 </select>
-                ${AccountAffiliation.fields({role:"Contrôleur"})}
+                ${AccountAffiliation.fields({role:"Contrôleur",company_id:companyId},companyUsers)}
                 ${CompanyUsers.selector()}
 
                 <div class="grid grid-cols-[1fr_auto] gap-2">
@@ -8865,7 +8871,7 @@
                               </select>
                           </div>
                           <div class="md:col-span-2">
-                              <label class="block text-xs font-bold">Service émetteur<input id="t-service" readonly value="${escapeHtml(currentUser.serviceAbbreviation || "")}" class="w-full border-2 p-3 rounded-xl text-xs bg-slate-100" /></label>
+                              ${AccountAffiliation.requestFields(currentUser,'t')}${AccountAffiliation.serviceField(currentUser,'t-service')}
                               <label class="text-[8px] text-slate-400 uppercase">Reference du bon / Motif</label>
                               <input id="t-objectif" type="text" list="tech-references-list" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="EX: BON N 123 - CHANTIER ABOBO" required />
                               <p class="mt-1 text-[7px] text-slate-400 uppercase">Liste filtree selon les stocks dedies selectionnes</p>
@@ -8901,6 +8907,7 @@
               </div>`;
         updateTechOperatorSummary();
         renderTechMaterialPicker();
+        AccountAffiliation.refreshCoordinators();
         return;
         container.innerHTML = `
               <div class="max-w-2xl mx-auto bg-white p-8 rounded-3xl shadow-xl italic font-bold">
@@ -9241,7 +9248,7 @@
           const d = {
             id: "BS-" + Date.now().toString(),
             workflow: "TECH_BON_SORTIE",
-            originOffice: AccountAffiliation.office(currentUser),
+            originOffice: document.getElementById('t-office')?.value || AccountAffiliation.office(currentUser),
             serviceAbbreviation,
             demandeurOriginalId: currentUser.id,
             demandeurName: currentUser.username ? currentUser.name : getFormTextValue("t-nom"),
@@ -9496,6 +9503,7 @@
             </div>
             <p class="mt-2 text-[8px] text-slate-500 uppercase">Vérifiez les quantités avant signature. Toute modification est conservée dans l’historique du bon.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+              <div data-request-routing class="md:col-span-2"></div>
               <div>
                 <label class="text-[8px] text-slate-400 uppercase">Gestionnaire destinataire</label>
                 <select id="coord-assign-gestionnaire" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required>${gestOptions}</select>
@@ -9509,6 +9517,7 @@
               <i class="fas fa-paper-plane"></i> ${window.ValidatorWorkflow.enabled() ? 'Envoyer au validateur' : 'Envoyer au gestionnaire'}
             </button>
           </div>`;
+        window.RequestRouting.mount(container);
       }
 
       async function coordSignAndSendDemande(id) {
@@ -9522,6 +9531,8 @@
         let editedItems;
         try { editedItems = getCoordinationEditedItems(d); }
         catch (error) { return alert(error.message || "Impossible de valider les matériels."); }
+        let routing={};
+        try {routing=window.RequestRouting?.values(document.getElementById('app-container'),editedItems)||{};} catch(error){return alert(error.message);}
         const signingSession = secureStore.generation;
         const coordinationInk = await window.BonSignatures.capture('Signature du coordinateur', signature);
         if (!coordinationInk || signingSession !== secureStore.generation) return;
@@ -9534,6 +9545,7 @@
           d.coordinationItemsAdjustedAt = new Date().toISOString();
         }
         d.assignedGestionnaireId = managerId;
+        Object.assign(d,routing);
         d.assignedGestionnaireName = gestionnaireNameById(managerId) || "";
         d.coordinationSignatureText = coordinationInk.name;
         d.bonSignatures = {...d.bonSignatures, coordination: coordinationInk};

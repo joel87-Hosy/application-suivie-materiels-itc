@@ -30,7 +30,9 @@ Deno.serve(async request=>{
   if(!['Gestionnaire','Contrôleur','Coordinateur','Coordinatrice','Superviseur Terrain','Technicien','Validateur','Validatrice'].includes(c.role))return json({error:'Le rôle choisi pour le nouveau compte n’est pas autorisé.'},400);
   if(typeof c.email!=='string'||!/^\S+@\S+\.\S+$/.test(c.email)||typeof c.name!=='string'||!c.name.trim()||c.name.length>120||typeof c.password!=='string'||c.password.length<12||c.password.length>128)return json({error:'Nom, email ou mot de passe invalide (12 caractères minimum).'},400);
   const affiliated=['Gestionnaire','Coordinateur','Coordinatrice','Technicien','Validateur','Validatrice'].includes(c.role);
-  if(affiliated && (!['B01','B02','BOUAKE','SAN-PEDRO','YAMOUSSOUKRO'].includes(c.office)||!['B2B','DEP','MAIN'].includes(c.serviceAbbreviation)))return json({error:'Choisissez le bureau et le service du compte.'},400);
+  const officeCodes=c.offices??[c.office],serviceCodes=c.services??[c.serviceAbbreviation],coordinatorIds=c.allowedCoordinatorIds??[],validatorIds=c.allowedValidatorIds??[];
+  if(affiliated && (!Array.isArray(officeCodes)||!officeCodes.length||officeCodes.length>5||officeCodes.some((v:unknown)=>!['B01','B02','BOUAKE','SAN-PEDRO','YAMOUSSOUKRO'].includes(v as string))||!Array.isArray(serviceCodes)||!serviceCodes.length||serviceCodes.length>3||serviceCodes.some((v:unknown)=>!['B2B','DEP','MAIN'].includes(v as string))))return json({error:'Choisissez les bureaux et services du compte.'},400);
+  if([coordinatorIds,validatorIds].some(ids=>!Array.isArray(ids)||ids.length>100||ids.some((id:unknown)=>typeof id!=='string'||!id||id.length>200)))return json({error:'Liste de coordinateurs ou validateurs invalide.'},400);
   if(!Array.isArray(c.managedOps)||c.managedOps.some((op:unknown)=>typeof op!=='string'))return json({error:'Liste de stocks invalide.'},400);
   const ops=c.role==='Contrôleur'?[]:[...new Set(c.managedOps)];
   if(['Gestionnaire','Validateur','Validatrice'].includes(c.role)&&!ops.length)return json({error:'Sélectionnez au moins un stock.'},400);
@@ -38,7 +40,7 @@ Deno.serve(async request=>{
   if(locationError||ops.some(op=>!locations?.some(row=>row.op===op)))return json({error:'Stock inconnu ou hors de cette entreprise.'},400);
   const {data:created,error:createError}=await admin.auth.admin.createUser({email:c.email.trim().toLowerCase(),password:c.password,email_confirm:true,user_metadata:{name:c.name.trim()}});
   if(createError||!created.user)return json({error:createError?.message||'Création impossible.'},400);
-  const {error:registrationError}=await admin.rpc('register_company_user_affiliated',{actor_id:auth.user.id,new_user_id:created.user.id,company:c.companyId,user_role:c.role,user_name:c.name.trim(),user_email:c.email.trim().toLowerCase(),stock_ops:ops,office_code:affiliated?c.office:null,service_code:affiliated?c.serviceAbbreviation:null});
+  const {error:registrationError}=await admin.rpc('register_company_user_multi',{actor_id:auth.user.id,new_user_id:created.user.id,company:c.companyId,user_role:c.role,user_name:c.name.trim(),user_email:c.email.trim().toLowerCase(),stock_ops:ops,office_codes:affiliated?officeCodes:[],service_codes:affiliated?serviceCodes:[],coordinator_ids:affiliated?coordinatorIds:[],validator_ids:affiliated?validatorIds:[]});
   if(registrationError){
    // A lost RPC response can follow a committed transaction. Never remove that account.
    const {data:existing,error:lookupError}=await admin.from('app_profiles').select('user_id').eq('user_id',created.user.id).maybeSingle();

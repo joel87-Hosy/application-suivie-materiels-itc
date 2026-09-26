@@ -1,5 +1,6 @@
-const CACHE_NAME = "itc-gestion-materiels-v52-account-affiliations";
+const CACHE_NAME = "itc-gestion-materiels-v54-multiple-affiliations";
 const APP_SHELL = [
+  "./assets/request-routing.js",
   "./assets/bon-signatures.js",
   "./assets/bon-scanner.js",
   "./assets/manager-locations.js",

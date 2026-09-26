@@ -12,14 +12,37 @@
       document.body.append(modal);modal.showModal();
       const canvas=modal.querySelector('canvas'),ctx=canvas.getContext('2d');
       ctx.strokeStyle='#13213c';ctx.fillStyle='#13213c';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';
-      let pointer=null,drawn=false,result=null;
+      let pointer=null,drawn=false,result=null,importVersion=0,importing=false;
+      const upload=document.createElement('label');
+      upload.className='block';upload.textContent='Ou importer votre signature (PNG, JPEG ou WebP, 5 Mo maximum)';
+      const input=document.createElement('input');input.type='file';input.accept='image/png,image/jpeg,image/webp';input.className='block w-full p-2';upload.append(input);
+      canvas.before(upload);
+      input.onchange=async()=>{
+        const version=++importVersion,file=input.files[0],status=modal.querySelector('[data-status]');
+        importing=false;modal.querySelector('[type=submit]').disabled=false;
+        if(!file)return;
+        if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5*1024*1024){status.textContent='Choisissez une image PNG, JPEG ou WebP de 5 Mo maximum.';input.value='';return;}
+        importing=true;modal.querySelector('[type=submit]').disabled=true;
+        const url=URL.createObjectURL(file);
+        try{
+          const img=new Image();img.src=url;await img.decode();
+          if(version!==importVersion||!modal.isConnected)return;
+          const preview=document.createElement('canvas');preview.width=640;preview.height=200;
+          const ratio=Math.min(640/img.naturalWidth,200/img.naturalHeight),w=img.naturalWidth*ratio,h=img.naturalHeight*ratio;
+          preview.getContext('2d').drawImage(img,(640-w)/2,(200-h)/2,w,h);
+          if(preview.toDataURL('image/png').length>100000)throw Error('Image trop détaillée. Importez une signature sur fond uni.');
+          ctx.clearRect(0,0,640,200);ctx.drawImage(preview,0,0);drawn=true;pointer=null;
+          status.textContent='Signature importée prête à être enregistrée.';
+        }catch(error){if(version===importVersion)status.textContent=error.message.startsWith('Image trop')?error.message:'Image illisible. Choisissez un autre fichier.';}
+        finally{URL.revokeObjectURL(url);if(version===importVersion){importing=false;modal.querySelector('[type=submit]').disabled=false;input.value='';}}
+      };
       const point=e=>{const r=canvas.getBoundingClientRect();return [(e.clientX-r.left)*640/r.width,(e.clientY-r.top)*200/r.height]};
-      canvas.onpointerdown=e=>{if(pointer!==null||e.button>0)return;e.preventDefault();pointer=e.pointerId;canvas.setPointerCapture(pointer);const [x,y]=point(e);ctx.beginPath();ctx.arc(x,y,1.25,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(x,y);drawn=true;modal.querySelector('[data-status]').textContent='Signature dessinée prête à être enregistrée.';};
+      canvas.onpointerdown=e=>{if(importing||pointer!==null||e.button>0)return;e.preventDefault();pointer=e.pointerId;canvas.setPointerCapture(pointer);const [x,y]=point(e);ctx.beginPath();ctx.arc(x,y,1.25,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(x,y);drawn=true;modal.querySelector('[data-status]').textContent='Signature dessinée prête à être enregistrée.';};
       canvas.onpointermove=e=>{if(e.pointerId!==pointer)return;e.preventDefault();const [x,y]=point(e);ctx.lineTo(x,y);ctx.stroke();};
       const finish=e=>{if(e.pointerId===pointer)pointer=null;};canvas.onpointerup=finish;canvas.onpointercancel=finish;canvas.onlostpointercapture=finish;
-      modal.querySelector('[data-clear]').onclick=()=>{ctx.clearRect(0,0,640,200);pointer=null;drawn=false;modal.querySelector('[data-status]').textContent='Dessin effacé. Vous pouvez signer à nouveau.';};
+      modal.querySelector('[data-clear]').onclick=()=>{importVersion++;importing=false;input.value='';modal.querySelector('[type=submit]').disabled=false;ctx.clearRect(0,0,640,200);pointer=null;drawn=false;modal.querySelector('[data-status]').textContent='Dessin effacé. Vous pouvez signer à nouveau.';};
       modal.querySelector('[data-cancel]').onclick=()=>modal.close();
-      modal.querySelector('form').onsubmit=e=>{e.preventDefault();const name=e.target.elements.signer.value.trim();if(!name)return;result={name,image:drawn?canvas.toDataURL('image/png'):null};modal.close();};
+      modal.querySelector('form').onsubmit=e=>{e.preventDefault();const name=e.target.elements.signer.value.trim();if(!name||importing)return;const image=drawn?canvas.toDataURL('image/png'):null;if(image?.length>100000){modal.querySelector('[data-status]').textContent='Signature trop volumineuse. Effacez et utilisez une image plus simple.';return;}result={name,image};modal.close();};
       modal.onclose=()=>{active=null;modal.remove();resolve(result);};
     });
   }
@@ -46,5 +69,8 @@
     });
     return doc.lastAutoTable.finalY;
   }
-  global.BonSignatures={capture,entries,pdf,cancel:()=>active?.close()};
+  function html(record,data={}){
+    return `<section data-bon-signatures><h4 class="font-bold">Signatures du bon</h4><div class="grid gap-3 sm:grid-cols-2">${entries(record,data).map(s=>`<div class="border rounded-xl p-3 bg-white"><b>${esc(s.label)}</b><p>${esc(s.name||'Signature non renseignée')}</p>${s.date?`<p>${esc(s.date)}</p>`:''}${s.refused?'<p>Décision : refus</p>':''}${s.image?`<img src="${esc(s.image)}" alt="Signature de ${esc(s.name)}" style="max-width:100%;width:320px;height:100px;object-fit:contain">`:''}</div>`).join('')}</div></section>`;
+  }
+  global.BonSignatures={capture,entries,pdf,html,cancel:()=>active?.close()};
 })(window);

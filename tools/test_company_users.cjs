@@ -13,9 +13,15 @@ const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict'),{st
  assert.equal((await call({managedOps:['ITC-SAN-PEDRO']})).status,400);assert.equal(created,0);
  actor.role='Technicien';assert.equal((await call({})).status,403);assert.equal(created,0);actor.role='Superviseur';
  assert.equal((await call({office:''})).status,400);assert.equal((await call({serviceAbbreviation:'OTHER'})).status,400);assert.equal(created,0);
- assert.equal((await call({})).status,200);assert.equal(lastRpc.name,'register_company_user_affiliated');assert.equal(lastRpc.args.office_code,'BOUAKE');assert.equal(lastRpc.args.service_code,'B2B');assert.equal(created,1);assert.equal(registered,1);assert.equal(deleted,0);
+ assert.equal((await call({})).status,200);assert.equal(lastRpc.name,'register_company_user_multi');assert.deepEqual(Array.from(lastRpc.args.office_codes),['BOUAKE']);assert.deepEqual(Array.from(lastRpc.args.service_codes),['B2B']);assert.equal(created,1);assert.equal(registered,1);assert.equal(deleted,0);
  registrationError={message:'Refus'};assert.equal((await call({})).status,400);assert.equal(deleted,1);
  lookup={user_id:'new-id'};assert.equal((await call({})).status,200);assert.equal(deleted,1,'lost response must not delete a provisioned account');
+ registrationError=null;lookup=null;
+ const before=created;
+ for(const invalid of [{offices:[]},{offices:['B99']},{services:['OTHER']},{allowedCoordinatorIds:[5]},{allowedValidatorIds:'all'}])assert.equal((await call(invalid)).status,400);
+ assert.equal(created,before,'invalid multiple affiliations rejected before Auth creation');
+ assert.equal((await call({offices:['B01','B02'],services:['B2B','MAIN'],allowedCoordinatorIds:['4'],allowedValidatorIds:['5','6']})).status,200);
+ assert.deepEqual(Array.from(lastRpc.args.office_codes),['B01','B02']);assert.deepEqual(Array.from(lastRpc.args.service_codes),['B2B','MAIN']);assert.deepEqual(Array.from(lastRpc.args.coordinator_ids),['4']);assert.deepEqual(Array.from(lastRpc.args.validator_ids),['5','6']);
  const sourceUi=fs.readFileSync('assets/company-users.js','utf8');const window={};vm.runInNewContext(sourceUi,{window});
  const html=window.CompanyUsers.selector(['ITC-SAN-PEDRO']);assert.equal((html.match(/type="checkbox"/g)||[]).length,9);assert.ok(html.includes('value="ITC-SAN-PEDRO" checked'));
  const index=fs.readFileSync('index.html','utf8');

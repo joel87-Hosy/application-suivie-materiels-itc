@@ -24,6 +24,11 @@ let chrome,ws;const pause=ms=>new Promise(r=>setTimeout(r,ms));
  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
  const mobile=await submit();assert.match(mobile.image,/^data:image\/png;base64,/);
  await open('Validateur');await evaluate(`document.querySelector('[data-clear]').click();true`);const nameOnly=await submit();assert.equal(nameOnly.image,null);assert.equal(nameOnly.name,'Validateur');
+ await open('Import');
+ const imported=await evaluate(`(async()=>{const input=document.querySelector('input[type=file]'),blob=await (await fetch(${JSON.stringify(drawn.image)})).blob(),transfer=new DataTransfer();transfer.items.add(new File([blob],'signature.png',{type:'image/png'}));input.files=transfer.files;await input.onchange();return document.querySelector('[data-status]').textContent})()`);assert.match(imported,/Signature import/);
+ const upload=await submit();assert.match(upload.image,/^data:image\/png;base64,/);assert.equal(upload.name,'Import');
+ await open('Invalid image');
+ const invalid=await evaluate(`(async()=>{const input=document.querySelector('input[type=file]'),transfer=new DataTransfer();transfer.items.add(new File(['broken'],'signature.png',{type:'image/png'}));input.files=transfer.files;await input.onchange();return document.querySelector('[data-status]').textContent})()`);assert.match(invalid,/illisible/);assert.equal((await submit()).image,null);
  await open('Gestionnaire');const cancelled=await evaluate(`(async()=>{BonSignatures.cancel();await signatureTask;return signatureResult})()`);assert.equal(cancelled,null);
  // Four distinct images and names are rendered in the real PDF signature table.
  await evaluate('window.drawn='+JSON.stringify(drawn)+';window.mobile='+JSON.stringify(mobile));

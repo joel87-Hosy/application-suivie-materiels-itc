@@ -64,6 +64,7 @@
         <p><b>Validateur :</b> ${esc(bon.validatorDecision?.name||'En attente')}</p><p><b>Gestionnaire affecté :</b> ${esc(bon.assignedGestionnaireName||'Non renseigné')}</p>
         ${check.state==='DEJA_LIVRE'?`<p><b>Remis le :</b> ${esc(date(check.deliveredAt))}</p><p><b>Remis par :</b> ${esc(check.deliveredBy||'Non renseigné')}</p>`:''}
         <ul>${(bon.items||[]).map(i=>`<li>${esc(i.label)} : ${esc(i.qty)} · ${esc(i.op||bon.op)}</li>`).join('')}</ul>
+        ${global.BonSignatures.html(bon)}
         ${(bon.bonRenewals||[]).map(r=>`<p>Confirmation ${r.approved===false?'refusée':'accordée'} par ${esc(r.name)} le ${esc(date(r.at))} : ${esc(r.reason)}. Validité : ${esc(date(r.validUntil))}.</p>`).join('')}
         ${check.canIssue?'<button data-issue class="bg-green-700 text-white p-3 rounded-xl">Vérifier et confirmer la remise</button>':''}
         ${check.canRequestRenewal?`<button data-renew class="bg-amber-700 text-white p-3 rounded-xl" ${bon.bonRenewalRequestedAt?'disabled':''}>${bon.bonRenewalRequestedAt?'Confirmation demandée au validateur':'Demander la confirmation du validateur'}</button>`:''}
