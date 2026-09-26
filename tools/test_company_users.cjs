@@ -1,18 +1,19 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict'),{stripTypeScriptTypes}=require('node:module');
 (async()=>{
  const source=stripTypeScriptTypes(fs.readFileSync('supabase/functions/company-users/index.ts','utf8').replace(/^import[^\n]+\n/,''),{mode:'strip'});
- let handler,actor={role:'Superviseur',company_id:'A',is_active:true},created=0,deleted=0,registered=0,registrationError=null,lookup=null;
- const admin={from(table){return {select(){return this},eq(){return this},single:async()=>({data:actor,error:null}),maybeSingle:async()=>({data:lookup,error:null}),then(resolve){return Promise.resolve({data:[{op:'ITC-BOUAKE'}],error:null}).then(resolve)}}},auth:{admin:{createUser:async()=>{created++;return {data:{user:{id:'new-id'}},error:null}},deleteUser:async()=>{deleted++;return {error:null}}}},rpc:async()=>{registered++;return {error:registrationError}}};
+ let handler,actor={role:'Superviseur',company_id:'A',is_active:true},created=0,deleted=0,registered=0,registrationError=null,lookup=null,lastRpc;
+ const admin={from(table){return {select(){return this},eq(){return this},single:async()=>({data:actor,error:null}),maybeSingle:async()=>({data:lookup,error:null}),then(resolve){return Promise.resolve({data:[{op:'ITC-BOUAKE'}],error:null}).then(resolve)}}},auth:{admin:{createUser:async()=>{created++;return {data:{user:{id:'new-id'}},error:null}},deleteUser:async()=>{deleted++;return {error:null}}}},rpc:async(name,args)=>{lastRpc={name,args};registered++;return {error:registrationError}}};
  const auth={auth:{getUser:async()=>({data:{user:{id:'actor'}},error:null})}};
  vm.runInNewContext(source,{Deno:{serve:f=>handler=f,env:{get:k=>k==='SUPABASE_SERVICE_ROLE_KEY'?'service':'public'}},createClient:(url,key)=>key==='service'?admin:auth,Response,Request,Set});
- const command={companyId:'A',role:'Gestionnaire',email:'test@example.test',name:'Gestionnaire',password:'temporary-password',managedOps:['ITC-BOUAKE']};
+ const command={companyId:'A',role:'Gestionnaire',email:'test@example.test',name:'Gestionnaire',password:'temporary-password',managedOps:['ITC-BOUAKE'],office:'BOUAKE',serviceAbbreviation:'B2B'};
  const call=async changes=>handler(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer test','Content-Type':'application/json'},body:JSON.stringify({...command,...changes})}));
  assert.equal((await call({companyId:'B'})).status,403);assert.equal(created,0);
  assert.equal((await call({role:'SUPER_ADMIN'})).status,400);assert.equal(created,0);
  assert.equal((await call({managedOps:[]})).status,400);assert.equal(created,0);
  assert.equal((await call({managedOps:['ITC-SAN-PEDRO']})).status,400);assert.equal(created,0);
  actor.role='Technicien';assert.equal((await call({})).status,403);assert.equal(created,0);actor.role='Superviseur';
- assert.equal((await call({})).status,200);assert.equal(created,1);assert.equal(registered,1);assert.equal(deleted,0);
+ assert.equal((await call({office:''})).status,400);assert.equal((await call({serviceAbbreviation:'OTHER'})).status,400);assert.equal(created,0);
+ assert.equal((await call({})).status,200);assert.equal(lastRpc.name,'register_company_user_affiliated');assert.equal(lastRpc.args.office_code,'BOUAKE');assert.equal(lastRpc.args.service_code,'B2B');assert.equal(created,1);assert.equal(registered,1);assert.equal(deleted,0);
  registrationError={message:'Refus'};assert.equal((await call({})).status,400);assert.equal(deleted,1);
  lookup={user_id:'new-id'};assert.equal((await call({})).status,200);assert.equal(deleted,1,'lost response must not delete a provisioned account');
  const sourceUi=fs.readFileSync('assets/company-users.js','utf8');const window={};vm.runInNewContext(sourceUi,{window});

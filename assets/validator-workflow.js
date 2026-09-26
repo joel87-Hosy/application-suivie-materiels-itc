@@ -5,9 +5,9 @@
   let env, busy = false, generation = 0;
   const enabled = () => env?.profile()?.validatorWorkflowEnabled === true;
   const isValidator = () => roles.includes(env?.profile()?.role);
-  const rpc = async (name, args) => {const {data,error} = await env.client().rpc(name,args); if(error) {if(error.code==='PGRST202') throw new Error('La base doit être mise à jour : appliquez la migration 202609240001_repair_rejected_bon_actions.sql dans Supabase, puis réessayez.'); throw error;} return data;};
+  const rpc = async (name, args) => {const {data,error} = await env.client().rpc(name,args); if(error) {if(error.code==='PGRST202' && name.endsWith('_signed')) throw new Error('La signature dessinée doit être activée sur le serveur. Contactez l’administrateur.'); if(error.code==='PGRST202') throw new Error('La base doit être mise à jour : appliquez la migration 202609240001_repair_rejected_bon_actions.sql dans Supabase, puis réessayez.'); throw error;} return data;};
   const op = value => String(value || '').trim().toUpperCase() === 'ITC' ? 'ITC-B01' : String(value || '').trim().toUpperCase();
-  const covers = request => Array.isArray(request?.items) && request.items.length > 0 && request.items.every(item => env?.profile()?.controlScopes?.[op(item.op || request.op)] === true);
+  const covers = request => global.AccountAffiliation ? Boolean(global.AccountAffiliation.office(env?.profile()) && global.AccountAffiliation.requestOffice(request,env?.data?.()?.users) === global.AccountAffiliation.office(env?.profile())) : Array.isArray(request?.items) && request.items.length > 0 && request.items.every(item => env?.profile()?.controlScopes?.[op(item.op || request.op)] === true);
   function setup(config) {env=config;}
   function menu() {
     let element = document.getElementById('menu-validator');
@@ -63,7 +63,11 @@
         const request=renewals[Number(form.dataset.renewal)],reason=form.elements.reason.value.trim();
         if(!reason)return global.alert('Indiquez une observation.');
         busy=true;container.querySelectorAll('button').forEach(b=>b.disabled=true);
-        try{await rpc('confirm_bon_renewal',{request_key:request._dbKey,expected_valid_until:request.bonValidUntil??null,approve:event.submitter?.value==='approve',reason});await enter(container);}
+        try{
+          const signature=await global.BonSignatures.capture('Signature du validateur — renouvellement',env.profile()?.name||'');
+          if(!signature||token!==generation)return;
+          await rpc('confirm_bon_renewal_signed',{request_key:request._dbKey,expected_valid_until:request.bonValidUntil??null,approve:event.submitter?.value==='approve',reason,signer_name:signature.name,signature_image:signature.image});await enter(container);
+        }
         catch(error){container.querySelector('#validation-message').textContent=error.message;}
         finally{busy=false;container.querySelectorAll('button').forEach(b=>b.disabled=false);}
       };});
@@ -73,7 +77,11 @@
         if(!values.get('manager'))return global.alert('Choisissez le gestionnaire dédié : il recevra le bon, y compris en cas de refus pour correction.');
         if(!approve&&!String(values.get('reason')||'').trim())return global.alert('Indiquez le motif du refus.');
         busy=true;container.querySelectorAll('button').forEach(b=>b.disabled=true);
-        try {await rpc('decide_stock_request',{request_key:request._dbKey,approve,manager_uid:values.get('manager'),reason:values.get('reason')||''});await enter(container);}
+        try {
+          const signature=await global.BonSignatures.capture('Signature du validateur',env.profile()?.name||'');
+          if(!signature||token!==generation)return;
+          await rpc('decide_stock_request_signed',{request_key:request._dbKey,approve,manager_uid:values.get('manager'),reason:values.get('reason')||'',signer_name:signature.name,signature_image:signature.image});await enter(container);
+        }
         catch(error){container.querySelector('#validation-message').textContent=error.message;}
         finally{busy=false;container.querySelectorAll('button').forEach(b=>b.disabled=false);}
       };
@@ -81,15 +89,17 @@
     }catch(error){if(token===generation)container.textContent=error.message;}
   }
   async function issue(request) {
-    if(busy)return; const signature=request.managerSignatureText||global.prompt('Signez la remise physique avec votre nom complet :',env.profile()?.name||'');
-    if(!signature?.trim())return;
-    if(!global.confirm('Confirmer la remise physique du matériel et le débit du stock ?'))return;
+    if(busy)return;
+    const token=generation;
     busy=true;
     try {
+      const signature=await global.BonSignatures.capture('Signature du gestionnaire — remise du matériel',request.managerSignatureText||env.profile()?.name||'');
+      if(!signature||token!==generation)return;
+      if(!global.confirm('Confirmer la remise physique du matériel et le débit du stock ?'))return;
       const explicit=global.StockSubstocks?.enabled();
       const selections=explicit?await global.StockSubstocks.chooseIssue(request):null;
-      if(explicit&&!selections)return;
-      await rpc(explicit?'issue_validated_request_substocks':'issue_validated_request',{request_key:request._dbKey,signature,service:request.serviceAbbreviation,...(explicit?{selections}:{})});await env.refresh();global.alert('Sortie physique enregistrée et tracée.');busy=false;env.navigate('demandes-coordonnatrice');}
+      if((explicit&&!selections)||token!==generation)return;
+      await rpc('issue_stock_request_signed',{request_key:request._dbKey,signer_name:signature.name,signature_image:signature.image,service:request.serviceAbbreviation,selections});await env.refresh();global.alert('Sortie physique enregistrée et tracée.');busy=false;env.navigate('demandes-coordonnatrice');}
     catch(error){global.alert(error.message);}finally{busy=false;}
   }
   async function removeRejected(requestKey) {

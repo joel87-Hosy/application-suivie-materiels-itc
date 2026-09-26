@@ -1,5 +1,6 @@
-const CACHE_NAME = "itc-gestion-materiels-v50-bon-validity-scanner";
+const CACHE_NAME = "itc-gestion-materiels-v52-account-affiliations";
 const APP_SHELL = [
+  "./assets/bon-signatures.js",
   "./assets/bon-scanner.js",
   "./assets/manager-locations.js",
   "./assets/manager-flux.js",
@@ -11,7 +12,8 @@ const APP_SHELL = [
   "./assets/profile.js",
   "./assets/notification-tabs.js?v=20260923-receipts",
   "./assets/manager-stock.js?v=20260923-tabs",
-  "./assets/company-users.js?v=20260923-actions",
+  "./assets/account-affiliation.js",
+  "./assets/company-users.js?v=20260926-affiliations",
   "./assets/secure-store.js",
   "./assets/control-core.js",
   "./assets/control-core.js?v=20260923-regional",

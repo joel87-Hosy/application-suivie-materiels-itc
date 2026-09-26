@@ -6,6 +6,7 @@ function renderMonProfil(container) {
   container.innerHTML = `<div class="max-w-3xl mx-auto space-y-6">
     <div class="bg-indigo-700 text-white rounded-2xl p-6"><h2 class="text-xl font-bold">Mon profil</h2><p class="mt-2">${escapeHtml(u.name || '')} · ${escapeHtml(u.role || '')}</p></div>
     ${u.must_change_password ? '<p class="bg-amber-50 text-amber-900 p-4 rounded-xl">Personnalisez votre mot de passe initial dans la rubrique Sécurité ci-dessous.</p>' : ''}
+    ${window.AccountAffiliation?.ownSection(u) || ''}
     <section class="bg-white rounded-2xl p-6 border space-y-4"><h3 class="font-bold text-lg">Informations du compte</h3>
     <p>Identifiant : <strong>${escapeHtml(u.username || u.email || '')}</strong></p>
     ${u.username ? `<p>Équipe : <strong>${escapeHtml(u.name || '')}</strong></p><p class="text-sm text-slate-500">Le nom de l’équipe reste celui affiché sur les bons. Contactez votre gestionnaire pour le modifier.</p>` : ''}

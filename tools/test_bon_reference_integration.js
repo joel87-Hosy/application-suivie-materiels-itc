@@ -19,6 +19,8 @@ const ctx = vm.createContext({BonReference,ControlCore:require('../assets/contro
   isBonSignedByCurrentUser:()=>true,getBonSignatureRoleForCurrentUser:()=>'Gestionnaire',getSortieTimestamp:()=>0,formatDemandeOps:()=>'ITC-B01',getSortieItems:s=>s.items||[],addLogoToPdf:async()=>{},getDemandItemOperator:()=> 'ITC-B01',getOperatorMeta:()=>({label:'ITC-B01'})});
 for(const name of ['getBonReference','bonServiceField','canAssignBonService','bonServiceEditor','saveBonService','getBonSignatureChain','canViewSignedBon','getSignedBonsHistory','renderSignedBonsHistory','renderTechMesDemandes','getPdfSafeDateParts','formatAutomaticSignature','getSortieSignatureText','getSortieTechnicianSignatureText','getBonEquipeName','getSortieCoordinationSignatureText','drawValidatedStamp','drawSortieBonBesoinPdf']) vm.runInContext(extract(name),ctx);
 async function main(){
+  ctx.window.BonReference=BonReference;
+  vm.runInContext(fs.readFileSync('assets/bon-signatures.js','utf8'),ctx);
   const select={value:'DEP'};
   await ctx.saveBonService('sorties','s1',select);
   assert.equal(calls.length,1);

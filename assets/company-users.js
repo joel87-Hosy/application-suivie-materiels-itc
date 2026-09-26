@@ -12,13 +12,14 @@
     try{
       const companyId=isCurrentSuperAdmin()?getFormTextValue('cu-company-id'):secureStore.profile.company_id;
       const role=document.getElementById('cu-user-role').value;
+      const affiliation=global.AccountAffiliation.values(event.target,role);
       const managedOps=role==='Contrôleur'?[]:Array.from(event.target.querySelectorAll('[name=managedOps]:checked'),el=>el.value);
       validateManagerStocks(role,managedOps);
       if(['Gestionnaire','Validateur','Validatrice'].includes(role)&&!managedOps.length)throw Error('Sélectionnez au moins un stock dédié.');
       const email=getFormTextValue('cu-user-email').toLowerCase(),password=getFormTextValue('cu-temp-password');
       const config=global.ITCSupabaseConfig;
       const {data,error}=await config.client.auth.getSession();if(error||!data.session)throw Error('Reconnectez-vous pour créer ce compte.');
-      const response=await fetch(config.projectUrl+'/functions/v1/company-users',{method:'POST',headers:{'Content-Type':'application/json',apikey:config.publishableKey,Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({companyId,role,managedOps,email,password,name:getFormTextValue('cu-user-name')})});
+      const response=await fetch(config.projectUrl+'/functions/v1/company-users',{method:'POST',headers:{'Content-Type':'application/json',apikey:config.publishableKey,Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({companyId,role,managedOps,email,password,...affiliation,name:getFormTextValue('cu-user-name')})});
       const result=await response.json();if(!response.ok||result.error)throw Error(result.error||'Création du compte impossible.');
       alert(`Compte créé.\nEmail : ${email}\nMot de passe temporaire : ${password}\nStocks : ${managedOps.join(', ')||'Selon le rôle'}`);
       await refreshAppDataFromServer();renderCompanyUsersAdmin(document.getElementById('app-container'));

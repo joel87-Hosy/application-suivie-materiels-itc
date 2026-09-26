@@ -1240,6 +1240,7 @@
             </div>
 
             <div id="menu-coordinatrice" class="mt-6 hidden">
+              <button type="button" onclick="showSection('mon-profil'); toggleSidebarMobile();" class="w-full text-left py-2 px-8 text-indigo-300"><i class="fas fa-id-badge w-5"></i> Mon bureau et service</button>
               <p
                 class="px-6 text-[10px] text-slate-500 mb-2 uppercase opacity-50"
               >
@@ -1655,12 +1656,14 @@
     <script src="assets/supabase-public-config.js?v=20260918-shared1"></script>
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
     <script src="assets/control-core.js?v=20260923-regional"></script>
-    <script src="assets/company-users.js?v=20260923-actions"></script>
+    <script src="assets/account-affiliation.js"></script>
+    <script src="assets/company-users.js?v=20260926-affiliations"></script>
     <script src="assets/notification-tabs.js?v=20260923-receipts"></script>
     <script src="assets/supabase-store.js?v=20260923-receipts"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
     <script src="assets/bon-scanner.js"></script>
+    <script src="assets/bon-signatures.js"></script>
     <script src="assets/validator-workflow.js?v=20260923-corrections"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js?v=20260923-tabs"></script>
@@ -2046,6 +2049,8 @@
             if (!data) return;
             appData = normalizeAppData(data);
 
+            if (currentUser && secureStore.profile) currentUser = {...currentUser, ...secureStore.profile};
+
             try {
               refreshDesignationsDatalists();
             } catch (e) {
@@ -2166,10 +2171,8 @@
       }
 
       function getCoordinatorUsers() {
-        return (appData.users || []).filter((u) => {
-          const role = String(u.role || "").toUpperCase();
-          return role.includes("COORD") || role === "SUPERVISEUR TERRAIN";
-        });
+        if (currentUser?.role === "Technicien") return AccountAffiliation.coordinators(currentUser, appData.users || []);
+        return (appData.users || []).filter(u => ["Coordinateur", "Coordinatrice", "Superviseur Terrain"].includes(u.role));
       }
 
       function getGestionnaireUsers() {
@@ -2198,6 +2201,7 @@
         return BonReference.format(bon,{data:appData});
       }
       function bonServiceField(id, selected='') {
+        if (id === 's-service' && ['Coordinateur','Coordinatrice'].includes(currentUser?.role) && window.AccountAffiliation) return `<label class="block text-xs font-bold">Service émetteur<input id="${id}" readonly value="${escapeHtml(currentUser.serviceAbbreviation || '')}" class="w-full border-2 p-3 rounded-xl text-xs bg-slate-100" /></label>`;
         return `<label class="block text-xs font-bold">Service émetteur<select id="${id}" required class="w-full border-2 p-3 rounded-xl text-xs bg-white"><option value="">Choisir le service</option>${Object.entries(BonReference.services).map(([code,name])=>`<option value="${code}" ${code===selected?'selected':''}>${escapeHtml(name)} (${code})</option>`).join('')}</select></label>`;
       }
       function canAssignBonService(bon) {
@@ -2585,7 +2589,7 @@
         if (password) password.value = '';
         for (const cleanup of [() => stopVoiceAssistant(), () => window.CableOffcuts?.stop(),
           () => window.StockControl?.reset(), () => window.ManagerLocations?.stop(),
-          () => window.ManagerStock?.stop(), () => window.ValidatorWorkflow?.stop(), () => window.BonScanner?.stop(), () => secureStore.stop()]) {
+          () => window.ManagerStock?.stop(), () => window.ValidatorWorkflow?.stop(), () => window.BonScanner?.stop(), () => window.BonSignatures?.cancel(), () => secureStore.stop()]) {
           try { cleanup(); } catch (error) { console.warn('Nettoyage de session', error); }
         }
         appData = emptyAppData();
@@ -4761,7 +4765,7 @@
           return;
         }
         const serviceAbbreviation = getFormTextValue("s-service");
-        if (!BonReference.services[serviceAbbreviation]) return alert("Choisissez le service : B2B, DEP ou MAIN.");
+        if (!BonReference.services[serviceAbbreviation]) return alert("Votre service doit être renseigné dans le rattachement de votre compte.");
         const ref = getFormTextValue("s-ref");
         const tech = getFormTextValue("s-tech");
         const emetteur = getFormTextValue("s-emetteur");
@@ -4824,12 +4828,16 @@
         }
 
         if (direct || window.ValidatorWorkflow.enabled()) {
+          const signingSession = secureStore.generation;
+          const coordinationInk = direct ? await window.BonSignatures.capture('Signature du coordinateur', coordinationSignatureText) : null;
+          if (direct && (!coordinationInk || signingSession !== secureStore.generation)) return;
           appData.demandes ||= [];
           const groups = direct ? [...new Set(selectedItems.map(item => normalizeOperatorKey(item.op)))].map(op => ({ops:[op],items:selectedItems.filter(item => normalizeOperatorKey(item.op)===op)})) : [{ops:selectedOps,items:selectedItems}];
           groups.forEach(group => appData.demandes.push({id:`BON-${crypto.randomUUID()}`,ref,serviceAbbreviation,
             op:group.ops.join('/'),ops:group.ops,tech,emetteur,items:group.items,
+            originOffice: window.AccountAffiliation?.office(currentUser),
             demandeurName:tech,demandeurOriginalId:currentUser.id,createdBy:currentUser.name,createdByUid:secureStore.uid,
-            ...(direct ? {workflow:'COORD_DIRECT_BON',coordinationSignatureText,coordinationSignedAt:new Date().toISOString(),coordinateurId:currentUser.id} : {}),
+            ...(direct ? {workflow:'COORD_DIRECT_BON',coordinationSignatureText:coordinationInk.name,bonSignatures:{coordination:coordinationInk},coordinationSignedAt:new Date().toISOString(),coordinateurId:currentUser.id} : {}),
             date:new Date().toISOString(),dateBon:dateBonValue,motif:ref,
             status:'EN ATTENTE VALIDATEUR',statut:'EN ATTENTE VALIDATEUR'}));
           if (!(await save())) return;
@@ -6245,9 +6253,6 @@
         const emetteur = String(
           sortie.emetteur || sortie.coordinateurNom || "EMETTEUR NON RENSEIGNE",
         ).toUpperCase();
-        const managerSignature = getSortieSignatureText(sortie, createdBy);
-        const technicianSignature = getSortieTechnicianSignatureText(sortie);
-        const coordinationSignature = [getSortieCoordinationSignatureText(sortie), window.ValidatorWorkflow.trace(sortie)].filter(Boolean).join('\n');
         const receiver = getBonEquipeName(sortie).toUpperCase();
         const ref = String(sortie.ref || "").toUpperCase();
         const op = formatDemandeOps(sortie).toUpperCase();
@@ -6407,30 +6412,7 @@
         );
         y += 7;
 
-        doc.autoTable({
-          startY: y,
-          margin: { left: margin, right: margin },
-          theme: "grid",
-          head: [["Technicien", "Logistique", "Coordination"]],
-          body: [[technicianSignature, managerSignature, coordinationSignature]],
-          styles: {
-            font: "helvetica",
-            fontSize: 7.2,
-            cellPadding: 2,
-            lineColor: [20, 20, 20],
-            lineWidth: 0.25,
-            halign: "center",
-            minCellHeight: 24,
-          },
-          pageBreak: "avoid",
-          rowPageBreak: "avoid",
-          headStyles: {
-            fillColor: [255, 255, 255],
-            textColor: [20, 20, 20],
-            fontStyle: "bold",
-          },
-          didDrawCell: drawValidatedStamp,
-        });
+        window.BonSignatures.pdf(doc, sortie, appData, y);
       }
 
       async function exportSortiePDF(id) {
@@ -8313,6 +8295,7 @@
                 </td>
                 <td class="py-3">
                   <div class="flex flex-wrap gap-1">
+                    ${AccountAffiliation.concerned(user.role) ? `<button type="button" data-user-id="${escapeHtml(user.id)}" onclick="AccountAffiliation.edit(this.dataset.userId)" class="bg-indigo-100 text-indigo-800 rounded-lg px-2 py-1 text-[8px] font-black">Bureau et service</button><span class="text-[9px]">${escapeHtml(AccountAffiliation.offices[AccountAffiliation.office(user)] || "Bureau à renseigner")} · ${escapeHtml(user.serviceAbbreviation || "Service à renseigner")}</span>` : ""}
                     ${['suspend','disable','activate','delete'].includes(user.account_action_pending) ? `<button type="button" onclick="manageCompanyUser('${escapeHtml(user.id)}', '${user.account_action_pending}')" class="bg-orange-100 text-orange-900 rounded-lg px-2 py-1 text-[8px] font-black">Terminer la synchronisation Supabase</button>` : ''}
                     ${user.role === "Gestionnaire" ? `<button type="button" data-user-id="${escapeHtml(user.id)}" onclick="editCompanyUserStockAccess(this.dataset.userId)" class="bg-teal-100 text-teal-800 rounded-lg px-2 py-1 text-[8px] font-black uppercase">Accès stock</button>` : ""}
                     ${
@@ -8347,7 +8330,7 @@
                 ${companySelector}
                 <input id="cu-user-name" class="w-full border rounded-xl p-3 text-xs" placeholder="Nom complet" required />
                 <input id="cu-user-email" class="w-full border rounded-xl p-3 text-xs" type="email" placeholder="Email" required />
-                <select id="cu-user-role" class="w-full border rounded-xl p-3 text-xs">
+                <select id="cu-user-role" onchange="AccountAffiliation.update(this.form)" class="w-full border rounded-xl p-3 text-xs">
                   <option value="Contrôleur">Contrôleur</option>
                   <option value="Superviseur Terrain">Superviseur Terrain</option>
                   <option value="Coordinateur">Coordinateur</option>
@@ -8355,6 +8338,7 @@
                   <option value="Coordinatrice">Coordinatrice</option>
                   <option value="Technicien">Technicien</option>
                 </select>
+                ${AccountAffiliation.fields({role:"Contrôleur"})}
                 ${CompanyUsers.selector()}
 
                 <div class="grid grid-cols-[1fr_auto] gap-2">
@@ -8829,7 +8813,7 @@
                   `<option value="${u.id}">${escapeHtml(u.name)} - ${escapeHtml(u.role || "")}</option>`,
               )
               .join("")
-          : `<option value="7">COORDINATION / SUPERVISION</option>`;
+          : `<option value="">Aucun coordinateur actif rattaché à votre bureau et à votre service</option>`;
         container.innerHTML = `
               <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
                   <div class="mb-8 rounded-2xl p-5 bg-gradient-to-r from-indigo-800 via-blue-700 to-cyan-600 text-white">
@@ -8875,13 +8859,13 @@
                               <input id="t-role" type="text" value="${escapeHtml(currentUser.role || "TECHNICIEN")}" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="EX: TECHNICIEN" required />
                           </div>
                           <div>
-                              <label class="text-[8px] text-slate-400 uppercase">Emetteur / Coordinateur ou Superviseur</label>
+                              <label class="text-[8px] text-slate-400 uppercase">Émetteur / Coordinateur de votre bureau</label>
                               <select id="t-coordinateur" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" required>
                                 ${coordinatorOptions}
                               </select>
                           </div>
                           <div class="md:col-span-2">
-                              ${bonServiceField("t-service")}
+                              <label class="block text-xs font-bold">Service émetteur<input id="t-service" readonly value="${escapeHtml(currentUser.serviceAbbreviation || "")}" class="w-full border-2 p-3 rounded-xl text-xs bg-slate-100" /></label>
                               <label class="text-[8px] text-slate-400 uppercase">Reference du bon / Motif</label>
                               <input id="t-objectif" type="text" list="tech-references-list" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-white" placeholder="EX: BON N 123 - CHANTIER ABOBO" required />
                               <p class="mt-1 text-[7px] text-slate-400 uppercase">Liste filtree selon les stocks dedies selectionnes</p>
@@ -9225,7 +9209,7 @@
       async function handleTechSubmit(e) {
         e.preventDefault();
         const serviceAbbreviation = getFormTextValue("t-service");
-        if (!BonReference.services[serviceAbbreviation]) return alert("Choisissez le service : B2B, DEP ou MAIN.");
+        if (!BonReference.services[serviceAbbreviation]) return alert("Demandez au responsable de renseigner votre bureau et votre service.");
         const pickedItems = getSelectedTechItemsFromPicker();
         const manualItems = getManualTechDemandeItems();
         const items = pickedItems.length ? pickedItems : manualItems;
@@ -9245,15 +9229,19 @@
             return;
           }
           const coordSelect = document.getElementById("t-coordinateur");
-          const assignedCoordinateurId = coordSelect ? parseInt(coordSelect.value, 10) : 7;
-          const assignedCoordinateurName =
-            (appData.users || []).find((u) => parseInt(u.id) === assignedCoordinateurId)?.name ||
-            "COORDINATION / SUPERVISION";
+          const coordinator = getCoordinatorUsers().find(u => String(u.id) === coordSelect?.value);
+          if (!coordinator) return alert("Choisissez un coordinateur actif rattaché à votre bureau et à votre service.");
+          const assignedCoordinateurId = coordinator.id;
+          const assignedCoordinateurName = coordinator.name;
+          const signingSession = secureStore.generation;
+          const technicianInk = await window.BonSignatures.capture('Signature du technicien', getFormTextValue('t-signature') || currentUser.name);
+          if (!technicianInk || signingSession !== secureStore.generation) return;
           const now = new Date().toLocaleString();
           const motif = getFormTextValue("t-objectif");
           const d = {
             id: "BS-" + Date.now().toString(),
             workflow: "TECH_BON_SORTIE",
+            originOffice: AccountAffiliation.office(currentUser),
             serviceAbbreviation,
             demandeurOriginalId: currentUser.id,
             demandeurName: currentUser.username ? currentUser.name : getFormTextValue("t-nom"),
@@ -9274,7 +9262,8 @@
             ref: motif,
             status: "EN ATTENTE COORDINATION",
             statut: "EN ATTENTE COORDINATION",
-            technicianSignatureText: getFormTextValue("t-signature"),
+            technicianSignatureText: technicianInk.name,
+            bonSignatures: {technician: technicianInk},
             technicianSignedAt: now,
             date: new Date().toLocaleDateString(),
           };
@@ -9533,6 +9522,9 @@
         let editedItems;
         try { editedItems = getCoordinationEditedItems(d); }
         catch (error) { return alert(error.message || "Impossible de valider les matériels."); }
+        const signingSession = secureStore.generation;
+        const coordinationInk = await window.BonSignatures.capture('Signature du coordinateur', signature);
+        if (!coordinationInk || signingSession !== secureStore.generation) return;
         const initialItems = (d.items || []).map(item => ({label:item.label, op:normalizeOperatorKey(getDemandItemOperator(item, d)), qty:parseInt(item.qty, 10) || 0}));
         const wasAdjusted = !sameCoordinationItems(initialItems, editedItems);
         if (wasAdjusted) {
@@ -9543,7 +9535,8 @@
         }
         d.assignedGestionnaireId = managerId;
         d.assignedGestionnaireName = gestionnaireNameById(managerId) || "";
-        d.coordinationSignatureText = signature;
+        d.coordinationSignatureText = coordinationInk.name;
+        d.bonSignatures = {...d.bonSignatures, coordination: coordinationInk};
         d.coordinationSignedAt = new Date().toLocaleString();
         d.coordinationBy = currentUser ? currentUser.name : "COORDINATION";
         d.status = "EN ATTENTE GESTIONNAIRE";
@@ -9895,7 +9888,7 @@
                 </tbody>
               </table>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
               <div class="border rounded-2xl p-3 bg-slate-50">
                 <p class="text-[8px] text-slate-400 uppercase">Signature technicien</p>
                 <p class="text-[9px] uppercase whitespace-pre-line">${escapeHtml(getSortieTechnicianSignatureText(d))}</p>
@@ -9903,6 +9896,10 @@
               <div class="border rounded-2xl p-3 bg-slate-50">
                 <p class="text-[8px] text-slate-400 uppercase">Signature coordination</p>
                 <p class="text-[9px] uppercase whitespace-pre-line">${escapeHtml(getSortieCoordinationSignatureText(d))}</p>
+              </div>
+              <div class="border rounded-2xl p-3 bg-slate-50">
+                <p class="text-[8px] text-slate-400 uppercase">Signature validateur</p>
+                <p class="text-[9px] whitespace-pre-line">${escapeHtml(window.ValidatorWorkflow.trace(d) || 'Signature non renseignée')}</p>
               </div>
               <div>
                 <label class="text-[8px] text-slate-400 uppercase">Signature electronique gestionnaire</label>
