@@ -47,3 +47,36 @@ l'éditeur SQL Supabase. Ce diagnostic est en lecture seule : il distingue compt
 Auth absent, profil applicatif manquant, entreprise différente et identifiants
 contradictoires. Il ne lit aucun mot de passe ni jeton. L'état du compte distant
 doit être vérifié avec ce résultat avant une éventuelle réparation de données.
+
+## Coordinateur incompatible avec le rattachement
+
+Le message « Coordinateur actif de la même entreprise, bureau et service requis »
+signifie qu'un des correspondants sélectionnés ne satisfait pas ces conditions,
+ou que son ancien identifiant ne correspond pas au profil serveur. Il ne signifie
+pas qu'il faut modifier le rôle Technicien du compte ARX.
+
+La migration `202609270001_affiliation_contacts.sql` ajoute la lecture des
+coordinateurs et validateurs depuis leurs profils serveur, réservée au responsable
+de l'entreprise. Le formulaire utilise leurs identifiants canoniques et filtre :
+
+- Coordinateurs : même entreprise, compte actif, au moins un bureau et un service
+  communs avec les choix du formulaire.
+- Validateurs : même entreprise, compte actif et au moins un bureau commun ; leur
+  service ne limite pas la validation.
+
+Une sélection existante incompatible reste visible et bloque l'enregistrement
+jusqu'à sa correction explicite. Elle n'est pas supprimée silencieusement, car une
+liste vide rétablit le circuit habituel sans restriction nominative. Les messages
+serveur précisent désormais le nom du correspondant et le motif du refus.
+
+Pour activer cette correction, appliquer la migration après les précédentes,
+puis publier `npm.cmd run build` (cache PWA v57). Choisir d'abord les bureaux et
+services d'ARX, puis ses correspondants. Si aucun coordinateur compatible
+n'apparaît, le responsable doit d'abord compléter les bureaux et services du
+coordinateur voulu, ou choisir un autre coordinateur compatible. Le bouton
+« Actualiser les correspondants » recharge leurs profils serveur.
+
+ARX est un prestataire d'ITC : son compte conserve le rôle `Technicien` et
+l'entreprise ITC. Le nom du prestataire ou de l'équipe n'intervient pas dans
+les autorisations de rattachement. Les tests couvrent l'affectation de ses bureaux,
+services, coordinateurs et validateurs par le responsable ITC.

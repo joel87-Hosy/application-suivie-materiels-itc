@@ -160,7 +160,9 @@
       for (const name of collections) {
         for (const row of data[name] || []) {
           if (!row || typeof row !== 'object') continue;
-          const recordKey = row._dbKey || key();
+          // Keep the identity on the local object as well: retrying a save or
+          // reusing a form snapshot must update this record, not insert a copy.
+          const recordKey = row._dbKey || (row._dbKey = key());
           const next = clean(row);
           // A stale form snapshot must never undo a confirmed read receipt.
           if (name === 'notifications' && (this.readNotificationKeys.has(recordKey) || this.raw[name]?.[recordKey]?.lu === true)) next.lu = true;

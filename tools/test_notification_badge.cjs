@@ -39,6 +39,28 @@ function extract(name){const start=html.search(new RegExp('^      (?:async )?fun
  await store.read(store.generation);context.updateNotifications();assert.equal(badge.innerText,1);assert.equal(badge.hidden,false);
  fail=true;await context.markNotificationsAsRead();assert.equal(badge.innerText,1,'failed persistence leaves notification unread');
  fail=false;await context.markNotificationsAsRead();assert.equal(badge.innerText,0);assert.equal(badge.hidden,true);
+ // Notifications arriving while a receipt waits for a save were not displayed.
+ rows.push({record_key:'visible',company_id:'A',payload:{userId:7,lu:false}});
+ await store.read(store.generation);
+ let release;context.saveBarrier=new Promise(resolve=>{release=resolve;});
+ vm.runInContext('pendingSave=saveBarrier',context);
+ const receipt=context.markNotificationsAsRead('demandes-coordonnatrice');
+ rows.push({record_key:'unseen',company_id:'A',payload:{userId:7,lu:false}});
+ await store.read(store.generation);release();await receipt;
+ vm.runInContext('pendingSave=null',context);
+ assert.equal(rows.find(r=>r.record_key==='visible').payload.lu,true);
+ assert.equal(rows.find(r=>r.record_key==='unseen').payload.lu,false);
+ assert.equal(badge.innerText,1,'arrival after rendering remains unread');
+ // A server refresh renders an already-open tab without calling showSection.
+ Object.assign(context,{useSupabaseBackend:true,normalizeAppData:x=>x,canMaintainBusinessData:()=>false,
+  refreshDesignationsDatalists:()=>{},currentSectionId:'demandes-coordonnatrice',
+  renderDemandesGestionnaire:()=>{context.rendered=true;}});
+ const getElement=context.document.getElementById;
+ context.document.getElementById=id=>id==='app-container'?{}:getElement(id);
+ vm.runInContext(extract('applyServerData'),context);
+ context.applyServerData({val:()=>store.value()});
+ await vm.runInContext('markingNotifications',context);
+ assert.equal(context.rendered,true);assert.equal(badge.innerText,0,'refresh of visible tab acknowledges its notifications');
  assert.match(html,/\.notification-badge\.hidden\s*\{\s*display:\s*none;/,'hidden style overrides badge display:flex');
  console.log('PASS: Commands unread count, legacy payload persistence, string IDs, zero hides badge, new notification reappears, reload and failure preservation.');
 })().catch(error=>{console.error(error);process.exitCode=1});

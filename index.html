@@ -2002,6 +2002,12 @@
             renderStock(currentSectionId.replace("stock-", ""), container);
           }
 
+          // These views have just rendered the refreshed snapshot. Record its
+          // notifications as read even when the user did not reopen the tab.
+          if (container && ['trafic-audit', 'coord-demandes-tech', 'demandes-coordonnatrice', 'tech-mes-demandes', 'bons-signes', 'gestion-retours'].includes(currentSectionId)) {
+            markNotificationsAsRead(currentSectionId);
+          }
+
           console.log(
             "Mise à jour temps réel appliquée sur : " + currentSectionId,
           );
@@ -8379,6 +8385,7 @@
               </div>
             </div>
           </div>`;
+        AccountAffiliation.update(container.querySelector('form'));
       }
 
       async function createCompanyUserFromSupervisor(event) { return CompanyUsers.create(event); }
@@ -11095,11 +11102,14 @@
         if (!currentUser || !Array.isArray(appData?.notifications)) return;
         const userId = currentUser.id;
         const sessionUid = secureStore.uid;
+        // Capture only notifications present in the view being read. A newer
+        // arrival while a save/read receipt is pending must remain unread.
+        const visible = window.NotificationTabs.unread(appData.notifications,currentUser,section);
         while (markingNotifications) await markingNotifications;
         // Wait for newly created notifications to receive their database keys.
         if (pendingSave) await pendingSave;
         if (currentUser?.id !== userId || secureStore.uid !== sessionUid) return;
-        const unread = window.NotificationTabs.unread(appData.notifications,currentUser,section);
+        const unread = visible.filter(n => !n.lu);
         if (!unread.length) { updateNotifications(); return; }
         let finishMark;
         markingNotifications = new Promise(resolve => { finishMark = resolve; });
