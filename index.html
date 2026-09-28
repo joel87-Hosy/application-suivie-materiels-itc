@@ -2209,7 +2209,8 @@
       }
       function bonServiceField(id, selected='') {
         if (id === 's-service' && ['Coordinateur','Coordinatrice'].includes(currentUser?.role) && window.AccountAffiliation) return AccountAffiliation.requestFields(currentUser,'s')+AccountAffiliation.serviceField(currentUser,id);
-        return `<label class="block text-xs font-bold">Service émetteur<select id="${id}" required class="w-full border-2 p-3 rounded-xl text-xs bg-white"><option value="">Choisir le service</option>${Object.entries(BonReference.services).map(([code,name])=>`<option value="${code}" ${code===selected?'selected':''}>${escapeHtml(name)} (${code})</option>`).join('')}</select></label>`;
+        const services = id === 's-service' ? BonReference.physicalServices(currentUser) : BonReference.services;
+        return `<label class="block text-xs font-bold">Service émetteur<select id="${id}" required class="w-full border-2 p-3 rounded-xl text-xs bg-white"><option value="">Choisir le service</option>${Object.entries(services).map(([code,name])=>`<option value="${code}" ${code===selected?'selected':''}>${escapeHtml(name)} (${code})</option>`).join('')}</select></label>`;
       }
       function canAssignBonService(bon) {
         if (!bon || bon.company_id !== secureStore.profile?.company_id) return false;
@@ -4774,7 +4775,7 @@
           return;
         }
         const serviceAbbreviation = getFormTextValue("s-service");
-        if (!BonReference.services[serviceAbbreviation]) return alert("Votre service doit être renseigné dans le rattachement de votre compte.");
+        if (!BonReference.physicalServices(currentUser)[serviceAbbreviation]) return alert("Choisissez un service émetteur dans la liste de votre bureau.");
         const ref = getFormTextValue("s-ref");
         const tech = getFormTextValue("s-tech");
         const emetteur = getFormTextValue("s-emetteur");
@@ -10026,7 +10027,7 @@
       async function finalSortie(id) {
         const d = appData.demandes.find((x) => x.id === id);
         if (!d) return alert("Bon introuvable.");
-        if (!BonReference.services[d.serviceAbbreviation]) {
+        if (!BonReference.allServices[d.serviceAbbreviation]) {
           const service = String(window.prompt("Service emetteur du bon : B2B, DEP (Deploiement) ou MAIN (Maintenance)") || "").trim().toUpperCase();
           if (!service) return;
           if (!BonReference.services[service]) return alert("Service invalide : utilisez B2B, DEP ou MAIN.");

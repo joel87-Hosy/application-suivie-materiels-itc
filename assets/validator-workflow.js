@@ -124,7 +124,7 @@
     modal.innerHTML=`<form class="space-y-3"><h2 class="font-bold">Corriger le bon ${esc(request.ref||request.id)}</h2><p class="text-red-700">Motif du refus : ${esc(request.validatorDecision?.reason)}</p>${corrections(request)}
       <label class="block">Destinataire<input name="recipient" required maxlength="200" class="border p-2 w-full" value="${esc(request.demandeurName||request.tech)}"></label>
       <label class="block">Motif<textarea name="motif" required maxlength="1000" class="border p-2 w-full">${esc(request.motif||request.ref)}</textarea></label>
-      <label class="block">Service<select name="service" required class="border p-2">${['B2B','DEP','MAIN'].map(s=>`<option ${request.serviceAbbreviation===s?'selected':''}>${s}</option>`).join('')}</select></label>
+      <label class="block">Service<select name="service" required class="border p-2">${[...new Set([...Object.keys(global.BonReference.physicalServices(env.profile())),request.serviceAbbreviation].filter(Boolean))].map(s=>`<option value="${esc(s)}" ${request.serviceAbbreviation===s?'selected':''}>${esc(global.BonReference.allServices[s]||s)}</option>`).join('')}</select></label>
       <div data-items>${(request.items||[]).map(row).join('')}</div><button type="button" data-add>Ajouter un matériel</button>
       <label class="block">Correction effectuée<textarea name="note" required maxlength="2000" class="border p-2 w-full"></textarea></label>
       <p>Les anciennes signatures restent dans la version précédente. Le bon corrigé repasse en validation avant toute sortie.</p><p role="status" class="text-red-700"></p>

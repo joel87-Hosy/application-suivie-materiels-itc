@@ -43,5 +43,14 @@ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAA
  await db.exec("SELECT request_bon_renewal('r3')");await as(3);
  await db.query("SELECT confirm_bon_renewal_signed('r3',$1,true,'Technicien présent','Validateur', $2)",[JSON.stringify(request.bonValidUntil),png]);
  request=await read('r3');assert.equal(request.bonSignatures.validator.image,png);assert.equal(request.bonRenewals[0].previousSignature.image,null);assert.equal(request.bonRenewals[0].signature.image,png);
- await db.close();console.log('PASS: four persisted signatures, authenticated signers, PNG validation, scoped decisions, signed delivery/retry, expiration rollback, renewal and correction history.');
+ await db.exec('RESET ROLE');
+ await db.exec(migration('202609280001_bureau01_physical_services.sql'));
+ await db.exec(migration('202609280001_bureau01_physical_services.sql'));
+ for(const service of ['PROD','MBM','MR','DR','MNM','DESS','LS']){
+  await create(service);await coordinate(service);await as(3);await decide(service);await as(4);
+  await db.query('SELECT issue_stock_request_signed($1,$2,$3,$4,NULL)',[service,'Gestionnaire',png,service]);
+  assert.equal((await read(service)).serviceAbbreviation,service);
+  assert.equal((await read(service)).status,'LIVREE');
+ }
+ await db.close();console.log('PASS: four persisted signatures, authenticated signers, PNG validation, scoped decisions, signed delivery/retry, expiration rollback, renewal, correction history and all Bureau 01 services.');
 })().catch(error=>{console.error(error);process.exitCode=1});

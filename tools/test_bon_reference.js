@@ -1,5 +1,9 @@
 const assert=require('node:assert/strict');
 const B=require('../assets/bon-reference');
+assert.deepEqual(Object.values(B.physicalServices({role:'Gestionnaire',controlScopes:{'ITC-B01':true}})),['Production','Maintenance backbone moov','Maintenance réseau','Déplacement réseau','Maintenance et normalisation MTN','Dessaturation','LS']);
+assert.deepEqual(Object.keys(B.physicalServices({role:'Gestionnaire',controlScopes:{'ITC-B02':true}})),['B2B','DEP','MAIN']);
+assert.equal(B.physicalServices({role:'Technicien',controlScopes:{'ITC-B01':true}}),B.services);
+for(const code of Object.keys(B.bureau01Services))assert.ok(B.format({id:'TEST',serviceAbbreviation:code}).startsWith(code+'-'));
 const record={id:'SORTIE-1788262231772',company_id:'A',serviceAbbreviation:'DEP',ref:'Chantier Abobo',dateBon:'2026-09-17',date:'17/09/2026 10:30:00'};
 const before=JSON.stringify(record);
 assert.match(B.format(record),/^DEP-CHANTIER-ABOBO-20260917-SORTIE[A-Z0-9]+$/);
