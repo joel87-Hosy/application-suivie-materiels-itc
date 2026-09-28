@@ -7187,30 +7187,25 @@
 
         try {
           const workbook = new ExcelJS.Workbook();
-          const ws = workbook.addWorksheet("Flux Magasin ITC");
-
-          await addLogoToWorksheet(workbook, ws);
-          ws.getCell("D1").value = "RAPPORT MENSUEL DES FLUX MAGASIN";
-          ws.getCell("D2").value = `${monthName.toUpperCase()} 2026`;
-
-          const headers = Array.from(table.querySelectorAll("thead th")).map(cell => String(cell.innerText || "").trim());
-          ws.addRow([]);
-          ws.addRow([]);
-          ws.addRow([...headers, "Total ligne"]);
-          const detailRows=[];
-          let grandTotal=0;
-          for(const movement of hebdoExportMovements){
-            const materials=movement.items.length?movement.items:[{label:movement.item,qty:movement.qty}];
-            for(const material of materials){
-              const quantity=Number(material.qty)||0;
-              detailRows.push([movement.date,movement.type,material.op||movement.op,material.label||"Matériel",quantity, movement.dest, quantity]);
-              grandTotal+=quantity;
+          for(const [type,sheetName] of [["ENTRÉE","Entrées"],["SORTIE","Sorties"]]){
+            const ws=workbook.addWorksheet(sheetName);
+            await addLogoToWorksheet(workbook,ws);
+            ws.getCell("D1").value=`RAPPORT MENSUEL DES ${type}S MAGASIN`;
+            ws.getCell("D2").value=`${monthName.toUpperCase()} 2026`;
+            ws.addRow([]);ws.addRow([]);
+            ws.addRow(["Date","Opérateur","Matériel","Quantité","Destinataire","Total ligne"]);
+            let grandTotal=0;
+            for(const movement of hebdoExportMovements.filter(item=>item.type===type)){
+              const materials=movement.items.length?movement.items:[{label:movement.item,qty:movement.qty}];
+              for(const material of materials){
+                const quantity=Number(material.qty)||0;
+                ws.addRow([movement.date,material.op||movement.op,material.label||"Matériel",quantity,movement.dest,quantity]);
+                grandTotal+=quantity;
+              }
             }
+            const totalRow=ws.addRow(["TOTAL GÉNÉRAL","","",grandTotal,"",grandTotal]);
+            totalRow.font={bold:true};ws.getRow(5).font={bold:true};
           }
-          detailRows.forEach(row=>ws.addRow(row));
-          const totalRow=ws.addRow(["TOTAL GÉNÉRAL","","","",grandTotal,"",grandTotal]);
-          totalRow.font={bold:true};
-          ws.getRow(5).font={bold:true};
 
           await saveExcelJsWorkbook(
             workbook,
