@@ -36,12 +36,25 @@
     await env.refresh();
     const grouped=new Map();
     for(const item of request.items||[]){const op=global.ControlCore.operator(item.op||request.op),key=JSON.stringify([op,String(item.label).trim().toUpperCase()]);if(!grouped.has(key))grouped.set(key,{op,label:item.label,qty:0,defaults:{}});const row=grouped.get(key);row.qty+=Number(item.qty);if(item.substock)row.defaults[item.substock]=(row.defaults[item.substock]||0)+Number(item.qty);}
-    const rows=[...grouped.values()];
+    const preferred={B2B:'production',DEP:'deploiement',MAIN:'maintenance'}[String(request.serviceAbbreviation||'').trim().toUpperCase()];
+    const automatic=[],rows=[];
+    for(const row of grouped.values()){
+      if(!Number.isFinite(row.qty)||row.qty<=0)throw new Error('Quantité demandée invalide.');
+      const matches=entries(row.op).filter(s=>String(s.label).trim().toUpperCase()===String(row.label).trim().toUpperCase());
+      if(matches.length!==1)throw new Error(`Article absent ou ambigu : ${row.op} / ${row.label}.`);
+      row.available=quantities(matches[0]);
+      if(Number(matches[0].qty)<row.qty)throw new Error(`Stock total insuffisant : ${row.label}. Disponible : ${matches[0].qty}, demandé : ${row.qty}.`);
+      if(!owns(row.op)){automatic.push({op:row.op,label:row.label,qty:row.qty});continue;}
+      if(preferred&&row.available[preferred]>=row.qty){automatic.push({op:row.op,label:row.label,qty:row.qty,substock:preferred});continue;}
+      row.defaults=preferred?{[preferred]:Math.min(row.qty,row.available[preferred])}:{};
+      rows.push(row);
+    }
+    if(!rows.length)return automatic;
     return new Promise(resolve=>{
       const modal=document.createElement('dialog');modal.className='substock-dialog';let result=null;
-      modal.innerHTML=`<form><h2>Choisir les sous-stocks à débiter</h2><p>Répartissez la quantité de chaque matériel entre les sous-stocks disponibles.</p>${rows.map((r,i)=>{const stock=entries(r.op).find(s=>String(s.label).trim().toUpperCase()===String(r.label).trim().toUpperCase()),q=quantities(stock||{qty:0});return `<fieldset class="border rounded-xl p-4 my-3"><legend>${esc(r.op)} · ${esc(r.label)} — ${r.qty} à sortir</legend><div class="substock-fields">${Object.entries(names).map(([key,name])=>`<label>${name} (${q[key]} disponibles)<input data-index="${i}" data-bucket="${key}" type="number" min="0" step="any" max="${q[key]}" value="${r.defaults[key]||0}" required></label>`).join('')}</div></fieldset>`;}).join('')}<p role="status"></p><button type="submit">Confirmer les sous-stocks</button><button type="button" data-cancel>Annuler</button></form>`;
+      modal.innerHTML=`<form><h2>${preferred?'Sous-stock du service insuffisant':'Choisir le sous-stock de ce bon'}</h2><p>${preferred?`${names[preferred]} ne suffit pas pour les matériels ci-dessous. Complétez avec un autre sous-stock disponible ou modifiez la répartition.`:'Le service du bon ne permet pas de choisir automatiquement un sous-stock.'} Les autres matériels sont affectés automatiquement.</p>${rows.map((r,i)=>{const q=r.available;return `<fieldset class="border rounded-xl p-4 my-3"><legend>${esc(r.op)} · ${esc(r.label)} — ${r.qty} à sortir</legend><div class="substock-fields">${Object.entries(names).filter(([key])=>q[key]>0).map(([key,name])=>`<label>${name} (${q[key]} disponibles)<input data-index="${i}" data-bucket="${key}" type="number" min="0" step="any" max="${q[key]}" value="${r.defaults[key]||0}" required></label>`).join('')}</div></fieldset>`;}).join('')}<p role="status"></p><button type="submit">Confirmer le prélèvement</button><button type="button" data-cancel>Annuler</button></form>`;
       document.body.append(modal);modal.showModal();modal.onclose=()=>{modal.remove();resolve(result);};modal.querySelector('[data-cancel]').onclick=()=>modal.close();
-      modal.onsubmit=e=>{e.preventDefault();const selected=[];for(const [i,r] of rows.entries()){let total=0;for(const input of modal.querySelectorAll(`[data-index="${i}"]`)){const qty=Number(input.value);total+=qty;if(qty>0)selected.push({op:r.op,label:r.label,qty,substock:input.dataset.bucket});}if(Math.abs(total-r.qty)>0.0000001){modal.querySelector('[role=status]').textContent=`La quantité répartie pour ${r.label} doit être ${r.qty}.`;return;}}result=selected;modal.close();};
+      modal.onsubmit=e=>{e.preventDefault();const selected=[...automatic];for(const [i,r] of rows.entries()){let total=0;for(const input of modal.querySelectorAll(`[data-index="${i}"]`)){const qty=Number(input.value);if(!Number.isFinite(qty)||qty<0||qty>r.available[input.dataset.bucket]){modal.querySelector('[role=status]').textContent='Choisissez une quantité disponible dans le sous-stock.';return;}total+=qty;if(qty>0)selected.push({op:r.op,label:r.label,qty,substock:input.dataset.bucket});}if(Math.abs(total-r.qty)>0.0000001){modal.querySelector('[role=status]').textContent=`La quantité répartie pour ${r.label} doit être ${r.qty}.`;return;}}result=selected;modal.close();};
     });
   }
   function exportSubstock(operator,bucket,format){
