@@ -6933,6 +6933,7 @@
 
       // 1. Variable globale pour le graphique (à placer au début de votre balise script)
       let myChart = null;
+      let hebdoExportMovements = [];
 
       function renderRapportHebdo() {
         const container = document.getElementById("app-container");
@@ -6995,6 +6996,8 @@
         // Récupération des Sorties (Bons Livrés) - robust date parsing
         (appData.demandes || []).forEach((d) => {
           if (d.status === "LIVREE") {
+            if ((appData.sorties || []).some(s => s.company_id === d.company_id &&
+              ((s.sourceDemandeId && s.sourceDemandeId === d.id) || (d.sortieId && s.id === d.sortieId)))) return;
             const ts = getSortieTimestamp(d.dateLivraison || d.date || "");
             if (!ts) return;
             const dt = new Date(ts);
@@ -7009,6 +7012,7 @@
                 op: normalizeOperatorKey(d.op || "ITC"),
                 item:
                   (d.items || []).map((i) => i.label).join(", ") || "Matériel",
+                items: getSortieItems(d),
                 qty: (d.items || []).reduce(
                   (sum, i) => sum + (parseInt(i.qty) || 0),
                   0,
@@ -7042,6 +7046,7 @@
             type: "SORTIE",
             op: normalizeOperatorKey(s?.op || "ITC"),
             item: items.map((i) => i.label).join(", ") || s?.ref || "Matériel",
+            items,
             qty: qtyTotal,
             dest: s?.tech || s?.createdBy || "N/A",
           });
@@ -7067,6 +7072,7 @@
               type: "ENTRÉE",
               op: normalizeOperatorKey(n.stockOp || n.auditFlux || "ITC"),
               item: itemMatch ? itemMatch[1] : "Matériel",
+              items: [{label:itemMatch ? itemMatch[1] : "Matériel",qty:qtyMatch ? parseInt(qtyMatch[1]) : 0}],
               qty: qtyMatch ? parseInt(qtyMatch[1]) : 0,
               dest: "MAGASIN CENTRAL",
             });
@@ -7088,6 +7094,7 @@
           if (tb !== ta) return tb - ta;
           return String(b.date || "").localeCompare(String(a.date || ""));
         });
+        hebdoExportMovements = allMovements.map(movement => ({...movement,items:Array.isArray(movement.items)?movement.items:[]}));
         let html = `
               <table class="w-full text-left border-collapse">
                   <thead>
@@ -7186,15 +7193,24 @@
           ws.getCell("D1").value = "RAPPORT MENSUEL DES FLUX MAGASIN";
           ws.getCell("D2").value = `${monthName.toUpperCase()} 2026`;
 
-          const rows = Array.from(table.querySelectorAll("tr")).map((tr) =>
-            Array.from(tr.querySelectorAll("th,td")).map((c) =>
-              String(c.innerText || "").trim(),
-            ),
-          );
-
-          rows.forEach((r) => ws.addRow(r));
-          ws.spliceRows(4, 0, []);
-          if (ws.getRow(5)) ws.getRow(5).font = { bold: true };
+          const headers = Array.from(table.querySelectorAll("thead th")).map(cell => String(cell.innerText || "").trim());
+          ws.addRow([]);
+          ws.addRow([]);
+          ws.addRow([...headers, "Total ligne"]);
+          const detailRows=[];
+          let grandTotal=0;
+          for(const movement of hebdoExportMovements){
+            const materials=movement.items.length?movement.items:[{label:movement.item,qty:movement.qty}];
+            for(const material of materials){
+              const quantity=Number(material.qty)||0;
+              detailRows.push([movement.date,movement.type,material.op||movement.op,material.label||"Matériel",quantity, movement.dest, quantity]);
+              grandTotal+=quantity;
+            }
+          }
+          detailRows.forEach(row=>ws.addRow(row));
+          const totalRow=ws.addRow(["TOTAL GÉNÉRAL","","","",grandTotal,"",grandTotal]);
+          totalRow.font={bold:true};
+          ws.getRow(5).font={bold:true};
 
           await saveExcelJsWorkbook(
             workbook,
