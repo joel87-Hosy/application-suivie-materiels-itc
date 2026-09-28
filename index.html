@@ -6761,7 +6761,7 @@
         } else if (id === "tech-nouvelle-demande") {
           renderTechDemandeForm(container);
         } else if (id === "tech-mes-demandes") {
-          renderTechMesDemandes(container);
+          loadTechMesDemandes(container);
         } else if (id === "tech-retour-materiel") {
           renderRetourForm(container);
         } else if (id === "coord-demandes-tech") {
@@ -8611,24 +8611,51 @@
         container.innerHTML = parts.join("");
         renderCockpitCharts(totalsByOp, perOperatorAlerts);
       }
+      async function loadTechMesDemandes(container) {
+        const generation = secureStore.generation;
+        container.innerHTML = '<p class="p-8">Chargement de vos bons...</p>';
+        try {
+          if (pendingSave) await pendingSave;
+          if (secureStore.generation !== generation) return;
+          await secureStore.read(generation, {notify:false});
+          if (secureStore.generation !== generation || currentSectionId !== 'tech-mes-demandes') return;
+          appData = normalizeAppData(secureStore.value());
+          renderTechMesDemandes(container);
+          await markNotificationsAsRead('tech-mes-demandes');
+        } catch (error) {
+          if (secureStore.generation !== generation || currentSectionId !== 'tech-mes-demandes') return;
+          container.innerHTML = '<p class="p-8 text-red-700">Chargement impossible. Rouvrez Mes bons pour réessayer.</p>';
+          console.error(error);
+        }
+      }
+
+      function isCurrentTechnicianBon(bon) {
+        if (!currentUser || (bon.company_id && bon.company_id !== currentUser.company_id)) return false;
+        const matches = (a, b) => a != null && b != null && String(a).trim() !== '' && String(a) === String(b);
+        // Authenticated identity takes precedence over legacy numeric IDs.
+        if (bon.technicienUid) return [currentUser.uid, secureStore.uid].some(uid => matches(bon.technicienUid, uid));
+        return matches(bon.technicienId ?? bon.demandeurOriginalId, currentUser.id);
+      }
+
+      function technicianBonStage(bon) {
+        const status = String(bon.status || bon.statut || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+        if (['LIVRE', 'LIVREE', 'LIVRES', 'LIVREES'].includes(status)) return 'delivered';
+        if (['PRET', 'PRETE', 'PRETS', 'PRETES', 'PREPARE', 'PREPAREE'].includes(status)) return 'ready';
+        // Pending includes validation, preparation and corrections. Never hide
+        // a request merely because its historical status uses another spelling.
+        return 'pending';
+      }
+
       function renderTechMesDemandes(container) {
         // 1. SÉCURITÉ CRUCIALE : "Gilet de sauvetage"
         // On vérifie que la liste existe avant de filtrer pour éviter le crash
         const sourceDemandes =
           appData && appData.demandes ? appData.demandes : [];
 
-        // 2. FILTRAGE (Ta logique conservée)
-        const myBS = sourceDemandes.filter(
-          (d) =>
-            d.demandeurOriginalId === currentUser.id &&
-            ["EN ATTENTE COORDINATION", "EN ATTENTE GESTIONNAIRE", "PRET", "LIVREE"].includes(d.status),
-        );
-
-        const kpiReady = myBS.filter((d) => d.status === "PRET").length;
-        const kpiDelivered = myBS.filter((d) => d.status === "LIVREE").length;
-        const kpiPending = myBS.filter(
-          (d) => ["EN ATTENTE COORDINATION", "EN ATTENTE GESTIONNAIRE"].includes(d.status),
-        ).length;
+        const myBS = sourceDemandes.filter(isCurrentTechnicianBon);
+        const kpiReady = myBS.filter(d => technicianBonStage(d) === 'ready').length;
+        const kpiDelivered = myBS.filter(d => technicianBonStage(d) === 'delivered').length;
+        const kpiPending = myBS.filter(d => technicianBonStage(d) === 'pending').length;
 
         // Optionnel : On inverse pour voir les plus récents en premier
         // myBS.reverse();
@@ -8641,6 +8668,7 @@
                       <div>
                         <p class="text-[8px] tracking-[0.2em] opacity-80">ESPACE TECHNICIEN</p>
                         <h3 class="text-xl font-black mt-1"><i class="fas fa-file-invoice mr-2"></i>Mes Bons de Sortie</h3>
+                        <button type="button" onclick="loadTechMesDemandes(document.getElementById('app-container'))" class="border rounded-lg p-2 mt-3">Actualiser mes bons</button>
                       </div>
                       <div class="bg-white/20 px-4 py-2 rounded-xl text-center min-w-[110px]">
                         <p class="text-[8px] uppercase">Total</p>
@@ -8669,8 +8697,9 @@
 
                                   <p class="text-[8px] uppercase text-orange-500 font-bold mt-1">
                                       <span class="w-2 h-2 rounded-full bg-orange-500 inline-block mr-1"></span>
-                                      STATUT : ${(bs.status || "").replace(/-/g, " ")}
+                                      STATUT : ${{pending:'EN ATTENTE',ready:'PRÊT',delivered:'LIVRÉ'}[technicianBonStage(bs)]}
                                   </p>
+                                  <p class="text-[8px] text-slate-600 mt-1">Étape : ${escapeHtml(bs.status || bs.statut || 'En attente de traitement')}${bs.validatorDecision?.approved === false ? ' — '+escapeHtml(bs.validatorDecision.reason || 'Correction requise') : ''}</p>
                                   <p class="text-[8px] text-slate-600 mt-2">Validité : 24 heures après création. ${bs.bonValidUntil ? 'Échéance : '+escapeHtml(new Date(bs.bonValidUntil).toLocaleString('fr-FR')) : 'Échéance à vérifier au magasin.'} Après expiration, confirmation du validateur requise.</p>
 
                                   <p class="text-[7px] text-slate-400 mt-1 uppercase font-bold">

@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v58-coordination-submit";
+const CACHE_NAME = "itc-gestion-materiels-v60-technician-statuses";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
