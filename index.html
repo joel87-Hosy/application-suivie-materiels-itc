@@ -9560,8 +9560,12 @@
         d.coordinationBy = currentUser ? currentUser.name : "COORDINATION";
         d.status = "EN ATTENTE GESTIONNAIRE";
         d.statut = "EN ATTENTE GESTIONNAIRE";
-        if (!window.ValidatorWorkflow.enabled()) addNotification(managerId, `BON A VALIDER : ${d.id} signe par ${currentUser?.name || "COORDINATION"}`);
-        addNotification(d.demandeurOriginalId, wasAdjusted ? `VOTRE BON ${getBonReference(d)} A ETE AJUSTE ET SIGNE PAR LA COORDINATION.` : `VOTRE BON ${getBonReference(d)} A ETE SIGNE PAR LA COORDINATION.`);
+        // The server routes validator notifications atomically with the bon.
+        // A legacy requester ID (or the audit copy) must not block its signature.
+        if (!window.ValidatorWorkflow.enabled()) {
+          addNotification(managerId, `BON A VALIDER : ${d.id} signe par ${currentUser?.name || "COORDINATION"}`);
+          addNotification(d.demandeurOriginalId, wasAdjusted ? `VOTRE BON ${getBonReference(d)} A ETE AJUSTE ET SIGNE PAR LA COORDINATION.` : `VOTRE BON ${getBonReference(d)} A ETE SIGNE PAR LA COORDINATION.`);
+        }
         if (!(await save())) return;
         alert(window.ValidatorWorkflow.enabled() ? "BON ENVOYÉ AU VALIDATEUR." : "BON ENVOYE AU GESTIONNAIRE.");
         showSection("cockpit");
