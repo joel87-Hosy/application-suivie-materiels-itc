@@ -4459,8 +4459,8 @@
           .filter(Boolean);
       }
 
-      function getSortieMaterialRowKey(op, label) {
-        return `${normalizeOperatorKey(op)}::${String(label || "").trim().toUpperCase()}`;
+      function getSortieMaterialRowKey(op, label, stockKey = "") {
+        return stockKey ? `${normalizeOperatorKey(op)}::${stockKey}` : `${normalizeOperatorKey(op)}::${String(label || "").trim().toUpperCase()}`;
       }
 
       function getSelectedSortieItemsFromPicker() {
@@ -4471,6 +4471,7 @@
             return {
               op: row.dataset.op || "",
               label: row.dataset.label || "",
+              ...(row.dataset.stockKey ? {stockKey:row.dataset.stockKey} : {}),
               ...(row.dataset.substock ? {substock:row.dataset.substock} : {}),
               qty,
               checked,
@@ -4545,7 +4546,7 @@
         }
         const previousByKey = new Map(
           (previousItems || []).map((item) => [
-            getSortieMaterialRowKey(item.op, item.label),
+            getSortieMaterialRowKey(item.op, item.label, item.stockKey),
             Number(item.qty) || "",
           ]),
         );
@@ -4576,12 +4577,13 @@
                 ? stockRows.map((item) => {
                     const op = normalizeOperatorKey(item.op);
                     const label = String(item.label || "").trim();
-                    const key = getSortieMaterialRowKey(op, label);
+                    const stockKey = String(item._dbKey || item.id || "");
+                    const key = getSortieMaterialRowKey(op, label, stockKey);
                     const previousQty = previousByKey.get(key);
                     const checked = previousByKey.has(key);
                     const available = Number(item.qty) || 0;
                     return `
-                      <div class="sortie-stock-row grid grid-cols-[auto_1fr_92px] gap-3 items-center bg-white border border-slate-200 rounded-xl p-3" data-op="${escapeHtml(op)}" data-label="${escapeHtml(label)}">
+                      <div class="sortie-stock-row grid grid-cols-[auto_1fr_92px] gap-3 items-center bg-white border border-slate-200 rounded-xl p-3" data-op="${escapeHtml(op)}" data-label="${escapeHtml(label)}" data-stock-key="${escapeHtml(stockKey)}">
                         <input type="checkbox" class="sortie-stock-check h-4 w-4 accent-red-600" ${checked ? "checked" : ""} onchange="const qtyInput = this.closest('.sortie-stock-row').querySelector('.sortie-stock-qty'); if (this.checked && !qtyInput.value) qtyInput.value = 1; saveSortieDraft();" />
                         <div class="min-w-0">
                           <p class="text-[9px] font-black uppercase text-slate-800 truncate">${escapeHtml(label)}</p>
@@ -4819,10 +4821,11 @@
           const qty = parseInt(item.qty) || 0;
 
           // Trouver l'article en stock pour cet opérateur (comparaisons normalisées)
-          const itemInStock = appData.stock.find((s) => {
-            try {
-              return (
-                normalizeOperatorKey(s.op) === opKey &&
+            const itemInStock = appData.stock.find((s) => {
+              try {
+                return (
+                  (!item.stockKey || String(s._dbKey || s.id || "") === item.stockKey) &&
+                  normalizeOperatorKey(s.op) === opKey &&
                 String(s.label || "")
                   .toUpperCase()
                   .trim() === normalizedLabel
