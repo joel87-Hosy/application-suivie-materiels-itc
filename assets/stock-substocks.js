@@ -3,6 +3,7 @@
   const names={production:'Stock-production',deploiement:'Stock-déploiement',maintenance:'Stock-maintenance',unallocated:'À répartir'};
   const colors={production:'#059669',deploiement:'#2563eb',maintenance:'#d97706',unallocated:'#64748b'};
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const normalizeLabel=value=>String(value??'').normalize('NFKC').replace(/[\s\u200B-\u200D\uFEFF]+/g,' ').trim().toLocaleUpperCase('fr');
   let env,busy=false,pendingReceipt=null;
   const enabled=()=>env?.profile()?.role==='Gestionnaire'&&env.profile().controlScopes?.['ITC-B02']===true;
   const owns=operator=>enabled()&&!global.ControlCore.operator(operator).startsWith('STK-')&&global.ControlCore.managerStocks(env.profile()).includes(global.ControlCore.operator(operator));
@@ -40,7 +41,7 @@
     const automatic=[],rows=[];
     for(const row of grouped.values()){
       if(!Number.isFinite(row.qty)||row.qty<=0)throw new Error('Quantité demandée invalide.');
-      const matches=entries(row.op).filter(s=>String(s.label).trim().toUpperCase()===String(row.label).trim().toUpperCase());
+      const matches=entries(row.op).filter(s=>normalizeLabel(s.label)===normalizeLabel(row.label));
       if(matches.length!==1)throw new Error(`Article absent ou ambigu : ${row.op} / ${row.label}.`);
       row.available=quantities(matches[0]);
       if(Number(matches[0].qty)<row.qty)throw new Error(`Stock total insuffisant : ${row.label}. Disponible : ${matches[0].qty}, demandé : ${row.qty}.`);
