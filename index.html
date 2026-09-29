@@ -1278,8 +1278,7 @@
                 "
                 class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic"
               >
-                <i class="fas fa-plus-square w-5 text-pink-400"></i> Commande
-                Directe
+                <i class="fas fa-plus-square w-5 text-pink-400"></i> <span id="coord-request-menu-label">Commande Directe</span>
               </div>
               <div
                 onclick="
@@ -2720,6 +2719,8 @@
 
         // 3. Menu Coordinatrice
         const menuCoord = document.getElementById("menu-coordinatrice");
+        const requestMenuLabel = document.getElementById('coord-request-menu-label');
+        if (requestMenuLabel) requestMenuLabel.textContent = r === 'SUPERVISEUR TERRAIN' ? 'Demande de matériel' : 'Commande Directe';
         if (menuCoord)
           menuCoord.classList.toggle(
             "hidden",
@@ -4628,7 +4629,7 @@
                         <div>
                           <p class="text-[8px] tracking-[0.2em] opacity-80">TRAÇABILITÉ MAGASIN</p>
                           <h3 class="mt-1 text-xl uppercase font-black italic">
-                            <i class="fas fa-file-signature mr-2"></i> ${direct ? 'Commande directe' : 'Sortie sur Bon Physique'}
+                            <i class="fas fa-file-signature mr-2"></i> ${direct ? (secureStore.profile?.role === 'Superviseur Terrain' ? 'Demande de matériel' : 'Commande directe') : 'Sortie sur Bon Physique'}
                           </h3>
                         </div>
                         <div class="bg-white/20 px-4 py-2 rounded-xl text-center min-w-[140px]">
@@ -4637,7 +4638,7 @@
                         </div>
                       </div>
                   </div>
-                  ${direct ? '<p class="mb-4 text-sm text-indigo-800">Votre commande sera transmise au validateur, puis au gestionnaire dédié. Un bon sera créé par stock sélectionné ; le débit se fera à la remise physique.</p>' : ''}
+                  ${direct ? '<p class="mb-4 text-sm text-indigo-800">Votre demande sera transmise au validateur affecté à votre bureau. Après validation, elle sera envoyée au gestionnaire dédié. Un bon sera créé pour chaque stock sélectionné ; le stock sera débité à la remise physique.</p>' : ''}
                   <form onsubmit="${direct ? 'handleDirectSubmit(event)' : 'handleSortiePhysique(event)'}" class="space-y-6">
                       ${direct?'<div data-request-routing></div>':''}
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border-2">

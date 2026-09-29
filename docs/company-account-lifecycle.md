@@ -20,6 +20,8 @@ Les fonctions SQL de préparation et de finalisation sont réservées à `servic
 
 Coordinateur, Coordinatrice et Superviseur Terrain utilisent le même formulaire de sélection que la sortie sur bon physique : stocks dédiés, destinataire, émetteur, service, référence/motif, date, recherche et sélection des articles avec quantités. Une signature de coordination complète la commande.
 
+Le Superviseur Terrain dispose de ce formulaire sous « Demande de matériel ». Sa demande est acheminée au validateur de son bureau, puis, après validation, au gestionnaire affecté aux stocks sélectionnés. Le débit du stock intervient lors de la remise physique.
+
 Chaque stock concerné donne lieu à un bon `COORD_DIRECT_BON` au statut **EN ATTENTE VALIDATEUR**. Le serveur notifie les validateurs affectés au stock. Le validateur accepte/refuse et désigne le gestionnaire dédié. Seul ce gestionnaire peut confirmer la remise physique et débiter le stock. La saisie ne crée aucune sortie ni diminution de quantité. Les brouillons sont séparés par entreprise, compte et formulaire.
 
 Vérifications : `tools/test_account_lifecycle.cjs`, `tools/test_account_lifecycle_endpoint.cjs` et `tools/test_direct_command.cjs`.
