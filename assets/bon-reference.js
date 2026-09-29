@@ -29,7 +29,7 @@
     const serial=bon._dbKey ? String(bon._dbKey).replace(/[^a-zA-Z0-9_-]/g,'') : match ? `${match[1].toUpperCase()}${BigInt(match[2]).toString(36).toUpperCase()}` : slug(id) || 'NUMERO-NR';
     return `${service}-${motif}-${date}-${serial}`;
   }
-  const bureau01Services={PROD:'Production',MBM:'Maintenance backbone moov',MR:'Maintenance réseau',DR:'Déplacement réseau',MNM:'Maintenance et normalisation MTN',DESS:'Dessaturation',LS:'LS'};
+  const bureau01Services={PROD:'Production',MBM:'Maintenance backbone moov',MFTTH:'Maintenance FTTH Moov Client',DR:'Déplacement réseau',MNM:'Maintenance et normalisation MTN',DESS:'Dessaturation',LS:'LS',CIDATA:'Cidata'};
   const allServices={...services,...bureau01Services};
   function physicalServices(profile){
     return profile?.role==='Gestionnaire'&&profile.controlScopes?.['ITC-B01']===true&&profile.controlScopes?.['ITC-B02']!==true?bureau01Services:services;
