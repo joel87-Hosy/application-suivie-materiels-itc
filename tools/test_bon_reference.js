@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict');
 const B=require('../assets/bon-reference');
-assert.deepEqual(Object.values(B.physicalServices({role:'Gestionnaire',controlScopes:{'ITC-B01':true}})),['Production','Maintenance backbone moov','Maintenance réseau','Déplacement réseau','Maintenance et normalisation MTN','Dessaturation','LS']);
+assert.deepEqual(Object.values(B.physicalServices({role:'Gestionnaire',controlScopes:{'ITC-B01':true}})),['Production','Maintenance backbone moov','Maintenance FTTH Moov Client','Déplacement réseau','Maintenance et normalisation MTN','Dessaturation','LS','Cidata']);
 assert.deepEqual(Object.keys(B.physicalServices({role:'Gestionnaire',controlScopes:{'ITC-B02':true}})),['B2B','DEP','MAIN']);
 assert.equal(B.physicalServices({role:'Technicien',controlScopes:{'ITC-B01':true}}),B.services);
 for(const code of Object.keys(B.bureau01Services))assert.ok(B.format({id:'TEST',serviceAbbreviation:code}).startsWith(code+'-'));
