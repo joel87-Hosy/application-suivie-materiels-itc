@@ -9862,6 +9862,7 @@
         if (!appData) return;
         const groups = getManagerCommandGroups();
         const data = groups.pending;
+        const bureau01OnlyManager = currentUser?.role === 'Gestionnaire' && currentUser?.controlScopes?.['ITC-B01'] === true && currentUser?.controlScopes?.['ITC-B02'] !== true;
         const statsByOp = {};
         data.forEach((d) => {
           const op = normalizeOperatorKey(d?.op || "ITC");
@@ -9915,6 +9916,7 @@
                                     <i class="fas fa-boxes-stacked"></i>
                                     ${d.status === 'REFUSEE VALIDATEUR' ? 'Corriger et renvoyer' : 'Réserver'}
                                 </button>
+                                ${bureau01OnlyManager && d.status === 'EN ATTENTE GESTIONNAIRE' ? `<button type="button" onclick="removeBureau01Command(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))" class="bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-red-800 transition inline-flex items-center gap-2"><i class="fas fa-trash"></i>Supprimer pour reprendre</button>` : ''}
                               </div>
                           </div>
                       `,
@@ -9944,6 +9946,21 @@
         d.status = "PRET";
         if (!(await save())) return;
         showSection("livraison");
+      }
+
+      async function removeBureau01Command(requestKey) {
+        const request = (appData?.demandes || []).find(item => item._dbKey === requestKey);
+        if (!request || currentUser?.role !== 'Gestionnaire' || currentUser?.controlScopes?.['ITC-B01'] !== true || currentUser?.controlScopes?.['ITC-B02'] === true) return alert('Action réservée au gestionnaire du Bureau 01.');
+        if (!confirm(`Supprimer le bon ${getBonReference(request)} pour permettre de reprendre la demande ? Cette suppression sera conservée dans la trace d’audit.`)) return;
+        try {
+          const { error } = await supabaseBackend.rpc('remove_bureau01_pending_request', { request_key: requestKey, expected_decision: request.validatorDecision ?? null });
+          if (error) throw error;
+          await refreshAppDataFromServer();
+          showSection('demandes-coordonnatrice');
+          alert('Bon supprimé. Le demandeur peut reprendre sa demande.');
+        } catch (error) {
+          alert(`Suppression impossible : ${error.message}`);
+        }
       }
 
       function openGestionnaireWorkflowDemande(id) {
