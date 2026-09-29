@@ -15,6 +15,12 @@ if (!publicKey) {
 if (!publicKey) throw new Error('Clé publique Supabase absente ou invalide. Configurez SUPABASE_PUBLISHABLE_KEY dans Render ou assets/supabase-public-config.js. Une clé secrète/service_role est interdite.');
 fs.mkdirSync('public', {recursive: true});
 for (const file of ['index.html', 'sw.js', 'offline.html', 'privacy.html', 'manifest.webmanifest']) fs.copyFileSync(file, 'public/' + file);
+// Give every deployment a distinct worker so installed apps can detect it even
+// when application code changed without a source-level service-worker edit.
+const deploymentRevision = String(process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || Date.now().toString(36)).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24);
+const workerPath = 'public/sw.js';
+const workerSource = fs.readFileSync(workerPath, 'utf8').replace(/^const CACHE_NAME = "[^"]+";/m, `const CACHE_NAME = "itc-gestion-materiels-${deploymentRevision}";`);
+fs.writeFileSync(workerPath, workerSource);
 fs.cpSync('assets', 'public/assets', {recursive: true});
 fs.writeFileSync('public/assets/supabase-public-config.js', 'window.ITCSupabasePublicConfig = '+JSON.stringify(config)+';\n');
 console.log('Public application copied to public/.');

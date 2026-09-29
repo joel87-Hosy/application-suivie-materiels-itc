@@ -1005,9 +1005,10 @@
         window.addEventListener("load", () => {
           navigator.serviceWorker
             .register("sw.js")
-            .then((registration) => {
-              registration.update().catch(() => {});
-              registration.addEventListener("updatefound", () => {
+              .then((registration) => {
+                registration.update().catch(() => {});
+                if (registration.waiting && navigator.serviceWorker.controller) showAppUpdateButton(true);
+                registration.addEventListener("updatefound", () => {
                 const worker = registration.installing;
                 if (!worker) return;
                 worker.addEventListener("statechange", () => {
@@ -1027,6 +1028,7 @@
       function showAppUpdateButton(isVisible) {
         const button = document.getElementById("app-update-button");
         if (button) button.classList.toggle("hidden", !isVisible);
+        document.getElementById("app-update-notice")?.classList.toggle("hidden", !isVisible);
       }
 
       async function updateInstalledApp() {
@@ -1046,7 +1048,15 @@
               const waitingWorker =
                 registration.waiting || registration.installing;
               if (waitingWorker) {
+                const activated = new Promise(resolve => {
+                  const timeout = setTimeout(resolve, 8000);
+                  navigator.serviceWorker.addEventListener("controllerchange", () => {
+                    clearTimeout(timeout);
+                    resolve();
+                  }, {once:true});
+                });
                 waitingWorker.postMessage({ type: "SKIP_WAITING" });
+                await activated;
               }
             }
           }
@@ -1071,6 +1081,9 @@
     </script>
 
     <div id="main-app" class="hidden">
+      <section id="app-update-notice" role="status" aria-live="polite" class="hidden fixed top-4 right-4 z-[100] max-w-md bg-indigo-950 text-white rounded-2xl shadow-2xl p-5 border border-indigo-300">
+        <div class="flex items-start gap-3"><i class="fas fa-cloud-arrow-down text-2xl text-cyan-300 mt-1"></i><div class="flex-1"><p class="font-black">Nouvelle version disponible</p><p class="text-sm mt-1 text-indigo-100">Actualisez l’application pour télécharger la dernière version.</p><button type="button" onclick="updateInstalledApp()" class="mt-3 bg-cyan-400 text-indigo-950 font-black rounded-xl px-4 py-2">Télécharger la mise à jour</button></div><button type="button" aria-label="Fermer" onclick="showAppUpdateButton(false)" class="text-white/80">✕</button></div>
+      </section>
       <div
         id="sidebar-overlay"
         onclick="toggleSidebar()"
