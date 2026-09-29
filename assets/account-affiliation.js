@@ -2,7 +2,7 @@
   'use strict';
   const offices={B01:'Bureau 01',B02:'Bureau 02',BOUAKE:'Bouaké','SAN-PEDRO':'San-Pédro',YAMOUSSOUKRO:'Yamoussoukro'};
   const services={B2B:'B2B',DEP:'Déploiement',MAIN:'Maintenance'};
-  const concerned=role=>['Technicien','Coordinateur','Coordinatrice','Gestionnaire','Validateur','Validatrice'].includes(role);
+  const concerned=role=>['Technicien','Coordinateur','Coordinatrice','Gestionnaire','Validateur','Validatrice','Superviseur Terrain'].includes(role);
   const office=user=>user?.office || user?.validationBureau || '';
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const officeList=user=>user?.offices?.length?user.offices:[office(user)].filter(Boolean);

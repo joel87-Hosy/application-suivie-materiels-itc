@@ -29,7 +29,7 @@ Deno.serve(async request=>{
   }
   if(!['Gestionnaire','Contrôleur','Coordinateur','Coordinatrice','Superviseur Terrain','Technicien','Validateur','Validatrice'].includes(c.role))return json({error:'Le rôle choisi pour le nouveau compte n’est pas autorisé.'},400);
   if(typeof c.email!=='string'||!/^\S+@\S+\.\S+$/.test(c.email)||typeof c.name!=='string'||!c.name.trim()||c.name.length>120||typeof c.password!=='string'||c.password.length<12||c.password.length>128)return json({error:'Nom, email ou mot de passe invalide (12 caractères minimum).'},400);
-  const affiliated=['Gestionnaire','Coordinateur','Coordinatrice','Technicien','Validateur','Validatrice'].includes(c.role);
+  const affiliated=['Gestionnaire','Coordinateur','Coordinatrice','Technicien','Validateur','Validatrice','Superviseur Terrain'].includes(c.role);
   const officeCodes=c.offices??[c.office],serviceCodes=c.services??[c.serviceAbbreviation],coordinatorIds=c.allowedCoordinatorIds??[],validatorIds=c.allowedValidatorIds??[];
   if(affiliated && (!Array.isArray(officeCodes)||!officeCodes.length||officeCodes.length>5||officeCodes.some((v:unknown)=>!['B01','B02','BOUAKE','SAN-PEDRO','YAMOUSSOUKRO'].includes(v as string))||!Array.isArray(serviceCodes)||!serviceCodes.length||serviceCodes.length>3||serviceCodes.some((v:unknown)=>!['B2B','DEP','MAIN'].includes(v as string))))return json({error:'Choisissez les bureaux et services du compte.'},400);
   if([coordinatorIds,validatorIds].some(ids=>!Array.isArray(ids)||ids.length>100||ids.some((id:unknown)=>typeof id!=='string'||!id||id.length>200)))return json({error:'Liste de coordinateurs ou validateurs invalide.'},400);

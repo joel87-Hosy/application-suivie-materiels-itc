@@ -2220,7 +2220,7 @@
         return BonReference.format(bon,{data:appData});
       }
       function bonServiceField(id, selected='') {
-        if (id === 's-service' && ['Coordinateur','Coordinatrice'].includes(currentUser?.role) && window.AccountAffiliation) return AccountAffiliation.requestFields(currentUser,'s')+AccountAffiliation.serviceField(currentUser,id);
+        if (id === 's-service' && (['Coordinateur','Coordinatrice'].includes(currentUser?.role) || (currentUser?.role === 'Superviseur Terrain' && currentSectionId === 'coord-creation-directe')) && window.AccountAffiliation) return AccountAffiliation.requestFields(currentUser,'s')+AccountAffiliation.serviceField(currentUser,id);
         const services = id === 's-service' ? BonReference.physicalServices(currentUser) : BonReference.services;
         return `<label class="block text-xs font-bold">Service émetteur<select id="${id}" required class="w-full border-2 p-3 rounded-xl text-xs bg-white"><option value="">Choisir le service</option>${Object.entries(services).map(([code,name])=>`<option value="${code}" ${code===selected?'selected':''}>${escapeHtml(name)} (${code})</option>`).join('')}</select></label>`;
       }
