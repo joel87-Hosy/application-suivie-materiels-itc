@@ -2674,7 +2674,7 @@
         window.StockSubstocks.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
           onClose:()=>{if(currentSectionId==='cockpit')renderCockpit(document.getElementById('app-container'));},
           refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());}});
-        window.ValidatorWorkflow.setup({profile:()=>secureStore.profile,uid:()=>secureStore.uid,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
+        window.ValidatorWorkflow.setup({profile:()=>secureStore.profile,uid:()=>secureStore.uid,client:()=>supabaseBackend,data:()=>appData,refresh:async()=>{const generation=secureStore.generation;await (secureStore.readCollections?secureStore.readCollections(['demandes'],generation):secureStore.read(generation,{notify:false}));if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());},navigate:showSection,readNotifications:markNotificationsAsRead});
         window.ValidatorWorkflow.menu();
         window.CableOffcuts.setup({profile: () => secureStore.profile});
         let chuteMenu = document.getElementById("menu-cable-offcuts");
@@ -8649,7 +8649,7 @@
         try {
           if (pendingSave) await pendingSave;
           if (secureStore.generation !== generation) return;
-          await secureStore.read(generation, {notify:false});
+          await (secureStore.readCollections ? secureStore.readCollections(['demandes','techDemandes'], generation) : secureStore.read(generation, {notify:false}));
           if (secureStore.generation !== generation || currentSectionId !== 'tech-mes-demandes') return;
           appData = normalizeAppData(secureStore.value());
           renderTechMesDemandes(container);
@@ -8819,7 +8819,8 @@
         try {
           if (pendingSave) await pendingSave;
           if (secureStore.generation !== generation) return;
-          if (typeof secureStore.read === 'function') await secureStore.read(generation, {notify:false});
+          if (typeof secureStore.readCollections === 'function') await secureStore.readCollections(['demandes','sorties'], generation);
+          else if (typeof secureStore.read === 'function') await secureStore.read(generation, {notify:false});
           if (secureStore.generation !== generation || secureStore.uid !== sessionUid || currentSectionId !== 'bons-signes' || !currentUser) return;
           appData = normalizeAppData(secureStore.value());
           renderSignedBonsHistory(container);
@@ -9833,7 +9834,7 @@
         try {
           if (pendingSave) await pendingSave;
           if (secureStore.generation !== generation) return;
-          await secureStore.read(generation, {notify:false});
+          await (secureStore.readCollections ? secureStore.readCollections(['demandes'], generation) : secureStore.read(generation, {notify:false}));
           if (secureStore.generation !== generation || currentSectionId !== 'demandes-coordonnatrice') return;
           appData = normalizeAppData(secureStore.value());
           renderDemandesGestionnaire(container);

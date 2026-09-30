@@ -84,6 +84,33 @@
       this.raw.settings = Object.fromEntries((settingRows || []).map(row => [row.setting_key, row.value]));
       if (this.ready && notify) this.onChange(this.value());
     }
+    async readCollections(names, generation, {notify = false} = {}) {
+      if (!this.ready || !this.profile) throw new Error('Données non chargées. Reconnectez-vous.');
+      const company = this.profile.company_id;
+      const results = await Promise.all([...new Set(names)].map(async name => {
+        const records = [];
+        for (;;) {
+          if (generation !== this.generation) throw new Error('Session remplacée.');
+          let query = this.client.from('app_records').select('*').eq('collection', name)
+            .order('record_key', {ascending:true}).range(records.length, records.length + 499);
+          if (this.profile.role !== 'SUPER_ADMIN') query = query.eq('company_id', company);
+          const {data, error} = await query;
+          if (error) throw error;
+          if (!data?.length) break;
+          records.push(...data);
+        }
+        return [name, records];
+      }));
+      if (generation !== this.generation) return;
+      for (const [name, records] of results) {
+        this.raw[name] = Object.fromEntries(records.map(row => [row.record_key, row.payload]));
+        if (name === 'notifications') {
+          this.notificationCompanies = Object.fromEntries(records.map(row => [row.record_key, row.company_id]));
+          for (const key of this.readNotificationKeys) if (this.raw[name][key]) this.raw[name][key] = {...this.raw[name][key], lu:true};
+        }
+      }
+      if (notify) this.onChange(this.value());
+    }
     async readAllRecords(generation) {
       const records = [], seen = new Set();
       const company = this.profile.company_id, isAdmin = this.profile.role === 'SUPER_ADMIN';
