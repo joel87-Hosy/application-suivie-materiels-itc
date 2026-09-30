@@ -8421,6 +8421,53 @@
 
       async function createCompanyUserFromSupervisor(event) { return CompanyUsers.create(event); }
 
+      function getCockpitRuptureRows() {
+        const allOperators = ['ITC-B01','ITC-B02','OCI','CIC','MOOV','MTN','ITC-BOUAKE','ITC-SAN-PEDRO','ITC-YAMOUSSOUKRO'];
+        const operators = isStockScopedUser(currentUser)
+          ? allOperators.filter(op => getManagedOpsNormalized(currentUser).includes(op))
+          : allOperators;
+        const allowed = new Set(operators.map(normalizeOperatorKey));
+        const byKey = new Map();
+        (appData?.stock || []).forEach(item => {
+          const op = normalizeOperatorKey(item.op), label = String(item.label || '').trim(), qty = parseInt(item.qty,10) || 0;
+          if (!label || !allowed.has(op) || qty >= 5) return;
+          const key = `${op}::${label.toUpperCase()}`;
+          if (!byKey.has(key)) byKey.set(key,{op,label,type:String(item.type || 'NON DÉFINI'),qty});
+        });
+        return [...byKey.values()].sort((a,b)=>a.op.localeCompare(b.op)||a.label.localeCompare(b.label));
+      }
+
+      function openCockpitRuptureReport() {
+        const rows = getCockpitRuptureRows();
+        const modal = document.createElement('dialog');
+        modal.className = 'p-0 rounded-2xl w-[min(1000px,95vw)] max-h-[90vh] shadow-2xl backdrop:bg-slate-950/60';
+        modal.innerHTML = `<div class="bg-white rounded-2xl overflow-hidden"><header class="bg-red-700 text-white p-5 flex items-center justify-between gap-4"><div><p class="text-xs uppercase tracking-widest opacity-80">Rapport de stock</p><h2 class="text-xl font-black">Alertes rupture (${rows.length})</h2><p class="text-sm">Articles dont la quantité est inférieure à 5 unités.</p></div><button type="button" data-close aria-label="Fermer" class="border border-white/50 rounded-lg px-3 py-2">Fermer</button></header><div class="p-5"><div class="flex flex-wrap gap-3 mb-4"><button type="button" data-export="excel" class="bg-emerald-700 text-white rounded-lg px-4 py-2 font-bold"><i class="fas fa-file-excel mr-2"></i>Exporter Excel</button><button type="button" data-export="pdf" class="bg-rose-700 text-white rounded-lg px-4 py-2 font-bold"><i class="fas fa-file-pdf mr-2"></i>Exporter PDF</button></div><div class="overflow-auto max-h-[55vh]"><table class="w-full text-sm"><thead class="sticky top-0 bg-slate-100"><tr><th class="text-left p-3">Opérateur</th><th class="text-left p-3">Désignation</th><th class="text-left p-3">Type</th><th class="text-right p-3">Quantité disponible</th><th class="text-left p-3">Alerte</th></tr></thead><tbody>${rows.map(r=>`<tr class="border-b"><td class="p-3">${escapeHtml(getOperatorMeta(r.op).label)}</td><td class="p-3 font-bold">${escapeHtml(r.label)}</td><td class="p-3">${escapeHtml(r.type)}</td><td class="p-3 text-right font-black text-red-700">${r.qty}</td><td class="p-3 text-red-700">${r.qty===0?'Rupture':'Stock faible'}</td></tr>`).join('') || '<tr><td colspan="5" class="p-6 text-center text-slate-500">Aucun article en alerte.</td></tr>'}</tbody></table></div></div></div>`;
+        document.body.append(modal);
+        modal.showModal();
+        modal.querySelector('[data-close]').onclick=()=>modal.close();
+        modal.addEventListener('click',event=>{if(event.target===modal)modal.close();});
+        modal.addEventListener('close',()=>modal.remove(),{once:true});
+        modal.querySelector('[data-export="excel"]').onclick=()=>exportCockpitRuptureExcel();
+        modal.querySelector('[data-export="pdf"]').onclick=()=>exportCockpitRupturePdf();
+      }
+
+      function exportCockpitRuptureExcel() {
+        const rows = getCockpitRuptureRows();
+        const worksheet = XLSX.utils.json_to_sheet(rows.map(r=>({'Opérateur':getOperatorMeta(r.op).label,'Désignation':r.label,'Type':r.type,'Quantité disponible':r.qty,'Seuil':5,'État':r.qty===0?'Rupture':'Stock faible'})));
+        worksheet['!cols']=[{wch:22},{wch:36},{wch:24},{wch:20},{wch:12},{wch:18}];
+        const workbook=XLSX.utils.book_new();XLSX.utils.book_append_sheet(workbook,worksheet,'Alertes rupture');
+        XLSX.writeFile(workbook,`Rapport_alertes_rupture_${new Date().toISOString().slice(0,10)}.xlsx`);
+      }
+
+      function exportCockpitRupturePdf() {
+        const rows = getCockpitRuptureRows();
+        const doc = new window.jspdf.jsPDF({orientation:'landscape'});
+        doc.setFontSize(16);doc.text('Rapport detaille des alertes rupture',14,16);
+        doc.setFontSize(10);doc.text(`Seuil : moins de 5 unites | Articles : ${rows.length} | ${new Date().toLocaleString('fr-FR')}`,14,23);
+        doc.autoTable({startY:29,head:[['Operateur','Designation','Type','Quantite disponible','Alerte']],body:rows.map(r=>[getOperatorMeta(r.op).label,r.label,r.type,String(r.qty),r.qty===0?'Rupture':'Stock faible']),styles:{fontSize:9},headStyles:{fillColor:[185,28,28]}});
+        doc.save(`Rapport_alertes_rupture_${new Date().toISOString().slice(0,10)}.pdf`);
+      }
+
       function renderCockpit(container) {
         if (!currentUser?.role) {
           container.textContent = 'Chargement de votre compte…';
@@ -8470,11 +8517,9 @@
           }
         } catch (e) {}
 
+        const normalizedTargets = (operatorsForTotals || []).map(normalizeOperatorKey);
         const perOperatorAlerts = {};
         try {
-          const normalizedTargets = (operatorsForTotals || []).map(
-            normalizeOperatorKey,
-          );
           normalizedTargets.forEach(
             (nt) => (perOperatorAlerts[nt] = new Set()),
           );
@@ -8491,12 +8536,17 @@
           });
         } catch (e) {}
 
-        const alertLabels = Array.from(
-          new Set(
-            Object.values(perOperatorAlerts).flatMap((s) => Array.from(s)),
-          ),
-        );
-        const alerts = alertLabels.length;
+        const ruptureItemsByKey = new Map();
+        stock.forEach((item) => {
+          const op = normalizeOperatorKey(item.op);
+          const label = String(item.label || '').trim();
+          const qty = parseInt(item.qty, 10) || 0;
+          if (!label || !normalizedTargets.includes(op) || qty >= 5) return;
+          const key = `${op}::${label.toUpperCase()}`;
+          if (!ruptureItemsByKey.has(key)) ruptureItemsByKey.set(key, {op,label,type:String(item.type || 'NON DÉFINI'),qty});
+        });
+        const ruptureItems = [...ruptureItemsByKey.values()].sort((a,b) => a.op.localeCompare(b.op) || a.label.localeCompare(b.label));
+        const alerts = ruptureItems.length;
 
         const totalsByOp = operatorsForTotals.map((op) => ({
           op,
@@ -8560,7 +8610,7 @@
           `<p class="text-3xl text-slate-800 mt-1">${pending}</p></div>`,
         );
         parts.push(
-          '<div class="dashboard-hover-block dashboard-hover-alert bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500"><p class="text-[8px] text-slate-400 uppercase font-black tracking-widest flex items-center gap-2"><i class="fas fa-triangle-exclamation text-red-500"></i>ALERTES RUPTURE</p>',
+          '<div role="button" tabindex="0" onclick="openCockpitRuptureReport()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCockpitRuptureReport()}" aria-label="Afficher et exporter le détail des alertes rupture" class="dashboard-hover-block dashboard-hover-alert cursor-pointer bg-white p-6 rounded-3xl shadow-lg border-t-4 border-red-500 focus-visible:outline focus-visible:outline-4 focus-visible:outline-red-300"><p class="text-[8px] text-slate-400 uppercase font-black tracking-widest flex items-center gap-2"><i class="fas fa-triangle-exclamation text-red-500"></i>ALERTES RUPTURE <span class="ml-auto text-[8px] text-red-600 normal-case">Cliquer pour le détail</span></p>',
         );
         parts.push(`<p class="text-3xl text-red-600 mt-1">${alerts}</p>`);
         parts.push('<div class="text-[10px] text-slate-600 mt-2 space-y-1">');
