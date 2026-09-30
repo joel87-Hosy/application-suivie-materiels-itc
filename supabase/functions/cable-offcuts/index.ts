@@ -23,22 +23,32 @@ Deno.serve(async request => {
     const actor = { ...profile.profile, uid: profile.firebase_uid || auth.user.id, user_id: auth.user.id, email: auth.user.email, company_id: profile.company_id, role: profile.role, is_active: profile.is_active, control_scopes: profile.control_scopes };
     const command = await request.json().catch(() => ({}));
     const workflowEnabled=true;
-    const {data: managerRows,error: managerError}=await admin.from('app_profiles').select('user_id,role,is_active,company_id,control_scopes,profile').eq('company_id',profile.company_id).eq('role','Gestionnaire').eq('is_active',true);
+    const [managerResult,stockResult,userResult,sortieResult]=await Promise.all([
+      admin.from('app_profiles').select('user_id,role,is_active,company_id,control_scopes,profile').eq('company_id',profile.company_id).eq('role','Gestionnaire').eq('is_active',true),
+      admin.from('app_records').select('record_key,payload').eq('collection','stock').eq('company_id',profile.company_id),
+      admin.from('app_records').select('record_key,payload').eq('collection','users').eq('company_id',profile.company_id),
+      admin.from('app_records').select('record_key,payload').eq('collection','sorties').eq('company_id',profile.company_id),
+    ]);
+    const {data:managerRows,error:managerError}=managerResult;
     if(managerError)throw managerError;
     const assignedManager=(managerRows||[]).find(row=>row.user_id===command.managerUid);
-    const { data: stockRows } = await admin.from('app_records').select('record_key,payload').eq('collection', 'stock').eq('company_id', profile.company_id);
-    const { data: userRows } = await admin.from('app_records').select('record_key,payload').eq('collection', 'users').eq('company_id', profile.company_id);
-    const { data: sortieRows } = await admin.from('app_records').select('record_key,payload').eq('collection', 'sorties').eq('company_id', profile.company_id);
+    const {data:stockRows}=stockResult;
+    const {data:userRows}=userResult;
+    const {data:sortieRows}=sortieResult;
     const stock = (stockRows || []).map(row => ({ ...row.payload, _dbKey: row.record_key }));
     const users = (userRows || []).map(row => ({ ...row.payload, _dbKey: row.record_key }));
     const sorties = (sortieRows || []).map(row => ({ ...row.payload, _dbKey: row.record_key }));
     if (command.action === 'overview') {
       const ops = new Set(stock.map(row => row.op === 'ITC' ? 'ITC-B01' : row.op).filter(Boolean));
-      const {data: locations,error: locationsError}=await admin.from('stock_locations').select('op').eq('company_id',profile.company_id);
+      const [locationsResult,storesResult]=await Promise.all([
+        admin.from('stock_locations').select('op').eq('company_id',profile.company_id),
+        admin.from('cable_offcut_stores').select('op,state').eq('company_id',profile.company_id),
+      ]);
+      const {data:locations,error:locationsError}=locationsResult;
       if(locationsError)throw locationsError;
       for(const location of locations||[])ops.add(location.op);
       Object.keys(profile.control_scopes || {}).forEach(op => ops.add(op));
-      const { data: stores } = await admin.from('cable_offcut_stores').select('op,state').eq('company_id', profile.company_id);
+      const {data:stores}=storesResult;
       const result: Record<string, any> = {};
       for (const row of stores || []) if (canRead(actor, row.op)) {
         const state = structuredClone(row.state || {}); delete state.commands;

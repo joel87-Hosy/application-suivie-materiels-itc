@@ -2528,14 +2528,13 @@
           ++authStateGeneration;
           logoutRequested = false;
           try { sessionStorage.removeItem('itc_signed_out'); } catch (_) {}
-          let authUser;
+          let authUser, firebaseSync = Promise.resolve();
           if (useSupabaseBackend) {
             const result = await supabaseBackend.auth.signInWithPassword({email, password});
             if (result.error) throw result.error;
             authUser = result.data.user;
             // Supabase is authoritative. New accounts do not require a legacy Firebase identity.
-            try { await firebase.auth().signInWithEmailAndPassword(email, password); }
-            catch (_) { await firebase.auth().signOut(); }
+            firebaseSync = firebase.auth().signInWithEmailAndPassword(email, password).catch(() => firebase.auth().signOut());
           } else {
             const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
             authUser = userCredential.user;
@@ -2543,7 +2542,7 @@
           // Après connection, forcer la lecture depuis le serveur puis
           // retrouver le profil dans les données fraîchement chargées.
           try {
-            await refreshAppDataFromServer({ render: false });
+            await Promise.all([refreshAppDataFromServer({ render: false }), firebaseSync]);
           } catch (e) {
             await signOutActiveAuth();
             throw e;
@@ -9156,6 +9155,8 @@
         if (!container) return;
 
         const selectedOps = getCheckedTechOperators();
+        const isBureau02B2B = AccountAffiliation.officeList(currentUser).includes('B02') && document.getElementById('t-service')?.value === 'B2B';
+        const visibleOps = new Set(selectedOps);
         const previousByKey = new Map(
           (previousItems || []).map((item) => [
             getTechMaterialRowKey(item.op, item.label),
@@ -9163,8 +9164,9 @@
           ]),
         );
         const stockRows = ((appData && appData.stock) || [])
-          .filter((item) => selectedOps.includes(normalizeOperatorKey(item.op)))
-          .filter((item) => (Number(item.qty) || 0) > 0)
+          .filter((item) => visibleOps.has(normalizeOperatorKey(item.op)))
+          .filter((item) => (isBureau02B2B ? Number(item.subStocks?.production) : Number(item.qty)) > 0)
+          .map(item => ({...item, _techAvailable: isBureau02B2B ? Number(item.subStocks.production) : Number(item.qty)}))
           .sort((a, b) => {
             const opCompare = normalizeOperatorKey(a.op).localeCompare(normalizeOperatorKey(b.op));
             if (opCompare !== 0) return opCompare;
@@ -9190,13 +9192,13 @@
                     const key = getTechMaterialRowKey(op, label);
                     const previousQty = previousByKey.get(key);
                     const checked = previousByKey.has(key);
-                    const available = Number(item.qty) || 0;
+                    const available = Number(item._techAvailable) || 0;
                     return `
                       <div class="tech-stock-row grid grid-cols-[auto_1fr_92px] gap-3 items-center bg-white border border-slate-200 rounded-xl p-3" data-op="${escapeHtml(op)}" data-label="${escapeHtml(label)}" data-available="${available}">
                         <input type="checkbox" class="tech-stock-check h-4 w-4 accent-indigo-600" ${checked ? "checked" : ""} onchange="const qtyInput = this.closest('.tech-stock-row').querySelector('.tech-stock-qty'); if (this.checked && !qtyInput.value) qtyInput.value = 1;" />
                         <div class="min-w-0">
                           <p class="text-[9px] font-black uppercase text-slate-800 truncate">${escapeHtml(label)}</p>
-                          <p class="text-[7px] uppercase text-slate-400">${escapeHtml(getOperatorMeta(op).label)} | disponible: ${available}</p>
+                          <p class="text-[7px] uppercase text-slate-400">${escapeHtml(getOperatorMeta(op).label)} | disponible: ${available}${isBureau02B2B ? ' (sous-stock Production)' : ''}</p>
                         </div>
                         <input type="number" class="tech-stock-qty border-2 rounded-lg p-2 text-[9px] font-black text-center" min="1" max="${available}" value="${previousQty || ""}" placeholder="QTE" oninput="this.closest('.tech-stock-row').querySelector('.tech-stock-check').checked = Number(this.value) > 0;" />
                       </div>`;
@@ -9226,6 +9228,7 @@
 
       function validateTechRequestedQuantities(items) {
         const errors = [];
+        const productionOnly = AccountAffiliation.officeList(currentUser).includes('B02') && document.getElementById('t-service')?.value === 'B2B';
         (items || []).forEach((item) => {
           const requestedQty = Number(item.qty) || 0;
           const stockItem = ((appData && appData.stock) || []).find(
@@ -9234,7 +9237,7 @@
               String(stock.label || "").trim().toUpperCase() ===
                 String(item.label || "").trim().toUpperCase(),
           );
-          const available = Number(stockItem?.qty) || 0;
+          const available = Number(productionOnly && ['ITC-B02','MOOV'].includes(normalizeOperatorKey(item.op)) ? stockItem?.subStocks?.production : stockItem?.qty) || 0;
           if (!stockItem) {
             errors.push(`L'article ${item.label} n'existe pas en stock pour ${getOperatorMeta(item.op).label}`);
           } else if (requestedQty > available) {

@@ -112,27 +112,31 @@
       if (notify) this.onChange(this.value());
     }
     async readAllRecords(generation) {
-      const records = [], seen = new Set();
       const company = this.profile.company_id, isAdmin = this.profile.role === 'SUPER_ADMIN';
-      // PostgREST caps a response (normally 1000 rows). Notifications and
-      // histories must not crowd stock cards out of the application snapshot.
-      for (;;) {
-        if (generation !== this.generation) throw new Error('Session remplacée.');
-        let query = this.client.from('app_records').select('*')
-          .order('collection', {ascending:true}).order('record_key', {ascending:true})
-          .range(records.length, records.length + 499);
-        if (!isAdmin) query = query.eq('company_id', company);
-        const {data, error} = await query;
-        if (error) throw error;
-        if (!data?.length) return records;
-        for (const row of data) {
-          const identity = JSON.stringify([row.collection, row.record_key]);
-          if (seen.has(identity)) throw new Error('Les données ont changé pendant le chargement. Actualisez la page.');
-          seen.add(identity); records.push(row);
+      // Fetch collections concurrently so a large history cannot delay the
+      // stock, users, and requests needed to enter the application.
+      const groups = await Promise.all(collections.map(async collection => {
+        const records = [];
+        for (;;) {
+          if (generation !== this.generation) throw new Error('Session remplacée.');
+          let query = this.client.from('app_records').select('*').eq('collection', collection)
+            .order('record_key', {ascending:true}).range(records.length, records.length + 499);
+          if (!isAdmin) query = query.eq('company_id', company);
+          const {data, error} = await query;
+          if (error) throw error;
+          if (!data?.length) break;
+          records.push(...data);
         }
-        // Advance by the number actually received, including servers whose
-        // configured row limit is lower than the requested page size.
+        return records;
+      }));
+      if (generation !== this.generation) throw new Error('Session remplacée.');
+      const records = groups.flat(), seen = new Set();
+      for (const row of records) {
+        const identity = JSON.stringify([row.collection, row.record_key]);
+        if (seen.has(identity)) throw new Error('Les données ont changé pendant le chargement. Actualisez la page.');
+        seen.add(identity);
       }
+      return records;
     }
     deny(error, generation) {
       if (generation !== this.generation) return;
