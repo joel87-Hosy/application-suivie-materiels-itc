@@ -1005,20 +1005,37 @@
         window.addEventListener("load", () => {
           navigator.serviceWorker
             .register("sw.js")
-              .then((registration) => {
-                registration.update().catch(() => {});
-                if (registration.waiting && navigator.serviceWorker.controller) showAppUpdateButton(true);
-                registration.addEventListener("updatefound", () => {
+            .then((registration) => {
+              const existingController = navigator.serviceWorker.controller;
+              const checkForAppUpdate = () => {
+                if (document.visibilityState === 'hidden') return;
+                registration.update().then(() => {
+                  if (existingController && (registration.waiting || registration.installing?.state === 'installed')) {
+                    showAppUpdateButton(true);
+                  }
+                }).catch(() => {});
+              };
+
+              registration.addEventListener("updatefound", () => {
                 const worker = registration.installing;
                 if (!worker) return;
                 worker.addEventListener("statechange", () => {
-                  if (
-                    worker.state === "installed" &&
-                    navigator.serviceWorker.controller
-                  ) {
+                  if (existingController && ['installed','activating','activated'].includes(worker.state)) {
                     showAppUpdateButton(true);
                   }
                 });
+              });
+              navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (existingController && navigator.serviceWorker.controller !== existingController) showAppUpdateButton(true);
+              });
+
+              if (registration.waiting && existingController) showAppUpdateButton(true);
+              checkForAppUpdate();
+              window.setInterval(checkForAppUpdate, 60_000);
+              window.addEventListener('focus', checkForAppUpdate);
+              window.addEventListener('online', checkForAppUpdate);
+              document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') checkForAppUpdate();
               });
             })
             .catch((error) => console.warn("Service worker non actif", error));
@@ -12228,7 +12245,6 @@
 
       // Appelé après chaque connexion réussie — réinitialise et ouvre l'assistant
       function onUserLogin() {
-        showAppUpdateButton(false);
         refreshPushNotifications?.();
         stopVoiceAssistant();
         // Réinitialiser l'historique avec le message d'accueil personnalisé
