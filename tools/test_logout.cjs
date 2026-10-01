@@ -11,7 +11,6 @@ function setup({push='pending',auth='pending',cleanupThrows=false}={}){
   stopVoiceAssistant:()=>{if(cleanupThrows)throw Error('voice failed')},secureStore:{stop:()=>events.push('stop-store')},
   window:{disablePushNotifications:()=>push==='reject'?Promise.reject(Error('push failed')):new Promise(()=>{}),ITCSupabaseConfig:{clearLocalSession:()=>events.push('clear-token')},ManagerLocations:{stop:()=>events.push('stop-locations')}},
   supabaseBackend:{auth:{signOut:options=>{events.push('supabase-'+options.scope);return auth==='reject'?Promise.resolve({error:Error('offline')}):pending.promise}}},
-  firebase:{auth:()=>({signOut:async()=>events.push('firebase')})},
  };
  vm.createContext(context);vm.runInContext(['signOutActiveAuth','logout'].map(extract).join('\n'),context);
  return {context,elements,events,pending,storage};
@@ -23,10 +22,10 @@ function setup({push='pending',auth='pending',cleanupThrows=false}={}){
  assert.equal(t.elements['app-container'].innerHTML,'');assert.equal(t.elements['login-password'].value,'');
  assert.equal(t.context.currentUser,null);assert.equal(t.context.authStateGeneration,2);assert.equal(t.storage.get('itc_signed_out'),'1');
  assert.equal(t.context.logout(),task,'double click reuses pending logout');
- await Promise.resolve();assert.ok(t.events.includes('supabase-local'));assert.ok(t.events.includes('firebase'),'push cannot block either auth provider');
+ await Promise.resolve();assert.ok(t.events.includes('supabase-local'),'Supabase session is closed');
  t.pending.resolve({error:null});await task;assert.ok(t.events.includes('clear-token'));assert.equal(t.context.logoutPromise,null);
  const offline=setup({push:'reject',auth:'reject'});await offline.context.logout();
- assert.equal(offline.elements['main-app'].classList.hidden,true);assert.ok(offline.events.includes('clear-token'));assert.ok(offline.events.includes('firebase'));
+ assert.equal(offline.elements['main-app'].classList.hidden,true);assert.ok(offline.events.includes('clear-token'));
  // A pending user lookup cannot reopen the data store after logout.
  const lookup=deferred();let connections=0;
  const stale={authStateGeneration:1,logoutRequested:false,getActiveAuthUser:()=>lookup.promise,secureStore:{connect:()=>{connections++;}}};

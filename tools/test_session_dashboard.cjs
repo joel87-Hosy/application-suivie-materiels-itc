@@ -1,7 +1,8 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const source=fs.readFileSync('index.html','utf8');
 function extract(name){const start=source.search(new RegExp('^      (?:async )?function '+name+'\\(','m'));assert.ok(start>=0,name);return source.slice(start,source.indexOf('\n      }',start)+8);}
-const auth=source.slice(source.indexOf('      let authStateGeneration = 0;'),source.indexOf('      if (useSupabaseBackend) {',source.indexOf('      let authStateGeneration = 0;')));
+const authStart=source.indexOf('      let authStateGeneration = 0;');
+const auth=source.slice(authStart,source.indexOf('      {\n        supabaseBackend.auth.onAuthStateChange',authStart));
 (async()=>{
  const elements=Object.fromEntries(['app-container','main-app','login-screen'].map(id=>[id,{innerHTML:'old dashboard',textContent:'',classList:{add(){},remove(){}}}]));
  let profile,authUser,fail=false,logouts=0;const renders=[];

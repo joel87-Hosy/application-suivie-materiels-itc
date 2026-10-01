@@ -6,25 +6,24 @@ function setup(team = true) {
   const updates = [], calls = [];
   const inputs = {};
   for (const id of ['profile-name', 'profile-phone', 'profile-contact-email', 'profile-status', 'profile-password-status', 'profile-current-password', 'profile-new-password', 'profile-confirm-password']) inputs[id] = {value: '', textContent: ''};
-  const user = {uid: 'team-uid', email: 'team@example.com', reauthenticateWithCredential: async () => calls.push('reauth'), updatePassword: async () => calls.push('password')};
-  const auth = () => ({currentUser: user});
-  auth.EmailAuthProvider = {credential: (email, password) => ({email, password})};
-  const profile = {uid: user.uid, name: 'Flash-Abonné', role: 'Technicien', username: team ? 'flash-abonne' : undefined};
-  const context = {firebase: {auth}, currentUser: {...profile}, appData: {users: [{...profile, _dbKey: "37"}]}, document: {getElementById: id => inputs[id]}, db: {ref: path => ({once: async () => ({val: () => ({'37': profile})}), update: async changes => updates.push({path, changes})})}, updateUserInfo() {}, escapeHtml: text => String(text).replace(/</g, '&lt;')};
-  context.window = {};
+  const user = {uid: 'team-uid', email: 'team@example.com'};
+  const client = {auth:{getUser:async()=>({data:{user}}),signInWithPassword:async({password})=>{if(password==='wrong')return {error:{code:'auth/wrong-password'}};calls.push('reauth');return {};},updateUser:async()=>{calls.push('password');return {}; }},rpc:async(name,{changes})=>{if(client.failRpc)throw new Error('offline');updates.push({name,changes});return {};}};
+  const profile = {uid: user.uid, email:user.email, name: 'Flash-Abonné', role: 'Technicien', username: team ? 'flash-abonne' : undefined};
+  const context = {currentUser: {...profile}, appData: {users: [{...profile}]}, document: {getElementById: id => inputs[id]}, updateUserInfo() {}, escapeHtml: text => String(text).replace(/</g, '&lt;')};
+  context.window = {ITCSupabaseConfig:{client}};
   vm.createContext(context); vm.runInContext(source, context);
   const button = {disabled: false};
   const form = {querySelector: () => button, querySelectorAll: () => [], reset: () => calls.push('reset')};
   const event = {preventDefault() {}, target: form};
-  return {context, inputs, updates, calls, event, user};
+  return {context, inputs, updates, calls, event, user, client};
 }
 (async () => {
   const team = setup();
   team.inputs['profile-name'].value = 'Kouamé Jean';
   await team.context.saveMonProfil(team.event);
   assert.equal(team.context.currentUser.name, 'Flash-Abonné');
+  assert.equal(team.updates[0].name, 'update_own_profile');
   assert.equal(team.updates[0].changes.contact_name, 'Kouamé Jean');
-  assert.equal(team.updates[0].path, 'itc_data/users/37');
   assert.equal(team.updates[0].changes.role, undefined);
   const personal = setup(false);
   personal.inputs['profile-name'].value = 'Jean';
@@ -53,15 +52,10 @@ function setup(team = true) {
   const partial = setup();
   partial.inputs['profile-current-password'].value = 'old-password';
   partial.inputs['profile-new-password'].value = partial.inputs['profile-confirm-password'].value = 'new-password';
-  partial.context.db.ref = () => ({once: async () => ({val: () => ({37: {uid: 'team-uid'}})}), update: async () => {throw new Error('offline');}});
+  partial.client.failRpc = true;
   await partial.context.changeMonProfilPassword(partial.event);
   assert.match(partial.inputs['profile-password-status'].textContent, /a été modifié/);
   const migrated = setup(false);
-  migrated.context.window.ITCSupabaseConfig = {client:{auth:{
-    getUser:async()=>({data:{user:{email:'validator@example.com'}}}),
-    signInWithPassword:async()=>{migrated.calls.push('reauth');return {};},
-    updateUser:async()=>{migrated.calls.push('password');return {};},
-  },rpc:async(name,{changes})=>{assert.equal(name,'update_own_profile');migrated.updates.push({changes});return {};}}};
   migrated.inputs['profile-current-password'].value='old-password';
   migrated.inputs['profile-new-password'].value=migrated.inputs['profile-confirm-password'].value='new-password';
   await migrated.context.changeMonProfilPassword(migrated.event);
