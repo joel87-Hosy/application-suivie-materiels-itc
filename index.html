@@ -1691,7 +1691,7 @@
     <script src="assets/request-routing.js"></script>
     <script src="assets/company-users.js?v=20261005-storekeeper-role-db"></script>
     <script src="assets/notification-tabs.js?v=20260923-receipts"></script>
-    <script src="assets/supabase-store.js?v=20260923-receipts"></script>
+    <script src="assets/supabase-store.js?v=20261005-session-dedupe"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
     <script src="assets/bon-scanner.js?v=20261001-storekeeper-issue"></script>
@@ -2138,6 +2138,7 @@
             }
           })
           .catch((err) => {
+            if (generation !== authStateGeneration || logoutRequested) throw err;
             console.warn("Erreur refreshAppDataFromServer", err);
             throw err;
           });
@@ -11638,6 +11639,9 @@
 
       let authStateGeneration = 0;
       const handleActiveAuthState = async (user) => {
+        // Manual login performs its own profile/data load. Ignore a parallel
+        // auth callback so it cannot restart the same store connection.
+        if (manualLoginInProgress) return;
         const generation = ++authStateGeneration;
         if (user && logoutRequested) return;
         if (user) {

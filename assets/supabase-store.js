@@ -35,14 +35,21 @@
     }
     async connect(user) {
       if (!user) throw new Error('Connexion requise.');
+      const uid = user.id || user.uid;
+      // Auth callbacks and the manual login flow can request the same initial
+      // load at once. Reuse that in-flight load instead of invalidating it.
+      if (this.uid === uid && this.pending) return this.pending;
       this.stop();
-      this.uid = user.id || user.uid;
+      this.uid = uid;
       const generation = this.generation;
-      this.pending = this.load(generation).catch(error => {
+      const pending = this.load(generation).catch(error => {
         if (this.generation === generation) this.stop();
         throw error;
+      }).finally(() => {
+        if (this.generation === generation) this.pending = null;
       });
-      return this.pending;
+      this.pending = pending;
+      return pending;
     }
     async load(generation) {
       const { data: profile, error: profileError } = await this.client
@@ -62,6 +69,7 @@
       // The server enforces validation for every company, including new tenants.
       this.profile.validatorWorkflowEnabled = true;
       await this.read(generation);
+      if (generation !== this.generation) throw new Error('Session remplacée.');
       this.ready = true;
       // Refresh only after an explicit action; background polling destroys drafts.
       return this.value();
