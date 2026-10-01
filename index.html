@@ -11641,7 +11641,7 @@
       const handleActiveAuthState = async (user) => {
         // Manual login performs its own profile/data load. Ignore a parallel
         // auth callback so it cannot restart the same store connection.
-        if (manualLoginInProgress) return;
+        if (typeof manualLoginInProgress !== 'undefined' && manualLoginInProgress) return;
         const generation = ++authStateGeneration;
         if (user && logoutRequested) return;
         if (user) {

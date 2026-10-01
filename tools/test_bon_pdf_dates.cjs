@@ -14,7 +14,7 @@ async function render(record){
  const texts=[],tables=[];
  const doc={internal:{pageSize:{getWidth:()=>210}},lastAutoTable:{finalY:35},setFont(){},setFontSize(){},setTextColor(){},setDrawColor(){},text:text=>texts.push(text),splitTextToSize:text=>[text],autoTable:table=>{tables.push(table);doc.lastAutoTable.finalY+=30}};
   await context.drawSortieBonBesoinPdf(doc,record);
- assert.deepEqual(Array.from(tables.at(-1).head[0]),['Technicien','Coordinateur','Validateur','Gestionnaire']);
+ assert.deepEqual(Array.from(tables.at(-1).head[0]),['Technicien','Coordinateur','Validateur','Gestionnaire','Magasinier']);
  return {header:tables[0].body[0][2],texts};
 }
 (async()=>{
