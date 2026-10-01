@@ -4434,7 +4434,34 @@
         return selectedDate.toLocaleString();
       }
 
-      function getAllowedSortieOperators() {
+      function isBureau01Coordinator(user) {
+        if (!['Coordinateur','Coordinatrice'].includes(user?.role)) return false;
+        const office=window.AccountAffiliation?.office(user) || user?.office || user?.validationBureau;
+        if (office) return office === 'B01';
+        return user?.controlScopes?.['ITC-B01'] === true && user?.controlScopes?.['ITC-B02'] !== true;
+      }
+
+      function getBureau01ManagerStockOps() {
+        const company=currentUser?.company_id;
+        const stockOps=new Set(((appData?.stock)||[]).map(item=>normalizeOperatorKey(item.op)).filter(Boolean));
+        const assigned=(appData?.users||[])
+          .filter(user=>user?.company_id===company && user?.role==='Gestionnaire')
+          .filter(user=>{
+            const office=window.AccountAffiliation?.office(user) || user?.office || user?.validationBureau;
+            return office==='B01' || getManagedOpsNormalized(user).includes('ITC-B01');
+          })
+          .flatMap(user=>getManagedOpsNormalized(user));
+        const forbidden=new Set(['ITC-B02','MOOV','ITC-BOUAKE','ITC-SAN-PEDRO','ITC-YAMOUSSOUKRO']);
+        return [...new Set(assigned.map(normalizeOperatorKey))].filter(op=>stockOps.has(op)&&!forbidden.has(op)).sort();
+      }
+
+      function isDirectSortieOperatorAllowed(user, opValue) {
+        if (isBureau01Coordinator(user)) return getBureau01ManagerStockOps().includes(normalizeOperatorKey(opValue));
+        return isOperatorAllowedForUser(user,opValue);
+      }
+
+      function getAllowedSortieOperators(direct=false) {
+        if (direct && isBureau01Coordinator(currentUser)) return getBureau01ManagerStockOps();
         const knownOps = ["ITC-B01", "ITC-B02", "OCI", "CIC", "MOOV", "MTN", "ITC-BOUAKE", "ITC-SAN-PEDRO", "ITC-YAMOUSSOUKRO"];
         const stockOps = ((appData && appData.stock) || [])
           .map((item) => normalizeOperatorKey(item.op))
@@ -4615,7 +4642,7 @@
           Array.isArray(saved.items) && saved.items.length > 0
             ? saved.items
             : [{ label: "", qty: "" }];
-        const allowedOps = getAllowedSortieOperators();
+        const allowedOps = getAllowedSortieOperators(direct);
         const savedOps = Array.isArray(saved.ops) && saved.ops.length > 0
           ? saved.ops.map((op) => normalizeOperatorKey(op))
           : saved.op
@@ -4788,17 +4815,21 @@
           return;
         }
         const forbiddenOp = selectedOps.find(
-          (op) => !isOperatorAllowedForUser(currentUser, op),
+          (op) => !(direct ? isDirectSortieOperatorAllowed(currentUser,op) : isOperatorAllowedForUser(currentUser, op)),
         );
         if (forbiddenOp) {
           alert("Accès refusé pour cet opérateur.");
           return;
         }
         const serviceAbbreviation = getFormTextValue("s-service");
-        if (!BonReference.physicalServices(currentUser)[serviceAbbreviation]) return alert("Choisissez un service émetteur dans la liste de votre bureau.");
-        if (direct && ['Coordinateur','Coordinatrice'].includes(secureStore.profile?.role) && !secureStore.profile?.serviceAbbreviation) {
+        const serviceSelect=document.getElementById('s-service');
+        const serviceIsListed=serviceSelect?Array.from(serviceSelect.options).some(option=>option.value===serviceAbbreviation):Boolean(BonReference.physicalServices(currentUser)[serviceAbbreviation]);
+        if (!serviceIsListed) return alert("Choisissez un service émetteur dans la liste de votre bureau.");
+        if (direct && ['Coordinateur','Coordinatrice'].includes(secureStore.profile?.role) && (
+          !secureStore.profile?.serviceAbbreviation || (window.AccountAffiliation?.office(currentUser)==='B01' && secureStore.profile.serviceAbbreviation!==serviceAbbreviation)
+        )) {
           const office=window.AccountAffiliation?.office(currentUser);
-          if (office && office !== 'B01') return alert('Votre rattachement de service doit être renseigné par un responsable.');
+          if (office && office !== 'B01' && secureStore.profile?.serviceAbbreviation) return alert('Votre rattachement de service doit être renseigné par un responsable.');
           const {error}=await supabaseBackend.rpc('choose_initial_coordinator_service',{service_code:serviceAbbreviation});
           if(error) return alert('Impossible d’associer ce service à votre compte : '+error.message);
           secureStore.profile.serviceAbbreviation=serviceAbbreviation;
