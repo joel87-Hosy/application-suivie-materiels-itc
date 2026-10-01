@@ -1027,7 +1027,9 @@
 
       function showAppUpdateButton(isVisible) {
         const button = document.getElementById("app-update-button");
-        if (button) button.classList.toggle("hidden", !isVisible);
+        // The sidebar action is always available; dismissing the update notice
+        // must not hide the manual update action for this browser session.
+        button?.classList.remove("hidden");
         document.getElementById("app-update-notice")?.classList.toggle("hidden", !isVisible);
       }
 
@@ -12195,6 +12197,7 @@
 
       // Appelé après chaque connexion réussie — réinitialise et ouvre l'assistant
       function onUserLogin() {
+        showAppUpdateButton(false);
         refreshPushNotifications?.();
         stopVoiceAssistant();
         // Réinitialiser l'historique avec le message d'accueil personnalisé
