@@ -1,5 +1,6 @@
 (function (global) {
   const collections = ['stock', 'stockMovements', 'sorties', 'demandes', 'techDemandes', 'retours', 'notifications', 'consumptionArchives', 'platformAuditLogs', 'companies', 'users'];
+  const initialCollections = collections.filter(name => !['stockMovements', 'consumptionArchives', 'platformAuditLogs'].includes(name));
   const settings = ['materialTypes', 'scansDuJour', 'derniereDateScan', 'lastConsumptionArchiveKey'];
   const clone = value => JSON.parse(JSON.stringify(value));
   const clean = value => {
@@ -68,15 +69,15 @@
       };
       // The server enforces validation for every company, including new tenants.
       this.profile.validatorWorkflowEnabled = true;
-      await this.read(generation);
+      await this.read(generation, {names:initialCollections});
       if (generation !== this.generation) throw new Error('Session remplacée.');
       this.ready = true;
       // Refresh only after an explicit action; background polling destroys drafts.
       return this.value();
     }
-    async read(generation, {notify = true} = {}) {
+    async read(generation, {notify = true, names = collections} = {}) {
       const [records, { data: settingRows, error: settingsError }] = await Promise.all([
-        this.readAllRecords(generation),
+        this.readAllRecords(generation, names),
         this.client.from('app_settings').select('*').eq('company_id', this.profile.company_id),
       ]);
       if (settingsError) throw settingsError;
@@ -119,11 +120,11 @@
       }
       if (notify) this.onChange(this.value());
     }
-    async readAllRecords(generation) {
+    async readAllRecords(generation, names = collections) {
       const company = this.profile.company_id, isAdmin = this.profile.role === 'SUPER_ADMIN';
       // Fetch collections concurrently so a large history cannot delay the
       // stock, users, and requests needed to enter the application.
-      const groups = await Promise.all(collections.map(async collection => {
+      const groups = await Promise.all(names.map(async collection => {
         const records = [];
         for (;;) {
           if (generation !== this.generation) throw new Error('Session remplacée.');

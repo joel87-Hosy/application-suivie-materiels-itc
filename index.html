@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
@@ -16,10 +16,6 @@
          atteindre la production sans passer par une modification de ce fichier. -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-messaging-compat.js"></script>
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
@@ -1691,14 +1687,14 @@
     <script src="assets/request-routing.js"></script>
     <script src="assets/company-users.js?v=20261005-storekeeper-role-db"></script>
     <script src="assets/notification-tabs.js?v=20260923-receipts"></script>
-    <script src="assets/supabase-store.js?v=20261005-session-dedupe"></script>
+    <script src="assets/supabase-store.js?v=20261005-fast-connect"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
     <script src="assets/bon-scanner.js?v=20261001-storekeeper-issue"></script>
     <script src="assets/bon-signatures.js?v=20261001-storekeeper-signature"></script>
     <script src="assets/validator-workflow.js?v=20261001-manager-handoff"></script>
-    <script src="assets/secure-store.js"></script>
-    <script src="assets/stock-control.js?v=20260923-tabs"></script>
+    <script src="assets/stock-control-store.js?v=20261006-supabase"></script>
+    <script src="assets/stock-control.js?v=20261006-supabase"></script>
     <script src="assets/cable-offcuts-transport.js?v=20260918-shared1"></script>
     <script src="assets/cable-offcuts.js"></script>
     <script src="assets/assistant-knowledge.js"></script>
@@ -1711,55 +1707,11 @@
     <script src="assets/push-notifications.js"></script>
     <script>
       let currentSectionId = "cockpit"; // Par défaut on est sur le cockpit
-      // CONFIGURATION FIREBASE
-      const firebaseConfig = {
-        apiKey: "AIzaSyD7P-6vY3yHQx7OFCs6th6gN6EURP89QUQ",
-        authDomain: "itc-erp.firebaseapp.com",
-        databaseURL:
-          "https://itc-erp-default-rtdb.europe-west1.firebasedatabase.app",
-        projectId: "itc-erp",
-        storageBucket: "itc-erp.firebasestorage.app",
-        messagingSenderId: "870100539481",
-        appId: "1:870100539481:web:e12d817a9a44e867e97948",
-        measurementId: "G-HMRDVGSWHM",
-      };
-
-      firebase.initializeApp(firebaseConfig);
-      const db = firebase.database();
       const supabaseBackend = window.ITCSupabaseConfig?.client || null;
-      const useSupabaseBackend = Boolean(supabaseBackend);
-      const activeAuth = useSupabaseBackend ? supabaseBackend.auth : firebase.auth();
-      const activeStoreClass = useSupabaseBackend ? SupabaseStore : SecureStore;
-      const activeStoreDatabase = useSupabaseBackend ? supabaseBackend : db;
-
-      async function createAuthUserWithoutChangingSession({
-        email,
-        password,
-        displayName,
-      }) {
-        const appName = `user-create-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2)}`;
-        const secondaryApp = firebase.initializeApp(firebaseConfig, appName);
-        try {
-          const auth = secondaryApp.auth();
-          const credential = await auth.createUserWithEmailAndPassword(
-            email,
-            password,
-          );
-          if (displayName && credential.user?.updateProfile) {
-            await credential.user.updateProfile({ displayName });
-          }
-          await auth.signOut();
-          return credential.user;
-        } finally {
-          try {
-            await secondaryApp.delete();
-          } catch (error) {
-            console.warn("Nettoyage instance Auth secondaire impossible", error);
-          }
-        }
-      }
+      if (!supabaseBackend) throw new Error('Configuration Supabase indisponible.');
+      const useSupabaseBackend = true;
+      const activeStoreClass = SupabaseStore;
+      const activeStoreDatabase = supabaseBackend;
 
       function getLoginTenantId() {
         try {
@@ -1809,10 +1761,9 @@
           return;
         }
 
-        db.ref(`tenant_branding/${tenantId}`)
-          .once("value")
-          .then((snapshot) => {
-            const branding = snapshot.val();
+        supabaseBackend.rpc('get_tenant_branding', {tenant_id: tenantId})
+          .then(({data: branding, error}) => {
+            if (error) throw error;
             if (branding) applyLoginBranding(branding);
             else applyLoginBranding();
           })
@@ -1919,10 +1870,10 @@
           // toujours currentUser synchronisé avec le profil présent dans
           // appData.users (rôle/managedOps peuvent évoluer en temps réel).
           try {
-            const fbUser = !useSupabaseBackend && firebase.auth().currentUser;
-            if (fbUser && Array.isArray(appData.users)) {
+            const authUser = secureStore.profile;
+            if (authUser && Array.isArray(appData.users)) {
               const profile = appData.users.find(
-                (u) => u.email.toLowerCase() === fbUser.email.toLowerCase(),
+                (u) => u.email.toLowerCase() === String(authUser.email || '').toLowerCase(),
               );
               if (profile) {
                 const hadUser = !!currentUser;
@@ -2002,7 +1953,7 @@
           } else if (currentSectionId === "stats-consommation") {
             renderStatsConsommation(container); // <--- AJOUTÉ : Pour que les stats s'actualisent
           } else if (currentSectionId === "archives-consommations") {
-            renderArchivesConsommations(container);
+            loadConsumptionArchives(container);
           } else if (currentSectionId === "trafic-audit") {
             renderTraficAudit(container);
           } else if (currentSectionId === "coord-demandes-tech") {
@@ -2022,7 +1973,7 @@
           } else if (currentSectionId === "rapports-sorties") {
             renderRapportsSorties(container);
           } else if (currentSectionId === "flux-materiels") {
-            renderFluxMateriels(container);
+            loadFluxMateriels(container);
           } else if (currentSectionId === "super-admin") {
             renderSuperAdminDashboard(container);
           } else if (currentSectionId === "company-users") {
@@ -2113,7 +2064,7 @@
                 else if (currentSectionId === "stats-consommation")
                   renderStatsConsommation(container);
                 else if (currentSectionId === "archives-consommations")
-                  renderArchivesConsommations(container);
+                  loadConsumptionArchives(container);
                 else if (currentSectionId === "trafic-audit")
                   renderTraficAudit(container);
                 else if (currentSectionId === "coord-demandes-tech")
@@ -2501,7 +2452,6 @@
 
       // --- AUTH ---
       async function getActiveAuthUser() {
-        if (!useSupabaseBackend) return firebase.auth().currentUser;
         const result = await supabaseBackend.auth.getUser();
         if (result.error) throw result.error;
         return result.data.user;
@@ -2513,13 +2463,11 @@
           .catch(error => console.warn('Nettoyage des notifications différé', error));
         const results = await Promise.allSettled([
           Promise.resolve().then(async () => {
-            if (!useSupabaseBackend) return;
             try {
               const result = await supabaseBackend.auth.signOut({scope:'local'});
               if (result.error) throw result.error;
             } finally { window.ITCSupabaseConfig?.clearLocalSession?.(); }
           }),
-          Promise.resolve().then(() => firebase.auth().signOut()),
         ]);
         for (const result of results) if (result.status === 'rejected') console.warn('Déconnexion distante indisponible', result.reason);
       }
@@ -2548,21 +2496,12 @@
           ++authStateGeneration;
           logoutRequested = false;
           try { sessionStorage.removeItem('itc_signed_out'); } catch (_) {}
-          let authUser, firebaseSync = Promise.resolve();
-          if (useSupabaseBackend) {
-            const result = await supabaseBackend.auth.signInWithPassword({email, password});
-            if (result.error) throw result.error;
-            authUser = result.data.user;
-            // Supabase is authoritative. New accounts do not require a legacy Firebase identity.
-            firebaseSync = firebase.auth().signInWithEmailAndPassword(email, password).catch(() => firebase.auth().signOut());
-          } else {
-            const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
-            authUser = userCredential.user;
-          }
+          const result = await supabaseBackend.auth.signInWithPassword({email, password});
+          if (result.error) throw result.error;
           // Après connection, forcer la lecture depuis le serveur puis
           // retrouver le profil dans les données fraîchement chargées.
           try {
-            await Promise.all([refreshAppDataFromServer({ render: false }), firebaseSync]);
+            await refreshAppDataFromServer({ render: false });
           } catch (e) {
             await signOutActiveAuth();
             throw e;
@@ -2570,7 +2509,7 @@
 
           const userProfile = (appData.users || []).find(
             (u) => String(u.email || "").toLowerCase() === email,
-          ) || (useSupabaseBackend && String(secureStore.profile?.email || "").toLowerCase() === email
+          ) || (String(secureStore.profile?.email || "").toLowerCase() === email
             ? secureStore.profile
             : null);
 
@@ -2660,10 +2599,9 @@
           return;
         }
 
-        firebase
-          .auth()
-          .sendPasswordResetEmail(email)
-          .then(() => {
+        supabaseBackend.auth.resetPasswordForEmail(email, {redirectTo: `${window.location.origin}${window.location.pathname}?password_recovery=1`})
+          .then(({error}) => {
+            if(error)throw error;
             alert(
               "Un email de réinitialisation a été envoyé à : " +
                 email +
@@ -3509,6 +3447,44 @@
           });
 
           statsConsommationCharts.push(chart);
+        });
+      }
+
+      async function loadConsumptionArchives(container) {
+        if (typeof secureStore.readCollections !== 'function') {
+          renderArchivesConsommations(container);
+          return;
+        }
+        const generation = secureStore.generation, uid = secureStore.uid;
+        container.innerHTML = '<p class="p-8 text-center">Chargement des archives...</p>';
+        try {
+          await secureStore.readCollections(['consumptionArchives'], generation);
+          if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'archives-consommations') return;
+          appData = normalizeAppData(secureStore.value());
+          renderArchivesConsommations(container);
+        } catch (error) {
+          if (generation !== secureStore.generation || uid !== secureStore.uid) return;
+          container.innerHTML = `<p class="p-8 text-red-700">Archives indisponibles : ${escapeHtml(error.message)}</p>`;
+        }
+      }
+
+      function showPasswordRecoveryForm() {
+        document.getElementById('login-screen').classList.remove('hidden');
+        document.getElementById('main-app').classList.add('hidden');
+        document.getElementById('login-screen').innerHTML = `<div class="max-w-md mx-auto mt-16 bg-white p-8 rounded-2xl shadow"><h1 class="text-2xl font-bold">Nouveau mot de passe</h1><form id="recovery-form" class="mt-5 space-y-4"><label class="block">Nouveau mot de passe<input name="password" type="password" minlength="8" required autocomplete="new-password" class="block w-full border rounded-xl p-3 mt-2"></label><label class="block">Confirmer le mot de passe<input name="confirmation" type="password" minlength="8" required autocomplete="new-password" class="block w-full border rounded-xl p-3 mt-2"></label><button class="bg-indigo-600 text-white rounded-xl px-5 py-3">Enregistrer</button><p id="recovery-status" role="status"></p></form></div>`;
+        document.getElementById('recovery-form').addEventListener('submit', async event => {
+          event.preventDefault();
+          const form=event.currentTarget, password=form.elements.password.value;
+          const status=document.getElementById('recovery-status'), button=form.querySelector('button');
+          if(password!==form.elements.confirmation.value){status.textContent='Les mots de passe ne correspondent pas.';return;}
+          button.disabled=true;status.textContent='Enregistrement…';
+          const {error}=await supabaseBackend.auth.updateUser({password});
+          if(error){status.textContent=error.message;button.disabled=false;return;}
+          const profileUpdate=await supabaseBackend.rpc('update_own_profile',{changes:{must_change_password:false,password_changed_at:new Date().toISOString()}});
+          if(profileUpdate.error){status.textContent='Mot de passe modifié, mais le profil n’a pas pu être actualisé : '+profileUpdate.error.message;button.disabled=false;return;}
+          history.replaceState({},'',window.location.pathname);
+          alert('Mot de passe modifié. Connectez-vous avec votre nouveau mot de passe.');
+          await signOutActiveAuth();window.location.reload();
         });
       }
 
@@ -6845,7 +6821,7 @@
           renderStatsConsommation(container);
         } else if (id === "archives-consommations") {
           viewTitle.innerText = "ARCHIVES CONSOMMATIONS";
-          renderArchivesConsommations(container);
+          loadConsumptionArchives(container);
         } else if (id === "trafic-audit") {
           renderTraficAudit(container);
         } else if (id === "magasinier-historique") {
@@ -6892,7 +6868,7 @@
           renderRapportsSorties(container);
         } else if (id === "flux-materiels") {
           viewTitle.innerText = "FLUX MATÉRIELS";
-          renderFluxMateriels(container);
+          loadFluxMateriels(container);
         } else if (id === "superviseur-rapports-sorties") {
           viewTitle.innerText = "RAPPORTS SORTIES - SUPERVISION";
           renderRapportsSorties(container, { readOnly: true });
@@ -8228,17 +8204,7 @@
       }
 
       function publishTenantBranding(company) {
-        if (!company?.id) return;
-        db.ref(`tenant_branding/${company.id}`)
-          .set({
-            id: company.id,
-            name: company.name || "Entreprise",
-            logo_url: company.logo_url || "assets/saas-logo.svg",
-            status: company.status || "active",
-          })
-          .catch((error) => {
-            console.warn("Publication branding tenant impossible", error);
-          });
+        // Company branding is stored with the tenant record in Supabase.
       }
 
       async function toggleCompanyStatus(companyId) {
@@ -11664,7 +11630,7 @@
             (u) =>
               String(u.email || "").toLowerCase() ===
               String(user.email || "").toLowerCase(),
-          ) || (useSupabaseBackend && String(secureStore.profile?.email || "").toLowerCase() === String(user.email || "").toLowerCase()
+          ) || (String(secureStore.profile?.email || "").toLowerCase() === String(user.email || "").toLowerCase()
             ? secureStore.profile
             : null);
           if (userProfile) {
@@ -11692,8 +11658,9 @@
           currentUser = null;
         }
       };
-      if (useSupabaseBackend) {
+      {
         supabaseBackend.auth.onAuthStateChange((event, session) => {
+          if(event==='PASSWORD_RECOVERY'){showPasswordRecoveryForm();return;}
           // Leave the auth callback before calling getUser; avoid simultaneous store connections.
           const generation = authStateGeneration;
           setTimeout(() => {
@@ -11702,8 +11669,6 @@
               handleActiveAuthState(session?.user || null);
           }, 0);
         });
-      } else {
-        firebase.auth().onAuthStateChanged(handleActiveAuthState);
       }
     </script>
 
@@ -13134,7 +13099,9 @@
         const controlStocks = unrestricted ? data.users.filter(u=>u.company_id===sessionCompany).flatMap(u=>ControlCore.scopes(u.managedOps)).map(normalizeOperatorKey) : [...managed];
         const report = await AssistantReports.build(request,{profile,data,normalizeOperator:normalizeOperatorKey,allowedStock,controlStocks,readControl:async stock=>{
           ensureSession();
-          return (await db.ref(`stock_control/${sessionCompany}/${stock}`).once('value')).val() || {};
+          const {data,error}=await supabaseBackend.from('stock_control_states').select('state').eq('company_id',sessionCompany).eq('op',stock).maybeSingle();
+          if(error)throw error;
+          return data?.state || {};
         }});
         const filename = await AssistantReports.download(report,{ExcelJS:window.ExcelJS,jsPDF:window.jspdf?.jsPDF,ensureSession,saveBlob:(blob,name)=>{
           const url=URL.createObjectURL(blob);
@@ -13369,6 +13336,24 @@
           });
         }
         return allMateriels.get(cleanLabel);
+      }
+
+      async function loadFluxMateriels(container) {
+        if (typeof secureStore.readCollections !== 'function') {
+          renderFluxMateriels(container);
+          return;
+        }
+        const generation = secureStore.generation, uid = secureStore.uid;
+        container.innerHTML = '<p class="p-8 text-center">Chargement des flux matériels...</p>';
+        try {
+          await secureStore.readCollections(['stockMovements','consumptionArchives'], generation);
+          if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'flux-materiels') return;
+          appData = normalizeAppData(secureStore.value());
+          renderFluxMateriels(container);
+        } catch (error) {
+          if (generation !== secureStore.generation || uid !== secureStore.uid) return;
+          container.innerHTML = `<p class="p-8 text-red-700">Flux matériels indisponibles : ${escapeHtml(error.message)}</p>`;
+        }
       }
 
       function renderFluxMateriels(container) {

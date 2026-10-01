@@ -68,16 +68,13 @@ localStorage.setItem("itc_ai_backend_token", "votre_token");
 Sans relais joignable, le chatbot bascule sur Gemini en direct (si une clé
 locale est configurée), puis sur une réponse locale.
 
-## Firebase
+## Supabase
 
-Le projet Firebase `itc-erp` reste nécessaire : le contrôle des stocks, l'identité
-visuelle des entreprises et la réinitialisation de mot de
-passe n'ont pas encore été migrés. La liste exacte est dans
-[docs/architecture.md](docs/architecture.md#ce-qui-tourne-encore-sur-firebase).
-Le service historique de notifications est documenté dans
-[functions/README.md](functions/README.md) ; il ne reçoit pas les notifications Supabase.
-La création de comptes par le superviseur passe par l'Edge Function Supabase
-`company-users` ; les affectations de stocks sont vérifiées côté serveur.
+L'application utilise Supabase pour l'authentification, les données, le contrôle
+des stocks, l'identité visuelle des entreprises et les fonctions serveur. Les
+anciennes procédures Firebase conservées dans `scripts/` et `docs/legacy-firebase/`
+servent uniquement à l'import ou à l'historique et ne sont pas chargées par le site.
 
-Pour les tests locaux, ajouter `localhost` et `127.0.0.1` aux domaines autorisés
-dans la console Firebase (Authentication → Settings) du projet `itc-erp`.
+Les notifications système utilisent Web Push avec des clés VAPID. Voir
+[docs/SUPABASE_PUSH_SETUP.md](docs/SUPABASE_PUSH_SETUP.md) pour configurer le
+secret Supabase, le webhook et l'inscription des appareils.

@@ -21,6 +21,6 @@ const deploymentRevision = String(process.env.RENDER_GIT_COMMIT || process.env.G
 const workerPath = 'public/sw.js';
 const workerSource = fs.readFileSync(workerPath, 'utf8').replace(/^const CACHE_NAME = "[^"]+";/m, `const CACHE_NAME = "itc-gestion-materiels-${deploymentRevision}";`);
 fs.writeFileSync(workerPath, workerSource);
-fs.cpSync('assets', 'public/assets', {recursive: true});
+fs.cpSync('assets', 'public/assets', {recursive: true, filter: source => !source.endsWith('secure-store.js')});
 fs.writeFileSync('public/assets/supabase-public-config.js', 'window.ITCSupabasePublicConfig = '+JSON.stringify(config)+';\n');
 console.log('Public application copied to public/.');

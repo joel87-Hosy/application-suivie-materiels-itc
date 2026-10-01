@@ -1,6 +1,4 @@
-/* Callable protocol: authenticated stock operations must not depend on Web Push.
- * https://firebase.google.com/docs/functions/callable-reference
- */
+/* Authenticated Supabase function transport for cable offcut operations. */
 (function(global) {
   'use strict';
   async function call(payload) {

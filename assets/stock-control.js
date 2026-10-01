@@ -18,7 +18,7 @@
   function ops() {
     return isSupervisor() || isController() ? [...new Set([...(window.CompanyUsers?.stocks || []),...appData.stock.filter(s=>s.company_id === company).map(s => C.operator(s.op)), ...appData.users.filter(u=>u.company_id === company).flatMap(u => C.scopes(u.managedOps))])].filter(Boolean).sort() : C.scopes(secureStore.profile?.controlScopes);
   }
-  const ref = path => db.ref(`stock_control/${writeContext?.company || company}/${writeContext?.op || op}${path ? '/' + path : ''}`);
+  const ref = path => StockControlStore.ref(writeContext?.company || company,writeContext?.op || op,path);
   function stop() { if (unsubscribe) unsubscribe(); unsubscribe = null; generation++; }
   function reset() { stop(); state = {}; summaries = {}; detail = null; op = ''; uid = ''; company = ''; search = ''; message = ''; }
   function rows(kind) { return entries(state[kind]).sort((a,b) => String(b.createdAt || b.at).localeCompare(String(a.createdAt || a.at))); }
@@ -49,7 +49,7 @@
     let notificationVisitRead = false;
     const subscriptions = [];
     for (const stockOp of ops()) {
-    const target = db.ref(`stock_control/${company}/${stockOp}`);
+    const target = StockControlStore.ref(company,stockOp);
     const callback = snap => {
       if (token !== generation) return;
       summaries[stockOp] = snap.val() || {};
@@ -301,7 +301,7 @@
       // Freeze first, then read a server snapshot. All operational stock writes are denied by rules.
       const lines = {};
       for (const key of keys) {
-        const s = (await db.ref('itc_data/stock/' + key).once('value')).val();
+        const s = appData.stock.find(item => String(item._dbKey) === String(key));
         if (!s || s.company_id !== company || C.operator(s.op) !== op) throw new Error('Matériel hors périmètre.');
         lines[key] = {label:s.label || key,theoretical:C.quantity(s.qty),type:s.type || ''};
       }
@@ -388,10 +388,12 @@
       if (action === 'apply-inventory') {
         if (!isSupervisor() || r.createdBy === uid) throw new Error('Approbation indépendante requise.');
         validateInventory(r);
-        for (const key of Object.keys(r.lines)) {
-          await C.applyAdjustment(db.ref('itc_data/stock/'+key),r,key,id);
-        }
-        await ref('inventories/'+id+'/status').set('closed'); await ref('lock').remove(); await log('Régularisations appliquées et inventaire clôturé',id);
+        const {error}=await ITCSupabaseConfig.client.rpc('apply_control_inventory',{stock_op:op,inventory_id:id});
+        if(error)throw error;
+        state=(await ref('').once('value')).val()||{};
+        await secureStore.readCollections(['stock'],secureStore.generation);
+        appData=normalizeAppData(secureStore.value());
+        draw();
       }
     });
   }
