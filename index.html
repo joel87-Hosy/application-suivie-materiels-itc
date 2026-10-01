@@ -4794,6 +4794,13 @@
         }
         const serviceAbbreviation = getFormTextValue("s-service");
         if (!BonReference.physicalServices(currentUser)[serviceAbbreviation]) return alert("Choisissez un service émetteur dans la liste de votre bureau.");
+        if (direct && ['Coordinateur','Coordinatrice'].includes(secureStore.profile?.role) && !secureStore.profile?.serviceAbbreviation) {
+          if (window.AccountAffiliation?.office(currentUser) !== 'B01') return alert('Votre rattachement de service doit être renseigné par un responsable.');
+          const {error}=await supabaseBackend.rpc('choose_initial_coordinator_service',{service_code:serviceAbbreviation});
+          if(error) return alert('Impossible d’associer ce service à votre compte : '+error.message);
+          secureStore.profile.serviceAbbreviation=serviceAbbreviation;
+          currentUser.serviceAbbreviation=serviceAbbreviation;
+        }
         const ref = getFormTextValue("s-ref");
         const tech = getFormTextValue("s-tech");
         const emetteur = getFormTextValue("s-emetteur");
