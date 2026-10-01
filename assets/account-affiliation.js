@@ -9,7 +9,8 @@
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const officeList=user=>user?.offices?.length?user.offices:[office(user)].filter(Boolean);
   const serviceList=user=>user?.services?.length?user.services:[user?.serviceAbbreviation].filter(Boolean);
-  const summary=user=>(officeList(user).map(o=>offices[o]||o).join(', ')||'Bureau à renseigner')+' · '+(serviceList(user).map(s=>services[s]||s).join(', ')||'Service à renseigner');
+  const serviceLabel=service=>services[service]||bureau01Services[service]||service;
+  const summary=user=>(officeList(user).map(o=>offices[o]||o).join(', ')||'Bureau à renseigner')+' · '+(serviceList(user).map(serviceLabel).join(', ')||'Service à renseigner');
   const contactStates=new WeakMap();
   const selectedValues=select=>Array.from(select?.selectedOptions||[],o=>o.value).filter(Boolean);
   function contactOptions(users,roles,selected=[]){
@@ -29,7 +30,8 @@
   const coordinators=(user,users)=>users.filter(candidate=>['Coordinateur','Coordinatrice'].includes(candidate.role) && candidate.is_active!==false && (!candidate.account_status || candidate.account_status==='active') && candidate.company_id===user.company_id && officeList(user).some(o=>officeList(candidate).includes(o)) && serviceList(user).some(s=>serviceList(candidate).includes(s)) && (!user.allowedCoordinatorIds?.length || user.allowedCoordinatorIds.map(String).includes(String(candidate.id))));
   function fields(user={},users=typeof appData!=='undefined'?appData.users||[]:[]){
     const people=(roles,selected)=>contactOptions(users.filter(u=>!user.company_id||u.company_id===user.company_id),roles,selected);
-    return `<fieldset data-affiliation data-company="${esc(user.company_id||'')}" onchange="AccountAffiliation.filterContacts(this.form)" class="border rounded-xl p-3 space-y-3" ${concerned(user.role)?'':'hidden'}><legend class="font-bold text-xs">Rattachements du compte</legend><p class="text-xs">Plusieurs choix possibles dans chaque liste (Ctrl/Cmd + clic sur ordinateur).</p><label class="block text-xs">Bureaux<select name="office" multiple size="5" required class="w-full border rounded p-2">${Object.entries(offices).map(([key,label])=>`<option value="${key}" ${officeList(user).includes(key)?'selected':''}>${label}</option>`).join('')}</select></label><label class="block text-xs">Services<select name="accountService" multiple size="3" required class="w-full border rounded p-2">${Object.entries(services).map(([key,label])=>`<option value="${key}" ${serviceList(user).includes(key)?'selected':''}>${label}</option>`).join('')}</select></label><label class="block text-xs">Coordinateurs autorisés<select name="allowedCoordinatorIds" multiple size="4" class="w-full border rounded p-2">${people(['Coordinateur','Coordinatrice'],user.allowedCoordinatorIds)}</select></label><label class="block text-xs">Validateurs autorisés<select name="allowedValidatorIds" multiple size="4" class="w-full border rounded p-2">${people(['Validateur','Validatrice'],user.allowedValidatorIds)}</select></label><p class="text-xs text-slate-500">Sans sélection de personnes : circuit habituel selon les bureaux et services. Les coordinateurs choisis limitent les destinataires des demandes technicien ; les validateurs choisis limitent leur validation. Les accès aux stocks se règlent séparément.</p><p data-contact-status role="status" class="text-xs text-amber-800"></p><button type="button" class="border rounded p-2 text-xs" onclick="AccountAffiliation.loadContacts(this.form)">Actualiser les correspondants</button></fieldset>`;
+    const selectedServices=serviceList(user);
+    return `<fieldset data-affiliation data-company="${esc(user.company_id||'')}" onchange="AccountAffiliation.refreshServices(this.form);AccountAffiliation.filterContacts(this.form)" class="border rounded-xl p-3 space-y-3" ${concerned(user.role)?'':'hidden'}><legend class="font-bold text-xs">Rattachements du compte</legend><p class="text-xs">Plusieurs choix possibles dans chaque liste (Ctrl/Cmd + clic sur ordinateur).</p><label class="block text-xs">Bureaux<select name="office" multiple size="5" required class="w-full border rounded p-2">${Object.entries(offices).map(([key,label])=>`<option value="${key}" ${officeList(user).includes(key)?'selected':''}>${label}</option>`).join('')}</select></label><label class="block text-xs">Services<select name="accountService" multiple size="8" required class="w-full border rounded p-2">${Object.entries(services).map(([key,label])=>`<option data-office-group="other" value="${key}" ${selectedServices.includes(key)?'selected':''}>${label}</option>`).join('')}${Object.entries(bureau01Services).map(([key,label])=>`<option data-office-group="B01" value="${key}" ${selectedServices.includes(key)?'selected':''}>${label}</option>`).join('')}</select><span class="block text-slate-500 mt-1">Pour le bureau 01, choisissez parmi les services FTTH, Moov et MTN.</span></label><label class="block text-xs">Coordinateurs autorisés<select name="allowedCoordinatorIds" multiple size="4" class="w-full border rounded p-2">${people(['Coordinateur','Coordinatrice'],user.allowedCoordinatorIds)}</select></label><label class="block text-xs">Validateurs autorisés<select name="allowedValidatorIds" multiple size="4" class="w-full border rounded p-2">${people(['Validateur','Validatrice'],user.allowedValidatorIds)}</select></label><p class="text-xs text-slate-500">Sans sélection de personnes : circuit habituel selon les bureaux et services. Les coordinateurs choisis limitent les destinataires des demandes technicien ; les validateurs choisis limitent leur validation. Les accès aux stocks se règlent séparément.</p><p data-contact-status role="status" class="text-xs text-amber-800"></p><button type="button" class="border rounded p-2 text-xs" onclick="AccountAffiliation.loadContacts(this.form)">Actualiser les correspondants</button></fieldset>`;
   }
   function filterContacts(form){
     const group=form.querySelector('[data-affiliation]');if(!group)return;
@@ -74,15 +76,27 @@
   function update(form){
     const role=form.querySelector('#cu-user-role').value,group=form.querySelector('[data-affiliation]');group.hidden=!concerned(role);
     group.querySelectorAll('select').forEach(el=>{el.required=concerned(role)&&['office','accountService'].includes(el.name);el.disabled=!concerned(role);});
+    refreshServices(form);
     const company=form.querySelector('#cu-company-id')?.value||group.dataset.company;
     if(company&&contactStates.get(group)?.company!==company)loadContacts(form);else filterContacts(form);
+  }
+  function refreshServices(form){
+    const group=form?.querySelector('[data-affiliation]');if(!group)return;
+    const offices=selectedValues(group.querySelector('[name=office]'));
+    const showB01=offices.includes('B01'),showOther=offices.some(code=>code!=='B01');
+    for(const option of group.querySelector('[name=accountService]')?.options||[]){
+      const allowed=option.dataset.officeGroup==='B01'?showB01:showOther;
+      option.hidden=!allowed;option.disabled=!allowed;
+      if(!allowed)option.selected=false;
+    }
   }
   function values(form,role){
     if(!concerned(role))return {};
     const group=form.querySelector('[data-affiliation]'),state=contactStates.get(group);
     if(state?.loading)throw Error('Patientez pendant le chargement des correspondants.');if(state?.error)throw Error(state.error);
     const selected=name=>selectedValues(form.querySelector(`[name=${name}]`)),officeCodes=selected('office'),serviceCodes=selected('accountService');
-    if(!officeCodes.length||!serviceCodes.length||officeCodes.some(o=>!offices[o])||serviceCodes.some(s=>!services[s]))throw Error('Choisissez au moins un bureau et un service du compte.');
+    const hasB01=officeCodes.includes('B01'),hasOther=officeCodes.some(o=>o!=='B01');
+    if(!officeCodes.length||!serviceCodes.length||officeCodes.some(o=>!offices[o])||serviceCodes.length>3||serviceCodes.some(s=>!(services[s]&&hasOther)&&!(bureau01Services[s]&&hasB01)))throw Error('Choisissez un à trois services compatibles avec les bureaux du compte.');
     const errors=filterContacts(form);if(errors?.length)throw Error(errors.join(' ; '));
     return {office:officeCodes[0],serviceAbbreviation:serviceCodes[0],offices:officeCodes,services:serviceCodes,allowedCoordinatorIds:selected('allowedCoordinatorIds'),allowedValidatorIds:selected('allowedValidatorIds')};
   }
@@ -98,6 +112,7 @@
     document.body.append(modal);modal.onclose=()=>modal.remove();modal.querySelector('[data-affiliation-cancel]').onclick=()=>modal.close();
     modal.querySelector('form').onsubmit=async event=>{event.preventDefault();const button=modal.querySelector('[type=submit]');button.disabled=true;try{const a=values(event.target,user.role);const byRecord=Boolean(user._dbKey);const {error}=await global.ITCSupabaseConfig.client.rpc(byRecord?'assign_account_affiliations_by_record':'assign_account_affiliations',{...(byRecord?{target_key:user._dbKey}:{target_uid:user.uid}),office_codes:a.offices,service_codes:a.services,coordinator_ids:a.allowedCoordinatorIds,validator_ids:a.allowedValidatorIds});if(error){if(error.code==='PGRST202')throw Error('Le serveur doit être mis à jour pour enregistrer les rattachements des comptes migrés (migration 202609260005).');throw error;}await refreshAppDataFromServer();modal.close();renderCompanyUsersAdmin(document.getElementById('app-container'));}catch(error){modal.querySelector('[role=status]').textContent=error.message;}finally{button.disabled=false;}};
     modal.showModal();
+    refreshServices(modal.querySelector('form'));
     await loadContacts(modal.querySelector('form'));
   }
   function ownSection(user){
@@ -110,5 +125,5 @@
     event.preventDefault();const form=event.target,button=form.querySelector('[type=submit]');button.disabled=true;
     try{const service_code=form.querySelector('[name=accountService]').value;const allowed=isBureau01(currentUser)?bureau01Services:services;if(!allowed[service_code])throw Error('Choisissez votre service.');const {error}=await global.ITCSupabaseConfig.client.rpc('choose_initial_coordinator_service',{service_code});if(error)throw error;await refreshAppDataFromServer();renderMonProfil(document.getElementById('app-container'));}catch(error){form.querySelector('[role=status]').textContent=error.message;}finally{button.disabled=false;}
   }
-  global.AccountAffiliation={offices,services,concerned,office,officeList,serviceList,summary,filterContacts,loadContacts,requestOffice,coordinators,fields,update,values,edit,ownSection,chooseService,requestFields,serviceField,requestUser,refreshCoordinators};
+  global.AccountAffiliation={offices,services,bureau01Services,concerned,office,officeList,serviceList,summary,filterContacts,loadContacts,requestOffice,coordinators,fields,update,refreshServices,values,edit,ownSection,chooseService,requestFields,serviceField,requestUser,refreshCoordinators};
 })(window);
