@@ -1,7 +1,7 @@
 (function(global){
   'use strict';
   let active=null;
-  const roles=[['technician','Technicien'],['coordination','Coordinateur'],['validator','Validateur'],['manager','Gestionnaire']];
+  const roles=[['technician','Technicien'],['coordination','Coordinateur'],['validator','Validateur'],['manager','Gestionnaire'],['storekeeper','Magasinier']];
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function capture(title,name=''){
     if(active)return Promise.resolve(null);
@@ -49,7 +49,7 @@
   function entries(record,data){
     const bon=global.BonReference.resolve(record,data),signed=bon.bonSignatures||{};
     return roles.map(([key,label])=>{
-      const legacy={technician:[bon.technicianSignatureText,bon.technicianSignedAt],coordination:[bon.coordinationSignatureText,bon.coordinationSignedAt],validator:[bon.validatorDecision?.name,bon.validatorDecision?.at],manager:[bon.managerSignatureText||((bon.managerSignedAt||bon.validatedAt)?bon.validatedBy:null),bon.managerSignedAt||bon.validatedAt]}[key];
+      const legacy={technician:[bon.technicianSignatureText,bon.technicianSignedAt],coordination:[bon.coordinationSignatureText,bon.coordinationSignedAt],validator:[bon.validatorDecision?.name,bon.validatorDecision?.at],manager:[bon.managerSignatureText||((bon.managerSignedAt||bon.validatedAt)?bon.validatedBy:null),bon.managerSignedAt||bon.validatedAt],storekeeper:[bon.materialService?.events?.at(-1)?.name,bon.materialService?.events?.at(-1)?.at]}[key];
       const evidence=signed[key];
       const name=evidence?.name||legacy[0]||'';
       const at=evidence?.at||legacy[1];

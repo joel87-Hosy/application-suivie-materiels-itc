@@ -1223,6 +1223,9 @@
                 <i class="fas fa-clipboard-list w-5 text-indigo-400"></i>
                 Rapports Sorties (Magasin)
               </div>
+              <div id="menu-dg-magasinier-suivi" onclick="showSection('dg-magasinier-suivi'); toggleSidebarMobile();" class="hidden cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic text-pink-300">
+                <i class="fas fa-user-clock w-5 text-pink-400"></i> Suivi Magasiniers
+              </div>
               <div
                 onclick="
                   showSection('company-users');
@@ -1290,6 +1293,7 @@
                   >0</span
                 >
               </div>
+              <button type="button" onclick="showSection('coord-retour-materiel'); toggleSidebarMobile();" class="w-full text-left py-2 px-8 hover:text-white italic"><i class="fas fa-rotate-left w-5 text-cyan-400"></i> Retour de matériel</button>
               <div
                 onclick="
                   showSection('coord-creation-directe');
@@ -1418,15 +1422,11 @@
                 <i class="fas fa-truck-loading w-5"></i> Sortie Physique
               </div>
 
-              <div
-                onclick="
-                  showSection('scanner-physique');
-                  toggleSidebarMobile();
-                "
-                class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic font-black text-pink-400 border-l-2 border-pink-500 ml-2 mt-1"
-              >
-                <i class="fas fa-qrcode w-5"></i> Scanner Bon (Cam)
-              </div>
+            </div>
+            <div id="menu-magasinier" class="mt-6 hidden">
+              <p class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50">Service des bons</p>
+              <button type="button" onclick="showSection('scanner-physique'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-pink-300 font-black"><i class="fas fa-qrcode w-5"></i> Scanner et servir un bon</button>
+              <button type="button" onclick="showSection('magasinier-historique'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-cyan-300 font-black"><i class="fas fa-clock-rotate-left w-5"></i> Historique des bons servis</button>
             </div>
             <div
               id="section-stock-disponible"
@@ -1689,14 +1689,14 @@
     <script src="assets/control-core.js?v=20260923-regional"></script>
     <script src="assets/account-affiliation.js"></script>
     <script src="assets/request-routing.js"></script>
-    <script src="assets/company-users.js?v=20260926-affiliations"></script>
+    <script src="assets/company-users.js?v=20261001-storekeeper-role"></script>
     <script src="assets/notification-tabs.js?v=20260923-receipts"></script>
     <script src="assets/supabase-store.js?v=20260923-receipts"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
-    <script src="assets/bon-scanner.js"></script>
-    <script src="assets/bon-signatures.js"></script>
-    <script src="assets/validator-workflow.js?v=20260923-corrections"></script>
+    <script src="assets/bon-scanner.js?v=20261001-storekeeper-issue"></script>
+    <script src="assets/bon-signatures.js?v=20261001-storekeeper-signature"></script>
+    <script src="assets/validator-workflow.js?v=20261001-manager-handoff"></script>
     <script src="assets/secure-store.js"></script>
     <script src="assets/stock-control.js?v=20260923-tabs"></script>
     <script src="assets/cable-offcuts-transport.js?v=20260918-shared1"></script>
@@ -2756,7 +2756,6 @@
           if (
             isSuperAdmin ||
             r === "GESTIONNAIRE" ||
-            r === "MAGASINIER" ||
             r === "GEST"
           ) {
             menuGest.classList.remove("hidden");
@@ -2765,15 +2764,18 @@
             menuGest.classList.add("hidden");
           }
         }
+        const magasinierMenu = document.getElementById('menu-magasinier');
+        if (magasinierMenu) magasinierMenu.classList.toggle('hidden', r !== 'MAGASINIER');
+        document.getElementById('menu-dg-magasinier-suivi')?.classList.toggle('hidden', r !== 'DG');
 
         // 5. Sections Communes (Consultation Stock & Cockpit)
         const secStock = document.getElementById("section-stock-disponible");
         if (secStock)
-          secStock.classList.toggle("hidden", r === "TECHNICIEN" || r === "CONTRÔLEUR");
+          secStock.classList.toggle("hidden", r === "TECHNICIEN" || r === "CONTRÔLEUR" || r === "MAGASINIER");
 
         const menuCockpit = document.getElementById("menu-cockpit");
         if (menuCockpit)
-          menuCockpit.classList.toggle("hidden", r === "TECHNICIEN" || r === "CONTRÔLEUR");
+          menuCockpit.classList.toggle("hidden", r === "TECHNICIEN" || r === "CONTRÔLEUR" || r === "MAGASINIER");
 
         // 6. Menu spécifique : STOCK ITC BUREAU 02 (visible au superviseur,
         // au super admin ou au gestionnaire qui gère ITC-B02)
@@ -5139,7 +5141,7 @@
           .toUpperCase();
         return (
           role === "SUPER_ADMIN" ||
-          role === "GESTIONNAIRE" || role === "MAGASINIER" || role === "GEST"
+          role === "GESTIONNAIRE" || role === "GEST"
         );
       }
 
@@ -6514,6 +6516,12 @@
         doc.save(`Bon_Sortie_${getBonReference(s)}.pdf`);
       }
 
+      window.generateSignedBonPdf = async function(bon) {
+        const doc = new window.jspdf.jsPDF();
+        await drawSortieBonBesoinPdf(doc, bon);
+        return doc.output('blob');
+      };
+
       async function exportSortieRefPDF(refKeyEncoded) {
         const refKey = decodeURIComponent(String(refKeyEncoded || ""));
         const sorties = (appData.sorties || [])
@@ -6777,6 +6785,9 @@
       }
 
       function showSection(id) {
+        const activeRole = String(secureStore.profile?.role || currentUser?.role || '').toUpperCase();
+        if (id === 'magasinier-historique' && activeRole !== 'MAGASINIER') id = getDefaultSectionForUser(currentUser);
+        if (id === 'dg-magasinier-suivi' && activeRole !== 'DG') id = getDefaultSectionForUser(currentUser);
         if (window.ManagerLocations?.isBusy()) return;
         window.ManagerLocations?.stop();
         if (window.ManagerStock?.isBusy()) return;
@@ -6836,6 +6847,12 @@
           renderArchivesConsommations(container);
         } else if (id === "trafic-audit") {
           renderTraficAudit(container);
+        } else if (id === "magasinier-historique") {
+          viewTitle.innerText = "HISTORIQUE DES BONS SERVIS";
+          loadMagasinierHistory(container);
+        } else if (id === "dg-magasinier-suivi") {
+          viewTitle.innerText = "SUIVI DES MAGASINIERS";
+          loadDgMagasinierTrace(container);
         } else if (id === "tech-nouvelle-demande") {
           renderTechDemandeForm(container);
         } else if (id === "tech-mes-demandes") {
@@ -6846,6 +6863,8 @@
           renderCoordFluxTech(container);
         } else if (id === "coord-creation-directe") {
           renderCoordCreationDirecte(container);
+        } else if (id === "coord-retour-materiel") {
+          loadCoordinatorMaterialReturns(container);
         } else if (id === "bons-signes") {
           viewTitle.innerText = "HISTORIQUE DES BONS SIGNES";
           loadSignedBonsHistory(container);
@@ -8384,7 +8403,7 @@
                 <td class="py-3">
                   <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${badge}">${escapeHtml(user.role || "-")}</span>
                 </td>
-                <td class="py-3 text-slate-400">${user.role === "Contrôleur" ? "Tous les stocks de l’entreprise" : Array.isArray(user.managedOps) ? escapeHtml(user.managedOps.join(", ")) : "-"}</td>
+                <td class="py-3 text-slate-400">${user.role === "Contrôleur" ? "Tous les stocks de l’entreprise" : user.role === "Magasinier" ? "Tous les bureaux · service des bons" : Array.isArray(user.managedOps) ? escapeHtml(user.managedOps.join(", ")) : "-"}</td>
                 <td class="py-3">
                   <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${
                     getCompanyUserStatus(user) === "active"
@@ -8431,11 +8450,11 @@
                 ${companySelector}
                 <input id="cu-user-name" class="w-full border rounded-xl p-3 text-xs" placeholder="Nom complet" required />
                 <input id="cu-user-email" class="w-full border rounded-xl p-3 text-xs" type="email" placeholder="Email" required />
-                <select id="cu-user-role" onchange="AccountAffiliation.update(this.form)" class="w-full border rounded-xl p-3 text-xs">
+                <select id="cu-user-role" onchange="AccountAffiliation.update(this.form);document.getElementById('cu-stock-selection')?.classList.toggle('hidden',this.value==='Magasinier')" class="w-full border rounded-xl p-3 text-xs">
                   <option value="Contrôleur">Contrôleur</option>
                   <option value="Superviseur Terrain">Superviseur Terrain</option>
                   <option value="Coordinateur">Coordinateur</option>
-                  <option value="Gestionnaire">Gestionnaire</option><option value="Validateur">Validateur / Validatrice</option>
+                  <option value="Gestionnaire">Gestionnaire</option><option value="Magasinier">Magasinier</option><option value="Validateur">Validateur / Validatrice</option>
                   <option value="Coordinatrice">Coordinatrice</option>
                   <option value="Technicien">Technicien</option>
                 </select>
@@ -9864,6 +9883,65 @@
         }
       }
 
+      async function loadCoordinatorMaterialReturns(container) {
+        const generation = secureStore.generation;
+        container.innerHTML = '<p class="p-8">Chargement des stocks et des retours...</p>';
+        try {
+          await (secureStore.readCollections ? secureStore.readCollections(['stock','demandes'], generation) : secureStore.read(generation, {notify:false}));
+          if (generation !== secureStore.generation || currentSectionId !== 'coord-retour-materiel') return;
+          appData = normalizeAppData(secureStore.value());
+          renderCoordinatorMaterialReturns(container);
+        } catch (error) {
+          if (generation !== secureStore.generation) return;
+          container.innerHTML = `<p class="p-8 text-red-700">Chargement impossible : ${escapeHtml(error.message)}</p>`;
+        }
+      }
+
+      function renderCoordinatorMaterialReturns(container) {
+        if (!['Coordinateur','Coordinatrice'].includes(currentUser?.role)) {
+          container.innerHTML = '<p class="p-8">Accès réservé aux coordinateurs et coordinatrices.</p>'; return;
+        }
+        const allowed = new Set(getAllowedSortieOperators(true));
+        const stocks = (appData.stock || []).filter(s => allowed.has(normalizeOperatorKey(s.op)) && Number(s.qty || 0) > 0);
+        const mine = (appData.demandes || []).filter(d => d.workflow === 'COORD_MATERIAL_RETURN' && (String(d.coordinateurId) === String(currentUser.id) || d.createdByUid === secureStore.uid)).sort((a,b) => String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+        container.innerHTML = `<div class="max-w-4xl mx-auto space-y-6 p-4">
+          <section class="bg-white rounded-2xl shadow p-6"><h2 class="text-xl font-black text-indigo-900">Retour de matériel</h2><p class="text-sm text-slate-600 mt-2">Choisissez le stock d’origine et la quantité à retourner. Le retour sera soumis à un validateur puis au gestionnaire de ce stock.</p>
+          <form id="coord-material-return-form" class="space-y-4 mt-5">
+            <label class="block font-bold">Matériel<select name="stock" required class="border rounded-xl p-3 w-full mt-1"><option value="">Choisir un matériel</option>${stocks.map(s=>`<option value="${escapeHtml(s._dbKey)}">${escapeHtml(getOperatorMeta(s.op).label)} — ${escapeHtml(s.label)} (disponible : ${escapeHtml(s.qty)})</option>`).join('')}</select></label>
+            <label class="block font-bold">Quantité retournée<input name="quantity" type="number" min="0.000001" step="any" required class="border rounded-xl p-3 w-full mt-1"></label>
+            <label class="block font-bold">Motif du retour<textarea name="reason" maxlength="1000" required class="border rounded-xl p-3 w-full mt-1" rows="3"></textarea></label>
+            <p role="status" class="text-red-700"></p><button type="submit" class="bg-indigo-700 text-white rounded-xl px-5 py-3 font-bold">Soumettre le retour</button>
+          </form></section>
+          <section class="bg-white rounded-2xl shadow p-6"><h3 class="text-lg font-black mb-3">Mes retours</h3><div class="space-y-3">${mine.map(d=>`<article class="border rounded-xl p-4"><b>${escapeHtml(d.items?.[0]?.label || d.op || 'Matériel')} × ${escapeHtml(d.items?.[0]?.qty || '')}</b><p>${escapeHtml(d.motif || '')}</p><p class="font-bold text-indigo-800">${escapeHtml(d.status || '')}</p>${d.validatorDecision ? `<p class="text-sm">${escapeHtml(window.ValidatorWorkflow.trace(d))}</p>`:''}${d.managerDecision ? `<p class="text-sm">Gestionnaire : ${escapeHtml(d.managerDecision.name || '')} — ${escapeHtml(d.managerDecision.reason || 'retour confirmé')}</p>`:''}</article>`).join('') || '<p class="text-slate-500">Aucun retour soumis.</p>'}</div></section>
+        </div>`;
+        const form = document.getElementById('coord-material-return-form');
+        form.onsubmit = async event => {
+          event.preventDefault(); const status = form.querySelector('[role=status]'); const values = new FormData(form);
+          const qty = Number(values.get('quantity'));
+          if (!Number.isFinite(qty) || qty <= 0) { status.textContent = 'Saisissez une quantité supérieure à zéro.'; return; }
+          const button = form.querySelector('button[type=submit]'); button.disabled = true; status.textContent = 'Envoi en cours...';
+          try {
+            const {error} = await supabaseBackend.rpc('submit_coordinator_material_return', {stock_key:String(values.get('stock')), quantity:qty, reason:String(values.get('reason')).trim()});
+            if (error) throw error;
+            await loadCoordinatorMaterialReturns(container);
+          } catch (error) { status.textContent = error.message || 'Impossible de soumettre ce retour.'; button.disabled = false; }
+        };
+      }
+
+      async function decideCoordinatorMaterialReturn(requestKey, approve) {
+        const request = (appData.demandes || []).find(d => d._dbKey === requestKey);
+        if (!request || request.workflow !== 'COORD_MATERIAL_RETURN' || request.status !== 'EN ATTENTE GESTIONNAIRE' || request.assignedGestionnaireUid !== secureStore.uid) return alert('Ce retour ne vous est pas affecté ou a déjà été traité.');
+        const reason = approve ? '' : (prompt('Motif du refus du retour :') || '').trim();
+        if (!approve && !reason) return;
+        if (approve && !confirm(`Confirmez-vous la réception de ${request.items?.[0]?.qty} × ${request.items?.[0]?.label} ? Cette confirmation recréditera le stock d’origine.`)) return;
+        try {
+          const {error} = await supabaseBackend.rpc('decide_coordinator_material_return', {request_key:requestKey, approve, reason});
+          if (error) throw error;
+          alert(approve ? 'Retour confirmé et matériel remis dans son stock d’origine.' : 'Retour refusé.');
+          loadManagerCommands(document.getElementById('app-container'));
+        } catch (error) { alert(error.message || 'Impossible de traiter le retour.'); }
+      }
+
       function renderCoordCreationDirecte(container) {
         if (!['Coordinateur','Coordinatrice','Superviseur Terrain'].includes(secureStore.profile?.role)) {
           container.textContent = 'Accès réservé à la coordination.';
@@ -10025,13 +10103,14 @@
                                 <div>
                                   <p class="font-black text-indigo-900 flex items-center gap-2"><i class="fas fa-file-signature text-indigo-500"></i>${escapeHtml(getBonReference(d))} | ${escapeHtml(d.demandeurName)}</p>
                                   <p class="text-[7px] text-orange-600 uppercase italic mt-1">MOTIF : ${escapeHtml(d.motif || "NON PRÉCISÉ")}</p>
+                                  ${d.workflow === 'COORD_MATERIAL_RETURN' ? `<p class="text-sm font-bold text-emerald-800 mt-2">Retour : ${escapeHtml(d.items?.[0]?.label || '')} × ${escapeHtml(d.items?.[0]?.qty || '')} · ${escapeHtml(getOperatorMeta(d.items?.[0]?.op || d.op).label)}</p>` : ''}
                                   ${d.status === 'REFUSEE VALIDATEUR' ? `<p class="text-sm text-red-700 mt-2">À corriger : ${escapeHtml(d.validatorDecision?.reason || '')}</p>` : ''}
                                   <p class="text-[7px] text-slate-500 uppercase mt-1">Opérateur : ${escapeHtml(getOperatorMeta(d?.op || "ITC").label)}</p>
                                 </div>
-                                <button onclick="${d.status === 'REFUSEE VALIDATEUR' ? `ValidatorWorkflow.correct(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))` : `prepSortie('${d.id}')`}" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-indigo-700 transition inline-flex items-center gap-2">
+                                ${d.workflow === 'COORD_MATERIAL_RETURN' ? `<button type="button" onclick="decideCoordinatorMaterialReturn(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'),true)" class="bg-emerald-700 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow">Confirmer la réception</button><button type="button" onclick="decideCoordinatorMaterialReturn(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'),false)" class="bg-red-700 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow">Refuser le retour</button>` : `<button onclick="${d.status === 'REFUSEE VALIDATEUR' ? `ValidatorWorkflow.correct(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))` : `prepSortie('${d.id}')`}" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-indigo-700 transition inline-flex items-center gap-2">
                                     <i class="fas fa-boxes-stacked"></i>
-                                    ${d.status === 'REFUSEE VALIDATEUR' ? 'Corriger et renvoyer' : 'Réserver'}
-                                </button>
+                                    ${d.status === 'REFUSEE VALIDATEUR' ? 'Corriger et renvoyer' : 'Signer et valider pour magasinier'}
+                                </button>`}
                                 ${bureau01OnlyManager && d.status === 'EN ATTENTE GESTIONNAIRE' ? `<button type="button" onclick="removeBureau01Command(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))" class="bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-red-800 transition inline-flex items-center gap-2"><i class="fas fa-trash"></i>Supprimer pour reprendre</button>` : ''}
                                 ${bureau02Manager && d.status === 'EN ATTENTE GESTIONNAIRE' ? `<button type="button" onclick="removeBureau02Command(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))" class="bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-red-800 transition inline-flex items-center gap-2"><i class="fas fa-trash"></i>Supprimer le bon</button>` : ''}
                               </div>
@@ -10056,6 +10135,9 @@
 
       async function prepSortie(id) {
         const d = appData.demandes.find((x) => x.id === id);
+        if (!d?.validatorDecision?.approved) {
+          return alert("Ce bon doit d’abord être approuvé par un validateur avant la signature du gestionnaire.");
+        }
         if (d?.workflow === "TECH_BON_SORTIE" || d?.validatorDecision) {
           openGestionnaireWorkflowDemande(id);
           return;
@@ -10141,7 +10223,7 @@
               </div>
             </div>
             <button onclick="managerSignAndValidateDemande('${d.id}')" class="w-full bg-green-600 text-white py-4 rounded-2xl text-[10px] mt-6 uppercase font-black shadow-lg hover:bg-green-700 transition inline-flex items-center justify-center gap-2">
-              <i class="fas fa-check-circle"></i> Valider la sortie et debiter le stock
+              <i class="fas fa-check-circle"></i> Valider le bon et transmettre au magasinier
             </button>
           </div>`;
       }
@@ -10208,13 +10290,14 @@
       async function finalSortie(id) {
         const d = appData.demandes.find((x) => x.id === id);
         if (!d) return alert("Bon introuvable.");
+        if (!d.validatorDecision?.approved) return alert("Ce bon doit être approuvé par un validateur avant de passer au magasinier.");
         if (!BonReference.allServices[d.serviceAbbreviation]) {
           const service = String(window.prompt("Service emetteur du bon : B2B, DEP (Deploiement) ou MAIN (Maintenance)") || "").trim().toUpperCase();
           if (!service) return;
           if (!BonReference.services[service]) return alert("Service invalide : utilisez B2B, DEP ou MAIN.");
           d.serviceAbbreviation = service;
         }
-        if (window.ValidatorWorkflow.enabled()) return window.ValidatorWorkflow.issue(d);
+        return window.ValidatorWorkflow.issue(d);
         if (d?.workflow === "TECH_BON_SORTIE") {
           let stockInsuffisant = false;
           (d.items || []).forEach((i) => {
@@ -11096,6 +11179,98 @@
           showSection("cockpit");
         }
       }
+      function magasinierEventsForBon(bon) {
+        return Array.isArray(bon?.materialService?.events) ? bon.materialService.events : [];
+      }
+
+      async function downloadMagasinierBonPdf(requestKey) {
+        const bon = (appData.demandes || []).find(d => String(d._dbKey || d.id) === String(requestKey));
+        if (!bon) return alert("Bon introuvable dans l'historique.");
+        try {
+          const doc = new window.jspdf.jsPDF();
+          await drawSortieBonBesoinPdf(doc, bon);
+          doc.save(`Bon_Sortie_${getBonReference(bon)}.pdf`);
+        } catch (error) { alert("Téléchargement du bon impossible : " + error.message); }
+      }
+
+      async function loadMagasinierHistory(container) {
+        const generation = secureStore.generation, uid = secureStore.uid;
+        container.innerHTML = '<p class="p-8 text-center">Chargement de vos bons servis...</p>';
+        try {
+          if (typeof secureStore.readCollections === 'function') await secureStore.readCollections(['demandes'], generation);
+          else await secureStore.read(generation, {notify:false});
+          if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'magasinier-historique') return;
+          appData = normalizeAppData(secureStore.value());
+          const myUid = String(uid || secureStore.profile?.uid || '');
+          const entries = (appData.demandes || []).flatMap(bon => magasinierEventsForBon(bon)
+            .filter(event => String(event.uid || event.storekeeperUid || '') === myUid)
+            .map(event => ({bon, event})))
+            .sort((a,b) => getSortieTimestamp(b.event.at) - getSortieTimestamp(a.event.at));
+          container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl">
+            <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-pink-700 via-fuchsia-700 to-indigo-700 text-white flex items-center justify-between gap-4 flex-wrap">
+              <div><p class="text-[8px] tracking-[0.2em] opacity-80">TRAÇABILITÉ PERSONNELLE</p><h3 class="text-xl font-black mt-1 uppercase"><i class="fas fa-clock-rotate-left mr-2"></i>Bons que vous avez servis</h3></div>
+              <div class="bg-white/20 px-4 py-2 rounded-xl text-center"><p class="text-[8px] uppercase">Services enregistrés</p><p class="text-2xl font-black">${entries.length}</p></div>
+            </div>
+            <div class="space-y-3">${entries.length ? entries.map(({bon,event}) => {
+              const lines = Array.isArray(event.items) ? event.items.map(item => `${item.qty ?? item.servedQty ?? 0} × ${item.label || item.name || 'Matériel'}`).join(' · ') : 'Détail des matériels non disponible';
+              return `<article class="rounded-2xl border border-slate-200 bg-slate-50 p-4 flex items-start justify-between gap-4 flex-wrap">
+                <div><p class="font-black text-slate-900"><i class="fas fa-file-signature text-pink-600 mr-2"></i>${escapeHtml(getBonReference(bon))}</p>
+                <p class="text-[10px] text-slate-500 mt-1">Servi le ${escapeHtml(event.at || 'Date inconnue')} · ${escapeHtml(event.name || currentUser?.name || 'Magasinier')}</p>
+                <p class="text-xs text-slate-700 mt-2">${escapeHtml(lines)}</p>
+                <p class="text-[9px] text-emerald-700 mt-2 font-bold">Remise enregistrée · ${bon.status === 'LIVREE' ? 'bon entièrement livré' : 'bon encore en cours'}</p></div>
+                <button type="button" onclick="downloadMagasinierBonPdf('${String(bon._dbKey || bon.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase"><i class="fas fa-download mr-2"></i>Télécharger le bon PDF</button>
+              </article>`;
+            }).join('') : '<div class="text-center py-12 text-slate-400"><i class="fas fa-box-open text-4xl mb-3"></i><p class="font-bold">Aucun bon servi par votre compte pour le moment.</p></div>'}</div>
+          </div>`;
+        } catch (error) {
+          if (generation !== secureStore.generation || uid !== secureStore.uid) return;
+          container.innerHTML = '<p class="p-8 text-center text-red-700">Historique indisponible. Réessayez en rouvrant cet onglet.</p>';
+          console.error(error);
+        }
+      }
+
+      async function loadDgMagasinierTrace(container) {
+        const generation = secureStore.generation, uid = secureStore.uid;
+        container.innerHTML = '<p class="p-8 text-center">Chargement de la traçabilité des magasiniers...</p>';
+        try {
+          if (typeof secureStore.readCollections === 'function') await secureStore.readCollections(['demandes','users','platformAuditLogs'], generation);
+          else await secureStore.read(generation, {notify:false});
+          if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'dg-magasinier-suivi') return;
+          appData = normalizeAppData(secureStore.value());
+          renderDgMagasinierTrace(container);
+        } catch (error) {
+          if (generation !== secureStore.generation || uid !== secureStore.uid) return;
+          container.innerHTML = '<p class="p-8 text-center text-red-700">Traçabilité indisponible. Réessayez en rouvrant cet onglet.</p>';
+          console.error(error);
+        }
+      }
+
+      function renderDgMagasinierTrace(container) {
+        const company = secureStore.profile?.company_id;
+        const allUsers = appData.users || [];
+        const users = allUsers.filter(user => String(user.role || '').toUpperCase() === 'MAGASINIER' && (!company || !user.company_id || user.company_id === company));
+        const audit = (appData.platformAuditLogs || []).filter(row => (!company || !row.company_id || row.company_id === company));
+        const created = new Map(audit.filter(row => row.action === 'CREATE_COMPANY_USER' && String(row.role || '').toUpperCase() === 'MAGASINIER').map(row => [String(row.target), row]));
+        const events = (appData.demandes || []).flatMap(bon => magasinierEventsForBon(bon).map(event => ({bon,event})));
+        const latestByUid = new Map();
+        events.forEach(({bon,event}) => {
+          const key = String(event.uid || event.storekeeperUid || '');
+          if (!key) return;
+          const current = latestByUid.get(key) || {count:0,last:0,bons:[]};
+          current.count++; current.last = Math.max(current.last, getSortieTimestamp(event.at)); current.bons.push({bon,event}); latestByUid.set(key,current);
+        });
+        const rows = users.map(user => {
+          const key = String(user.uid || user.id || '');
+          const activity = latestByUid.get(key) || {count:0,last:0,bons:[]};
+          const creation = created.get(key);
+          const recent = activity.bons.slice().sort((a,b)=>getSortieTimestamp(b.event.at)-getSortieTimestamp(a.event.at)).slice(0,5);
+          return `<article class="rounded-2xl border border-slate-200 p-5"><div class="flex items-start justify-between gap-4 flex-wrap"><div><h4 class="font-black text-slate-900">${escapeHtml(user.name || user.full_name || user.email || 'Magasinier')}</h4><p class="text-xs text-slate-500">${escapeHtml(user.email || '')} · ${user.is_active === false || user.account_status === 'disabled' ? 'Compte désactivé' : 'Compte actif'}</p><p class="text-[10px] text-slate-500 mt-1">Compte créé : ${escapeHtml(creation?.date || user.created_at || 'Information indisponible')}${creation?.by ? ` · Par ${escapeHtml(allUsers.find(x=>String(x.uid||x.id)===String(creation.by))?.name || creation.by)}` : ''}</p></div><div class="rounded-xl bg-pink-50 px-4 py-2 text-center"><p class="text-[8px] uppercase text-pink-700">Services tracés</p><p class="text-xl font-black text-pink-800">${activity.count}</p></div></div>
+            <div class="mt-4 space-y-2">${recent.length ? recent.map(({bon,event})=>`<div class="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 text-xs"><span><b>${escapeHtml(getBonReference(bon))}</b> · ${escapeHtml(event.at || '')} · ${(event.items||[]).length} article(s)</span><span class="font-bold ${bon.status==='LIVREE'?'text-emerald-700':'text-amber-700'}">${bon.status==='LIVREE'?'Terminé':'Partiel'}</span></div>`).join('') : '<p class="text-xs text-slate-400">Aucun bon servi à ce jour.</p>'}</div>
+          </article>`;
+        }).join('');
+        container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl"><div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-indigo-800 via-pink-700 to-rose-600 text-white"><p class="text-[8px] tracking-[0.2em] opacity-80">SUPERVISION DG</p><h3 class="text-xl font-black mt-1 uppercase"><i class="fas fa-user-clock mr-2"></i>Traçabilité des comptes Magasinier</h3><p class="text-xs mt-2">Comptes créés, état du compte, nombre de services et derniers bons traités.</p></div><div class="space-y-4">${rows || '<p class="text-center text-slate-400 py-10">Aucun compte Magasinier enregistré.</p>'}</div></div>`;
+      }
+
       function renderTraficAudit(container) {
         const getAuditTimestamp = (dateText) => {
           const raw = String(dateText || "").trim();

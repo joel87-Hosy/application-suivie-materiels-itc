@@ -93,13 +93,11 @@
     const token=generation;
     busy=true;
     try {
-      const signature=await global.BonSignatures.capture('Signature du gestionnaire — remise du matériel',request.managerSignatureText||env.profile()?.name||'');
+      const signature=await global.BonSignatures.capture('Signature du gestionnaire pour autoriser le bon',request.managerSignatureText||env.profile()?.name||'');
       if(!signature||token!==generation)return;
-      if(!global.confirm('Confirmer la remise physique du matériel et le débit du stock ?'))return;
-      const explicit=global.StockSubstocks?.enabled();
-      const selections=explicit?await global.StockSubstocks.chooseIssue(request):null;
-      if((explicit&&!selections)||token!==generation)return;
-      await rpc('issue_stock_request_signed',{request_key:request._dbKey,signer_name:signature.name,signature_image:signature.image,service:request.serviceAbbreviation,selections});await env.refresh();global.alert('Sortie physique enregistrée et tracée.');busy=false;env.navigate('demandes-coordonnatrice');}
+      if(!global.confirm('Confirmer la validation du bon et sa transmission au magasinier ? Aucun stock ne sera debite a cette etape.'))return;
+      if(token!==generation)return;
+await rpc('issue_stock_request_signed',{request_key:request._dbKey,signer_name:signature.name,signature_image:signature.image,service:request.serviceAbbreviation,selections:null});await env.refresh();global.alert('Bon validé et transmis au magasinier. Aucun stock n’est encore débité.');busy=false;env.navigate('demandes-coordonnatrice');}
     catch(error){global.alert(error.message);}finally{busy=false;}
   }
   async function removeRejected(requestKey) {

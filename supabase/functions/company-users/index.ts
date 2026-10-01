@@ -27,14 +27,14 @@ Deno.serve(async request=>{
    if(finishError)return json({error:'Synchronisation à terminer. Réessayez la même action : '+finishError.message},503);
    return json({updated:true,action:c.action});
   }
-  if(!['Gestionnaire','Contrôleur','Coordinateur','Coordinatrice','Superviseur Terrain','Technicien','Validateur','Validatrice'].includes(c.role))return json({error:'Le rôle choisi pour le nouveau compte n’est pas autorisé.'},400);
+  if(!['Gestionnaire','Magasinier','Contrôleur','Coordinateur','Coordinatrice','Superviseur Terrain','Technicien','Validateur','Validatrice'].includes(c.role))return json({error:'Le rôle choisi pour le nouveau compte n’est pas autorisé.'},400);
   if(typeof c.email!=='string'||!/^\S+@\S+\.\S+$/.test(c.email)||typeof c.name!=='string'||!c.name.trim()||c.name.length>120||typeof c.password!=='string'||c.password.length<12||c.password.length>128)return json({error:'Nom, email ou mot de passe invalide (12 caractères minimum).'},400);
   const affiliated=['Gestionnaire','Coordinateur','Coordinatrice','Technicien','Validateur','Validatrice','Superviseur Terrain'].includes(c.role);
   const officeCodes=c.offices??[c.office],serviceCodes=c.services??[c.serviceAbbreviation],coordinatorIds=c.allowedCoordinatorIds??[],validatorIds=c.allowedValidatorIds??[];
   if(affiliated && (!Array.isArray(officeCodes)||!officeCodes.length||officeCodes.length>5||officeCodes.some((v:unknown)=>!['B01','B02','BOUAKE','SAN-PEDRO','YAMOUSSOUKRO'].includes(v as string))||!Array.isArray(serviceCodes)||!serviceCodes.length||serviceCodes.length>3||serviceCodes.some((v:unknown)=>!['B2B','DEP','MAIN'].includes(v as string))))return json({error:'Choisissez les bureaux et services du compte.'},400);
   if([coordinatorIds,validatorIds].some(ids=>!Array.isArray(ids)||ids.length>100||ids.some((id:unknown)=>typeof id!=='string'||!id||id.length>200)))return json({error:'Liste de coordinateurs ou validateurs invalide.'},400);
   if(!Array.isArray(c.managedOps)||c.managedOps.some((op:unknown)=>typeof op!=='string'))return json({error:'Liste de stocks invalide.'},400);
-  const ops=c.role==='Contrôleur'?[]:[...new Set(c.managedOps)];
+  const ops=['Contrôleur','Magasinier'].includes(c.role)?[]:[...new Set(c.managedOps)];
   if(['Gestionnaire','Validateur','Validatrice'].includes(c.role)&&!ops.length)return json({error:'Sélectionnez au moins un stock.'},400);
   const {data:locations,error:locationError}=await admin.from('stock_locations').select('op').eq('company_id',c.companyId);
   if(locationError||ops.some(op=>!locations?.some(row=>row.op===op)))return json({error:'Stock inconnu ou hors de cette entreprise.'},400);

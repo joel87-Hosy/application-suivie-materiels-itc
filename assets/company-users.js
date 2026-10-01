@@ -13,7 +13,7 @@
       const companyId=isCurrentSuperAdmin()?getFormTextValue('cu-company-id'):secureStore.profile.company_id;
       const role=document.getElementById('cu-user-role').value;
       const affiliation=global.AccountAffiliation.values(event.target,role);
-      const managedOps=role==='Contrôleur'?[]:Array.from(event.target.querySelectorAll('[name=managedOps]:checked'),el=>el.value);
+      const managedOps=['Contrôleur','Magasinier'].includes(role)?[]:Array.from(event.target.querySelectorAll('[name=managedOps]:checked'),el=>el.value);
       validateManagerStocks(role,managedOps);
       if(['Gestionnaire','Validateur','Validatrice'].includes(role)&&!managedOps.length)throw Error('Sélectionnez au moins un stock dédié.');
       const email=getFormTextValue('cu-user-email').toLowerCase(),password=getFormTextValue('cu-temp-password');

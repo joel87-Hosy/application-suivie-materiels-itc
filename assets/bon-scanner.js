@@ -1,6 +1,6 @@
 (function(global){
   'use strict';
-  let env,camera=null,generation=0,busy=false,stopping=Promise.resolve();
+  let env,camera=null,generation=0,busy=false,stopping=Promise.resolve(),activePdfUrl=null;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const date=v=>v&&!Number.isNaN(Date.parse(v))?new Date(v).toLocaleString('fr-FR'):'Non renseignée';
   function historyHtml(rows){return `<h3 class="font-bold">Scans du jour (heure UTC)</h3>${(rows||[]).map(r=>`<p>${esc(r.heure)} · ${esc(r.technicien)} · ${esc(r.id)} · ${esc(r.state||'Contrôlé')}</p>`).join('')||'<p>Aucun scan aujourd’hui.</p>'}`;}
@@ -28,8 +28,8 @@
       doc.setFontSize(8);
       const lines=[`Enregistre le : ${date(bon.bonCreatedAt||bon.createdAt||bon.date)}`,
         bon.bonValidUntil?`Valable jusqu'au : ${date(bon.bonValidUntil)}`:'Validite a verifier en ligne au magasin.',
-        'Validite : 24 heures. Apres expiration : confirmation du validateur.',
-        'Scanner obligatoire au magasin : le statut serveur fait foi.',
+        'Validite initiale : 24 heures. Apres validation du gestionnaire, le magasinier peut servir le bon.',
+        'Le statut serveur et le suivi des articles font foi au magasin.',
         'Un bon deja livre ne permet aucune nouvelle remise.'];
       doc.text(lines,47,y+4,{maxWidth:148});
       return y+34;
@@ -37,7 +37,7 @@
   }
   function stop(){
     generation++;busy=false;
-    const previous=camera;camera=null;
+    const previous=camera;camera=null;if(activePdfUrl){URL.revokeObjectURL(activePdfUrl);activePdfUrl=null;}
     if(previous)stopping=stopping.catch(()=>{}).then(async()=>{try{if(previous.isScanning)await previous.stop();}catch(_){}try{previous.clear();}catch(_){}});
     return stopping;
   }
@@ -45,7 +45,7 @@
   async function scan(value,container=document.getElementById('app-container')){
     if(busy)return;
     const token=generation,profile=env.profile(),uid=profile?.uid;
-    if(profile?.role!=='Gestionnaire')return;
+    if(profile?.role!=='Magasinier')return;
     busy=true;
     const output=container.querySelector('[data-scan-result]');if(!output){busy=false;return;}
     output.innerHTML='<p role="status">Vérification du bon dans la base…</p>';
@@ -56,47 +56,48 @@
       if(!valid())return;
       const bon=check.bon;
       const history=container.querySelector('[data-scan-history]');if(history)history.innerHTML=historyHtml(check.scansToday);
-      const labels={VALIDE:'BON VALIDE',EXPIRE:'BON EXPIRÉ — REMISE BLOQUÉE',DEJA_LIVRE:'BON DÉJÀ LIVRÉ — NE PAS REMETTRE DE MATÉRIEL',A_VALIDER:'VALIDATION EN ATTENTE — REMISE BLOQUÉE',REFUSE:'BON REFUSÉ OU ANNULÉ — REMISE BLOQUÉE'};
+      const labels={VALIDE:'BON PRET A SERVIR',EXPIRE:'BON EXPIRE',DEJA_LIVRE:'BON ENTIEREMENT SERVI',A_VALIDER:'EN ATTENTE DE VALIDATION',REFUSE:'BON REFUSE OU ANNULE'};
+      const material=bon.materialService||{},servedMap=material.servedByItem||{},events=material.events||[];
+      const serveRows=(bon.items||[]).map((item,index)=>{
+        const progress=servedMap[String(index)]||{},served=Number(progress.qty||0),remaining=Math.max(0,Number(item.qty||0)-served);
+        const servedBy=events.filter(event=>(event.items||[]).some(line=>Number(line.index)===index)).map(event=>event.name).filter(Boolean).join(', ');
+        return `<label class="grid grid-cols-[auto_1fr_100px] gap-3 items-center border rounded-xl p-3 ${remaining<=0?'bg-emerald-50':'bg-white'}"><input type="checkbox" data-serve-index="${index}" ${remaining<=0?'disabled':''}><span><b>${esc(item.label)}</b><small class="block">${esc(item.op||bon.op)} · demande ${esc(item.qty)} · déjà servi ${esc(served)} · reste ${esc(remaining)}${servedBy?` · par ${esc(servedBy)}`:''}</small></span><input type="number" data-serve-qty="${index}" min="0.000001" max="${remaining}" step="any" value="${remaining}" ${remaining<=0?'disabled':''} class="border rounded p-2 w-full" aria-label="Quantité à servir"></label>`;
+      }).join('');
+      if(activePdfUrl)URL.revokeObjectURL(activePdfUrl);activePdfUrl=null;
+      try{if(global.generateSignedBonPdf){activePdfUrl=URL.createObjectURL(await global.generateSignedBonPdf(bon));}}catch(pdfError){console.warn('PDF du bon indisponible',pdfError);}
       const color=check.canIssue?'border-green-600 bg-green-50':'border-red-600 bg-red-50';
-      output.innerHTML=`<section class="border-2 ${color} p-5 rounded-2xl space-y-3"><h3 class="font-black">${labels[check.state]||'BON NON AUTORISÉ'}</h3>
-        <p><b>Référence :</b> ${esc(global.BonReference.format(bon))}</p><p><b>Destinataire / équipe :</b> ${esc(bon.equipe||bon.demandeurName||bon.tech)}</p><p><b>Motif :</b> ${esc(bon.motif||bon.ref)}</p>
-        <p><b>Création :</b> ${esc(date(check.createdAt))}</p><p><b>Fin de validité :</b> ${esc(date(check.expiresAt))}</p><p><b>Statut enregistré :</b> ${esc(bon.status||bon.statut)}</p>
-        <p><b>Validateur :</b> ${esc(bon.validatorDecision?.name||'En attente')}</p><p><b>Gestionnaire affecté :</b> ${esc(bon.assignedGestionnaireName||'Non renseigné')}</p>
-        ${check.state==='DEJA_LIVRE'?`<p><b>Remis le :</b> ${esc(date(check.deliveredAt))}</p><p><b>Remis par :</b> ${esc(check.deliveredBy||'Non renseigné')}</p>`:''}
-        <ul>${(bon.items||[]).map(i=>`<li>${esc(i.label)} : ${esc(i.qty)} · ${esc(i.op||bon.op)}</li>`).join('')}</ul>
+      output.innerHTML=`<section class="border-2 ${color} p-5 rounded-2xl space-y-3"><h3 class="font-black">${labels[check.state]||'BON NON AUTORISE'}</h3>
+        <p><b>Reference :</b> ${esc(global.BonReference.format(bon))}</p><p><b>Destinataire / equipe :</b> ${esc(bon.equipe||bon.demandeurName||bon.tech)}</p><p><b>Motif :</b> ${esc(bon.motif||bon.ref)}</p>
+        <p><b>Statut :</b> ${esc(bon.status||bon.statut)}</p><p><b>Validateur :</b> ${esc(bon.validatorDecision?.name||'En attente')} · <b>Gestionnaire :</b> ${esc(bon.assignedGestionnaireName||'Non renseigne')}</p>
+        ${check.state==='DEJA_LIVRE'?`<p><b>Termine le :</b> ${esc(date(check.deliveredAt))} · <b>Par :</b> ${esc(check.deliveredBy||'')}</p>`:''}
+        ${pdfUrl?`<div><a class="inline-block bg-indigo-700 text-white rounded-lg p-3" href="${pdfUrl}" target="_blank" rel="noopener">Ouvrir / telecharger le PDF du bon</a><iframe title="PDF du bon" src="${pdfUrl}" class="w-full h-[65vh] border rounded-xl mt-3"></iframe></div>`:'<p class="text-amber-800">Le PDF du bon est indisponible. Les articles restent consultables ci-dessous.</p>'}
+        <section class="space-y-2"><h4 class="font-bold">Articles et suivi du service</h4>${serveRows||'<p>Aucun article sur ce bon.</p>'}</section>
         ${global.BonSignatures.html(bon)}
-        ${(bon.bonRenewals||[]).map(r=>`<p>Confirmation ${r.approved===false?'refusée':'accordée'} par ${esc(r.name)} le ${esc(date(r.at))} : ${esc(r.reason)}. Validité : ${esc(date(r.validUntil))}.</p>`).join('')}
-        ${check.canIssue?'<button data-issue class="bg-green-700 text-white p-3 rounded-xl">Vérifier et confirmer la remise</button>':''}
-        ${check.canRequestRenewal?`<button data-renew class="bg-amber-700 text-white p-3 rounded-xl" ${bon.bonRenewalRequestedAt?'disabled':''}>${bon.bonRenewalRequestedAt?'Confirmation demandée au validateur':'Demander la confirmation du validateur'}</button>`:''}
-        ${check.state==='VALIDE'&&!check.canIssue?'<p>Seul le gestionnaire affecté peut remettre ce matériel.</p>':''}
-        <p>Contrôle serveur effectué le ${esc(date(check.checkedAt))}. Comparez l’identité du porteur et les articles avec les informations ci-dessus.</p>
-        <button data-recheck class="border p-3 rounded-xl">Revérifier ce bon</button><p data-action-status role="status"></p></section>`;
+        ${check.canIssue?`<form data-serve-form class="space-y-3"><p class="font-bold">Cochez uniquement les articles remis. Un autre magasinier pourra servir les articles restants.</p><label class="block">Nom et signature du magasinier<textarea data-signer name="signer" required maxlength="120" class="border rounded-xl p-3 w-full" placeholder="Nom complet"></textarea></label><button class="bg-green-700 text-white p-3 rounded-xl">Signer et valider la sortie cochée</button></form>`:''}
+        <p>Controle serveur : ${esc(date(check.checkedAt))}. Le debit de stock sera enregistre uniquement apres validation de cette sortie.</p>
+        <button data-recheck class="border p-3 rounded-xl">Actualiser le suivi du bon</button><p data-action-status role="status"></p></section>`;
       output.querySelector('[data-recheck]').onclick=()=>scan(value,container);
-      output.querySelector('[data-issue]')?.addEventListener('click',async()=>{
-        if(busy||!valid())return;busy=true;
-        const button=output.querySelector('[data-issue]');button.disabled=true;
+      output.querySelectorAll('[data-serve-index]').forEach(input=>input.onchange=()=>{const qty=output.querySelector(`[data-serve-qty="${input.dataset.serveIndex}"]`);if(qty)qty.disabled=!input.checked;});
+      output.querySelector('[data-serve-form]')?.addEventListener('submit',async event=>{
+        event.preventDefault();if(busy||!valid())return;
+        const selected=Array.from(output.querySelectorAll('[data-serve-index]:checked'),checkBox=>({index:Number(checkBox.dataset.serveIndex),quantity:Number(output.querySelector(`[data-serve-qty="${checkBox.dataset.serveIndex}"]`).value)}));
+        if(!selected.length){output.querySelector('[data-action-status]').textContent='Cochez au moins un article a servir.';return;}
+        busy=true;const button=event.target.querySelector('button');button.disabled=true;
         try{
-          const latest=await rpc('inspect_stock_bon',{bon_id:id});
-          if(!valid())return;
-          if(!latest.canIssue){busy=false;await scan(value,container);return;}
-          await global.ValidatorWorkflow.issue(latest.bon);
-        }catch(e){if(valid())output.querySelector('[data-action-status]').textContent=e.message;}
-        finally{busy=false;if(valid())button.disabled=false;}
-      });
-      output.querySelector('[data-renew]')?.addEventListener('click',async()=>{
-        if(busy||!valid())return;busy=true;const button=output.querySelector('[data-renew]');button.disabled=true;
-        try{await rpc('request_bon_renewal',{request_key:check.requestKey});busy=false;if(valid())await scan(value,container);}
-        catch(e){if(valid()){output.querySelector('[data-action-status]').textContent=e.message;button.disabled=false;}}
-        finally{busy=false;}
-      });
-      const sound=document.getElementById('beep-sound');try{sound?.play()?.catch(()=>{});if(navigator.userActivation?.hasBeenActive)navigator.vibrate?.(100);}catch(_){}
+          const signature=await global.BonSignatures.capture('Signature du magasinier — service des articles',event.target.elements.signer.value||profile.name||'');
+          if(!signature||!valid())return;
+          await rpc('dispense_stock_bon_signed',{request_key:check.requestKey,items:selected,signer_name:signature.name,signature_image:signature.image});
+          if(valid()){busy=false;await scan(value,container);}
+        }catch(error){if(valid())output.querySelector('[data-action-status]').textContent=error.message;}
+        finally{busy=false;if(valid()&&button.isConnected)button.disabled=false;}
+      });      const sound=document.getElementById('beep-sound');try{sound?.play()?.catch(()=>{});if(navigator.userActivation?.hasBeenActive)navigator.vibrate?.(100);}catch(_){}
     }catch(e){if(valid())output.innerHTML=`<p class="bg-red-50 text-red-800 p-5 rounded-xl" role="alert">${esc(e.message)} Aucune remise autorisée sans contrôle serveur.</p>`;}
     finally{if(token===generation)busy=false;}
   }
   async function enter(container){
     const pending=stop(),token=generation;await pending;if(token!==generation)return;
-    if(env.profile()?.role!=='Gestionnaire'){container.textContent='Scanner réservé au gestionnaire.';return;}
-    container.innerHTML=`<div class="max-w-3xl mx-auto space-y-5 p-4"><h2 class="font-black text-xl">Contrôle des bons au magasin</h2><p>Scannez le QR code avant chaque remise. Un bon expire après 24 heures et ne peut servir qu’une fois.</p><div id="bon-reader"></div><button data-camera class="bg-indigo-700 text-white p-3 rounded-xl">Activer la caméra</button><button data-camera-stop class="border p-3 rounded-xl">Arrêter la caméra</button><p data-camera-status role="status"></p><form data-manual class="flex gap-2"><input name="code" aria-label="Identifiant ou contenu du QR code" placeholder="Identifiant du bon ou contenu du QR code" required class="border rounded-xl p-3 flex-1 min-w-0"><button class="border p-3 rounded-xl">Vérifier</button></form><div data-scan-result aria-live="polite"></div><section data-scan-history class="bg-slate-50 p-4 rounded-xl">L’historique du jour sera actualisé lors du contrôle d’un bon.</section></div>`;
+    if(env.profile()?.role!=='Magasinier'){container.textContent='Scanner réservé au magasinier.';return;}
+    container.innerHTML=`<div class="max-w-3xl mx-auto space-y-5 p-4"><h2 class="font-black text-xl">Service des bons au magasin</h2><p>Scannez le QR code du bon validé par le gestionnaire. Les articles déjà servis sont affichés et les articles restants peuvent être servis.</p><div id="bon-reader"></div><button data-camera class="bg-indigo-700 text-white p-3 rounded-xl">Activer la caméra</button><button data-camera-stop class="border p-3 rounded-xl">Arrêter la caméra</button><p data-camera-status role="status"></p><form data-manual class="flex gap-2"><input name="code" aria-label="Identifiant ou contenu du QR code" placeholder="Identifiant du bon ou contenu du QR code" required class="border rounded-xl p-3 flex-1 min-w-0"><button class="border p-3 rounded-xl">Vérifier</button></form><div data-scan-result aria-live="polite"></div><section data-scan-history class="bg-slate-50 p-4 rounded-xl">L’historique du jour sera actualisé lors du contrôle d’un bon.</section></div>`;
     container.querySelector('[data-manual]').onsubmit=e=>{e.preventDefault();scan(e.target.elements.code.value,container);};
     container.querySelector('[data-camera-stop]').onclick=async()=>{if(camera?.isScanning)await camera.stop();};
     container.querySelector('[data-camera]').onclick=async()=>{
