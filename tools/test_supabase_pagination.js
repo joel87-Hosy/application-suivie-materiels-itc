@@ -6,11 +6,11 @@ for(let i=0;i<63;i++)rows.push({collection:'stock',record_key:String(i),company_
 rows.push({collection:'stock',record_key:'foreign',company_id:'B',payload:{company_id:'B',qty:999}});
 function setup({cap=1000,admin=false,failAt=Infinity}={}) {
  const ranges=[];let changes=0;
- const client={from(name){let company=null,range=[0,999],orders=[];const query={select(){return this},eq(field,value){company=value;return this},order(field){orders.push(field);return this},range(start,end){range=[start,end];return this},then(resolve,reject){
+ const client={from(name){let collection=null,company=null,range=[0,999],orders=[];const query={select(){return this},eq(field,value){if(field==='collection')collection=value;else if(field==='company_id')company=value;return this},order(field){orders.push(field);return this},range(start,end){range=[start,end];return this},then(resolve,reject){
   if(name==='app_settings')return Promise.resolve({data:[],error:null}).then(resolve,reject);
-  ranges.push(range);assert.deepEqual(orders,['collection','record_key']);
+  ranges.push(range);assert.deepEqual(orders,['record_key']);
   if(range[0]>=failAt)return Promise.resolve({data:null,error:Error('Network failure')}).then(resolve,reject);
-  const data=rows.filter(r=>!company||r.company_id===company).sort((a,b)=>a.collection.localeCompare(b.collection)||a.record_key.localeCompare(b.record_key)).slice(range[0],Math.min(range[1]+1,range[0]+cap));
+  const data=rows.filter(r=>(!collection||r.collection===collection)&&(!company||r.company_id===company)).sort((a,b)=>a.record_key.localeCompare(b.record_key)).slice(range[0],Math.min(range[1]+1,range[0]+cap));
   return Promise.resolve({data,error:null}).then(resolve,reject);
  }};return query;}};
  const store=new context.window.SupabaseStore(client,()=>changes++,()=>{});store.profile={company_id:'A',role:admin?'SUPER_ADMIN':'Gestionnaire'};store.ready=true;store.raw={stock:{old:{qty:7}}};

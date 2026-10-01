@@ -22,7 +22,7 @@ const noisy=/MODULE_TYPELESS_PACKAGE_JSON|Reparsing as ES module|To eliminate th
 const failures=[];
 for(const file of selected){
  const started=Date.now();
- const run=spawnSync(process.execPath,[path.join('tools',file)],{encoding:'utf8',timeout:300000});
+ const run=spawnSync(process.execPath,['--experimental-strip-types',path.join('tools',file)],{encoding:'utf8',timeout:300000});
  const output=[run.stdout,run.stderr].join('').split('\n').filter(l=>l.trim()&&!noisy.test(l));
  const ok=run.status===0&&output.some(l=>/^(PASS|OK)\b/.test(l));
  process.stdout.write(`${ok?'ok  ':'FAIL'}  ${file.padEnd(38)} ${((Date.now()-started)/1000).toFixed(1)}s\n`);
