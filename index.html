@@ -1988,6 +1988,11 @@
             renderStock(currentSectionId.replace("stock-", ""), container);
           }
 
+          // Actualiser aussi les vues de notification alimentées par leurs modules.
+          if (['reception', 'transferts-stocks', 'validation-bons'].includes(currentSectionId)) {
+            showSection(currentSectionId);
+          }
+
           // These views have just rendered the refreshed snapshot. Record its
           // notifications as read even when the user did not reopen the tab.
           if (container && ['trafic-audit', 'coord-demandes-tech', 'demandes-coordonnatrice', 'tech-mes-demandes', 'bons-signes', 'gestion-retours'].includes(currentSectionId)) {

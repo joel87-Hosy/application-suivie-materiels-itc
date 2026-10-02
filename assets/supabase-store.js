@@ -19,6 +19,9 @@
       this.onChange = onChange;
       this.onDenied = onDenied;
       this.timer = null;
+      this.refreshTimer = null;
+      this.pendingRefreshNames = new Set();
+      this.channel = null;
       this.generation = 0;
       this.stop();
     }
@@ -26,6 +29,11 @@
       this.generation++;
       if (this.timer) clearInterval(this.timer);
       this.timer = null;
+      if (this.refreshTimer) clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+      this.pendingRefreshNames.clear();
+      if (this.channel) this.client.removeChannel(this.channel);
+      this.channel = null;
       this.profile = null;
       this.uid = null;
       this.pending = null;
@@ -72,8 +80,35 @@
       await this.read(generation, {names:initialCollections});
       if (generation !== this.generation) throw new Error('Session remplacée.');
       this.ready = true;
+      this.watchRecords(generation);
       // Refresh only after an explicit action; background polling destroys drafts.
       return this.value();
+    }
+    watchRecords(generation) {
+      if (!this.client.channel) return;
+      const channel = this.client.channel(`app-records-${this.uid}-${generation}`);
+      this.channel = channel;
+      const refresh = payload => {
+        if (generation !== this.generation) return;
+        const row = payload.new?.collection ? payload.new : payload.old;
+        const name = row?.collection;
+        if (!name || !collections.includes(name)) return;
+        this.pendingRefreshNames.add(name);
+        if (this.refreshTimer) return;
+        this.refreshTimer = setTimeout(async () => {
+          this.refreshTimer = null;
+          const names = [...this.pendingRefreshNames];
+          this.pendingRefreshNames.clear();
+          try { await this.readCollections(names, generation, {notify:true}); }
+          catch (error) { if (generation === this.generation) console.warn('Actualisation temps réel indisponible', error); }
+        }, 80);
+      };
+      channel.on('postgres_changes', {
+        event:'*', schema:'public', table:'app_records',
+        ...(this.profile.role === 'SUPER_ADMIN' ? {} : {filter:`company_id=eq.${this.profile.company_id}`}),
+      }, refresh).subscribe(status => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn('Abonnement temps réel Supabase indisponible:', status);
+      });
     }
     async read(generation, {notify = true, names = collections} = {}) {
       const [records, { data: settingRows, error: settingsError }] = await Promise.all([
