@@ -2638,7 +2638,7 @@
         // On transforme le rôle en MAJUSCULES pour éviter les erreurs de saisie
         const r = currentUser.role.trim().toUpperCase();
         const isSuperAdmin = r === "SUPER_ADMIN";
-        window.ManagerStock.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
+        window.ManagerStock.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());},navigate:showSection,readNotifications:markNotificationsAsRead});
         window.BonScanner.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend});
         window.StorekeeperBacklog.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
           refresh:async()=>{const generation=secureStore.generation;await secureStore.readCollections(['demandes','stock'],generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());}});
