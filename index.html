@@ -4742,7 +4742,7 @@
                           <div id="sortie-material-picker"></div>
                       </div>
 
-                        ${direct ? `<label class="block text-xs">Signature de la coordination<input id="s-coordination-signature" value="${escapeHtml(saved.coordinationSignatureText || currentUser?.name || '')}" maxlength="500" required class="w-full border-2 p-3 rounded-xl mt-2" /></label>` : ''}
+                        ${direct ? `<label class="block text-xs">Signature du ${currentUser?.role === 'Superviseur Terrain' ? 'Superviseur Terrain' : 'coordinateur'}<input id="s-coordination-signature" value="${escapeHtml(saved.coordinationSignatureText || currentUser?.name || '')}" maxlength="500" required class="w-full border-2 p-3 rounded-xl mt-2" /></label>` : ''}
                         <div class="flex gap-4">
                           <button type="submit" class="flex-1 bg-red-600 text-white py-4 rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-black transition inline-flex items-center justify-center gap-2"><i class="fas fa-check-circle"></i> ${direct ? 'Envoyer au validateur' : 'Confirmer la Sortie de Stock'}</button>
                       </div>
@@ -4908,7 +4908,8 @@
           let routing={};
           try {if(direct)routing=window.RequestRouting?.values(e.target,selectedItems)||{};} catch(error){return alert(error.message);}
           const signingSession = secureStore.generation;
-          const coordinationInk = direct ? await window.BonSignatures.capture('Signature du coordinateur', coordinationSignatureText) : null;
+          const signerRole = currentUser?.role === 'Superviseur Terrain' ? 'Superviseur Terrain' : 'Coordinateur';
+          const coordinationInk = direct ? await window.BonSignatures.capture(`Signature du ${signerRole}`, coordinationSignatureText) : null;
           if (direct && (!coordinationInk || signingSession !== secureStore.generation)) return;
           appData.demandes ||= [];
           const groups = direct ? [...new Set(selectedItems.map(item => normalizeOperatorKey(item.op)))].map(op => ({ops:[op],items:selectedItems.filter(item => normalizeOperatorKey(item.op)===op)})) : [{ops:selectedOps,items:selectedItems}];
@@ -4917,7 +4918,7 @@
             originOffice: document.getElementById('s-office')?.value || window.AccountAffiliation?.office(currentUser),
             ...routing,
             demandeurName:tech,demandeurOriginalId:currentUser.id,createdBy:currentUser.name,createdByUid:secureStore.uid,
-            ...(direct ? {workflow:'COORD_DIRECT_BON',coordinationSignatureText:coordinationInk.name,bonSignatures:{coordination:coordinationInk},coordinationSignedAt:new Date().toISOString(),coordinateurId:currentUser.id} : {}),
+            ...(direct ? {workflow:'COORD_DIRECT_BON',createdByRole:currentUser.role,emitterRole:currentUser.role,coordinationSignerRole:signerRole,coordinationSignatureText:coordinationInk.name,bonSignatures:{coordination:coordinationInk},coordinationSignedAt:new Date().toISOString(),coordinateurId:currentUser.id} : {}),
             date:new Date().toISOString(),dateBon:dateBonValue,motif:ref,
             status:'EN ATTENTE VALIDATEUR',statut:'EN ATTENTE VALIDATEUR'}));
           if (!(await save())) return;
@@ -8870,7 +8871,7 @@
       function getBonSignatureChain(bon) {
         const chain = [];
         if (bon.technicianSignatureText) chain.push('Technicien : ' + bon.technicianSignatureText);
-        if (bon.coordinationSignatureText) chain.push('Coordination : ' + bon.coordinationSignatureText);
+        if (bon.coordinationSignatureText) chain.push((bon.coordinationSignerRole || 'Coordination') + ' : ' + bon.coordinationSignatureText);
         if (bon.validatorDecision?.approved === true) chain.push('Validation : ' + (bon.validatorDecision.name || bon.validatorDecision.uid || '') + ' (' + (bon.validatorDecision.at || '') + ')');
         if (bon.managerSignatureText || bon.validatedAt) chain.push('Gestionnaire : ' + (bon.managerSignatureText || bon.validatedBy || '') + ' (' + (bon.managerSignedAt || bon.validatedAt || '') + ')');
         return chain;

@@ -49,7 +49,7 @@
           return `<form data-index="${index}" class="bg-white border rounded-2xl p-5 space-y-3"><h3 class="font-bold">${esc(r.ref||r.id)} — ${esc(r.demandeurName||r.tech||r.createdBy)}</h3><p>${esc(r.motif||'')} · ${esc(ops.join(', '))}</p>
             <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th class="text-left">Stock</th><th class="text-left">Matériel</th><th class="text-right">Quantité</th></tr></thead><tbody>${(r.items||[]).map(i=>`<tr><td>${esc(op(i.op||r.op))}</td><td>${esc(i.label)}</td><td class="text-right">${esc(i.qty)}</td></tr>`).join('')}</tbody></table></div>
             ${corrections(r)}
-            ${r.coordinationSignatureText?`<p>Coordination : ${esc(r.coordinationSignatureText)}</p>`:''}
+            ${r.coordinationSignatureText?`<p>${esc(r.coordinationSignerRole||'Coordination')} : ${esc(r.coordinationSignatureText)}</p>`:''}
             <label class="block">Gestionnaire dédié<select name="manager" class="border p-3 rounded-lg w-full"><option value="">Choisir le gestionnaire</option>${eligible.map(m=>`<option value="${esc(m.uid)}" ${r.assignedGestionnaireUid===m.uid||eligible.length===1?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>
             ${eligible.length?'':'<p class="text-amber-800">Aucun gestionnaire ne couvre tous les stocks de ce bon. Contactez le superviseur pour corriger les affectations avant de traiter ce bon.</p>'}
             <label class="block">Observation / motif du refus<textarea name="reason" maxlength="1000" class="border p-3 rounded-lg w-full"></textarea></label>

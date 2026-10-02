@@ -55,7 +55,8 @@
       const at=evidence?.at||legacy[1];
       const date=at&&!Number.isNaN(Date.parse(at))?new Date(at).toLocaleString('fr-FR'):at||'';
       const image=typeof evidence?.image==='string'&&evidence.image.startsWith('data:image/png;base64,')?evidence.image:null;
-      return {key,label,name,date,image,refused:key==='validator'&&bon.validatorDecision?.approved===false};
+      const displayLabel=key==='coordination'&&bon.coordinationSignerRole==='Superviseur Terrain'?'Superviseur Terrain':label;
+      return {key,label:displayLabel,name,date,image,refused:key==='validator'&&bon.validatorDecision?.approved===false};
     });
   }
   function pdf(doc,record,data,y){
