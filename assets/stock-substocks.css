@@ -20,3 +20,4 @@
 .substock-fields label{font-size:13px;font-weight:700;}.substock-fields input{display:block;width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin-top:8px;}
 .substock-items button[type=submit]{background:#1d4ed8;color:white;}.substock-dialog [data-status]{color:#9f1239;}
 @media(max-width:650px){.substock-dialog{padding:14px;}.substock-cards{grid-template-columns:repeat(2,minmax(0,1fr));}.substock-fields{grid-template-columns:1fr;}.substock-toolbar{flex-wrap:wrap;}}
+.substock-dialog header p,.substock-items summary span,.substock-items form>p,.substock-fields label{font-size:14px;}

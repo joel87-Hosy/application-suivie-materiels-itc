@@ -82,3 +82,5 @@ body:has(.ctl-workspace) #app-container{position:absolute;left:0;top:0;width:100
 .ctl-workspace{font-size:10px}
 .ctl-hero{color:black;background:white}
 }
+.ctl-workspace{font-size:16px}
+.ctl-eyebrow,.ctl-controller-metrics small,.ctl-muted,.ctl-chart figcaption,.ctl-chart-label,.ctl-table th,.ctl-badge,.ctl-events time,.ctl-events small,.ctl-tabs button{font-size:14px}

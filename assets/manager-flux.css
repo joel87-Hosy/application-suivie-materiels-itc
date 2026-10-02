@@ -37,4 +37,8 @@
 .manager-flux tbody tr:nth-child(even){background:#f8fafc;}
 .manager-flux tbody tr:hover{background:#f0f9ff;}
 @media(max-width:640px){.manager-flux{padding:12px!important;}.manager-flux>h2{padding:22px 16px;font-size:18px;}.manager-flux label{flex:1 1 140px;min-width:0;}.manager-flux input{max-width:100%;}.manager-flux [data-kind],.manager-flux .bg-cyan-50{padding:18px;}}
+.manager-flux label,.manager-flux [data-refresh],.manager-flux [data-export],.manager-flux [data-kind]>span:last-child,.manager-flux [data-material] p,.manager-flux th,.manager-flux td{font-size:14px;}
+.manager-flux>p{font-size:15px;}
+.manager-flux [data-material] b,.manager-flux summary{font-size:16px;}
+@media(max-width:640px){.manager-flux>h2{font-size:20px;}}
 @media(prefers-reduced-motion:reduce){.manager-flux button{transition:none;}.manager-flux button:hover{transform:none;}}
