@@ -1,6 +1,6 @@
 BEGIN;
 
--- ONT NOKIA is recorded as served without a stock debit.
+-- Match ONT NOKIA by both words regardless of label order or punctuation.
 CREATE OR REPLACE FUNCTION public.dispense_stock_bon_signed(request_key text,items jsonb,signer_name text,signature_image text) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; request public.app_records; stockrow public.app_records; selection jsonb; item jsonb; selected_item jsonb;
