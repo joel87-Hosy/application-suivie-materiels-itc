@@ -2638,7 +2638,7 @@
         if (!chuteMenu) {
           chuteMenu = document.createElement("div");
           chuteMenu.id = "menu-cable-offcuts";
-          chuteMenu.innerHTML = `<button type="button" onclick="showSection('stocks-chutes')" class="w-full text-left p-3 rounded-xl bg-emerald-800 text-white font-bold"><i class="fas fa-recycle mr-2"></i>Stocks de chutes</button>`;
+          chuteMenu.innerHTML = `<button type="button" onclick="showSection('stocks-chutes'); toggleSidebarMobile()" class="w-full text-left p-3 rounded-xl bg-emerald-800 text-white font-bold"><i class="fas fa-recycle mr-2"></i>Stocks de chutes</button>`;
           document.getElementById("menu-cockpit")?.parentNode.insertBefore(chuteMenu, document.getElementById("menu-cockpit"));
         }
         chuteMenu.classList.toggle("hidden", !window.CableOffcuts.roles.includes(currentUser.role));
@@ -2647,7 +2647,7 @@
           controlMenu = document.createElement("div");
           controlMenu.id = "menu-stock-control";
           controlMenu.className = "space-y-2";
-          controlMenu.innerHTML = `<button type="button" onclick="showSection('control-dashboard')" class="w-full text-left p-3 rounded-xl bg-teal-800 text-white font-bold"><i class="fas fa-clipboard-check mr-2"></i>Contrôle des stocks</button>`;
+          controlMenu.innerHTML = `<button type="button" onclick="showSection('control-dashboard'); toggleSidebarMobile()" class="w-full text-left p-3 rounded-xl bg-teal-800 text-white font-bold"><i class="fas fa-clipboard-check mr-2"></i>Contrôle des stocks</button>`;
           document.getElementById("menu-cockpit")?.parentNode.insertBefore(controlMenu, document.getElementById("menu-cockpit"));
         }
         controlMenu.classList.toggle("hidden", !["CONTRÔLEUR", "SUPERVISEUR", "GESTIONNAIRE"].includes(r));
