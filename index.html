@@ -1422,6 +1422,7 @@
             <div id="menu-magasinier" class="mt-6 hidden">
               <p class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50">Service des bons</p>
               <button type="button" onclick="showSection('scanner-physique'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-pink-300 font-black"><i class="fas fa-qrcode w-5"></i> Scanner et servir un bon</button>
+              <button type="button" onclick="showSection('magasinier-regularisation'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-amber-300 font-black"><i class="fas fa-file-signature w-5"></i> Régulariser les remises</button>
               <button type="button" onclick="showSection('magasinier-historique'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-cyan-300 font-black"><i class="fas fa-clock-rotate-left w-5"></i> Historique des bons servis</button>
             </div>
             <div
@@ -1685,12 +1686,13 @@
     <script src="assets/control-core.js?v=20260923-regional"></script>
     <script src="assets/account-affiliation.js"></script>
     <script src="assets/request-routing.js"></script>
-    <script src="assets/company-users.js?v=20261005-storekeeper-role-db"></script>
+    <script src="assets/company-users.js?v=20261006-company-users-deploy"></script>
     <script src="assets/notification-tabs.js?v=20260923-receipts"></script>
     <script src="assets/supabase-store.js?v=20261005-fast-connect"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
     <script src="assets/bon-scanner.js?v=20261001-storekeeper-issue"></script>
+    <script src="assets/storekeeper-backlog.js?v=20261006-storekeeper-backlog"></script>
     <script src="assets/bon-signatures.js?v=20261001-storekeeper-signature"></script>
     <script src="assets/validator-workflow.js?v=20261001-manager-handoff"></script>
     <script src="assets/stock-control-store.js?v=20261006-supabase"></script>
@@ -1960,6 +1962,8 @@
             renderCoordFluxTech(container); // <--- AJOUTÉ : Pour la coordinatrice
           } else if (currentSectionId === "demandes-coordonnatrice") {
             renderDemandesGestionnaire(container); // <--- AJOUTÉ : Pour le magasinier
+          } else if (currentSectionId === "magasinier-regularisation") {
+            window.StorekeeperBacklog?.render(container);
           } else if (currentSectionId === "tech-mes-demandes") {
             renderTechMesDemandes(container); // <--- AJOUTÉ : Pour le technicien
           } else if (currentSectionId === "bons-signes") {
@@ -2565,7 +2569,7 @@
         document.getElementById("app-container").innerHTML = "";
         const password = document.getElementById('login-password');
         if (password) password.value = '';
-        for (const cleanup of [() => stopVoiceAssistant(), () => window.CableOffcuts?.stop(),
+        for (const cleanup of [() => stopVoiceAssistant(), () => window.CableOffcuts?.stop(), () => window.StorekeeperBacklog?.stop(),
           () => window.StockControl?.reset(), () => window.ManagerLocations?.stop(),
           () => window.ManagerStock?.stop(), () => window.ValidatorWorkflow?.stop(), () => window.BonScanner?.stop(), () => window.BonSignatures?.cancel(), () => secureStore.stop()]) {
           try { cleanup(); } catch (error) { console.warn('Nettoyage de session', error); }
@@ -2625,6 +2629,8 @@
         const isSuperAdmin = r === "SUPER_ADMIN";
         window.ManagerStock.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:()=>secureStore.read(secureStore.generation),navigate:showSection,readNotifications:markNotificationsAsRead});
         window.BonScanner.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend});
+        window.StorekeeperBacklog.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
+          refresh:async()=>{const generation=secureStore.generation;await secureStore.readCollections(['demandes','stock'],generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());}});
         window.ManagerLocations.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,navigate:showSection,
           refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());},
           reloadProfile:async()=>{const generation=secureStore.generation;await secureStore.load(generation);if(generation!==secureStore.generation)throw new Error('Session remplacée.');currentUser={...currentUser,...secureStore.profile};appData=normalizeAppData(secureStore.value());updateMenuVisibility();updateUserInfo();}});
@@ -6764,15 +6770,17 @@
       function showSection(id) {
         const activeRole = String(secureStore.profile?.role || currentUser?.role || '').toUpperCase();
         if (id === 'magasinier-historique' && activeRole !== 'MAGASINIER') id = getDefaultSectionForUser(currentUser);
+        if (id === 'magasinier-regularisation' && activeRole !== 'MAGASINIER') id = getDefaultSectionForUser(currentUser);
         if (id === 'dg-magasinier-suivi' && activeRole !== 'DG') id = getDefaultSectionForUser(currentUser);
         if (window.ManagerLocations?.isBusy()) return;
         window.ManagerLocations?.stop();
         if (window.ManagerStock?.isBusy()) return;
         window.ManagerStock?.stop();
         if (window.ValidatorWorkflow?.isBusy()) return;
-        if (window.StockControl?.isBusy() || window.CableOffcuts?.isBusy()) return;
+        if (window.StockControl?.isBusy() || window.CableOffcuts?.isBusy() || window.StorekeeperBacklog?.isBusy()) return;
         window.ValidatorWorkflow?.stop();
         window.BonScanner?.stop();
+        window.StorekeeperBacklog?.stop();
         if (secureStore.profile?.role === "Contrôleur" && !id.startsWith("control-") && id !== "mon-profil" && id !== "stocks-chutes") id = "control-dashboard";
         window.StockControl?.stop();
         window.CableOffcuts?.stop();
@@ -6855,6 +6863,9 @@
           renderGestionRetours(container);
         } else if (id === "scanner-physique") {
           renderScanner(container);
+        } else if (id === "magasinier-regularisation") {
+          viewTitle.innerText = "RÉGULARISER LES REMISES MAGASINIER";
+          window.StorekeeperBacklog.enter(container);
         }
         // CORRECTION : Ajout du container manquant
         else if (id === "sortie-physique") {
