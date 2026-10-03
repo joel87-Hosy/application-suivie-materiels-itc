@@ -41,7 +41,7 @@
     if(previous)stopping=stopping.catch(()=>{}).then(async()=>{try{if(previous.isScanning)await previous.stop();}catch(_){}try{previous.clear();}catch(_){}});
     return stopping;
   }
-  async function rpc(name,args){const {data,error}=await env.client().rpc(name,args);if(error)throw Error(error.code==='PGRST202'?'Le contrôle des bons doit être activé sur le serveur. Aucune remise autorisée depuis le scanner.':error.message);return data;}
+  async function rpc(name,args){const {data,error}=await env.client().rpc(name,args);if(error)throw Error(error.code==='PGRST202'&&name==='inspect_stock_bon'?'Le serveur Supabase ne connaît pas encore le contrôle du scanner. L’administrateur doit appliquer la migration supabase/migrations/202610010002_storekeeper_issue_workflow.sql, puis recharger le schéma API. Aucune remise n’a été effectuée.':error.message);return data;}
   async function scan(value,container=document.getElementById('app-container')){
     if(busy)return;
     const token=generation,profile=env.profile(),uid=profile?.uid;
@@ -70,7 +70,7 @@
         <p><b>Reference :</b> ${esc(global.BonReference.format(bon))}</p><p><b>Destinataire / equipe :</b> ${esc(bon.equipe||bon.demandeurName||bon.tech)}</p><p><b>Motif :</b> ${esc(bon.motif||bon.ref)}</p>
         <p><b>Statut :</b> ${esc(bon.status||bon.statut)}</p><p><b>Validateur :</b> ${esc(bon.validatorDecision?.name||'En attente')} · <b>Gestionnaire :</b> ${esc(bon.assignedGestionnaireName||'Non renseigne')}</p>
         ${check.state==='DEJA_LIVRE'?`<p><b>Termine le :</b> ${esc(date(check.deliveredAt))} · <b>Par :</b> ${esc(check.deliveredBy||'')}</p>`:''}
-        ${pdfUrl?`<div><a class="inline-block bg-indigo-700 text-white rounded-lg p-3" href="${pdfUrl}" target="_blank" rel="noopener">Ouvrir / telecharger le PDF du bon</a><iframe title="PDF du bon" src="${pdfUrl}" class="w-full h-[65vh] border rounded-xl mt-3"></iframe></div>`:'<p class="text-amber-800">Le PDF du bon est indisponible. Les articles restent consultables ci-dessous.</p>'}
+        ${activePdfUrl?`<div><a class="inline-block bg-indigo-700 text-white rounded-lg p-3" href="${activePdfUrl}" target="_blank" rel="noopener">Ouvrir / télécharger le PDF du bon</a><iframe title="PDF du bon" src="${activePdfUrl}" class="w-full h-[65vh] border rounded-xl mt-3"></iframe></div>`:'<p class="text-amber-800">Le PDF du bon est indisponible. Les articles restent consultables ci-dessous.</p>'}
         <section class="space-y-2"><h4 class="font-bold">Articles et suivi du service</h4>${serveRows||'<p>Aucun article sur ce bon.</p>'}</section>
         ${global.BonSignatures.html(bon)}
         ${check.canIssue?`<form data-serve-form class="space-y-3"><p class="font-bold">Cochez uniquement les articles remis. Un autre magasinier pourra servir les articles restants.</p><label class="block">Nom et signature du magasinier<textarea data-signer name="signer" required maxlength="120" class="border rounded-xl p-3 w-full" placeholder="Nom complet"></textarea></label><button class="bg-green-700 text-white p-3 rounded-xl">Signer et valider la sortie cochée</button></form>`:''}
