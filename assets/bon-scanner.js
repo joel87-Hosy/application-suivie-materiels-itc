@@ -15,6 +15,12 @@
     }
     if(!text||text.length>250)throw Error('Identifiant invalide.');return text;
   }
+  function stockFor(item,bon){
+    const stock=env?.data?.()?.stock||[],op=String(item?.op||bon?.op||'').trim().toUpperCase();
+    const label=String(item?.label||'').trim().replace(/\s+/g,' ').toUpperCase();
+    const key=String(item?.stockKey||item?._dbKey||'');
+    return stock.find(row=>(!key||String(row._dbKey||row.id||'')===key)&&String(row.op||row.operator||'').trim().toUpperCase()===op&&String(row.label||row.name||row.designation||'').trim().replace(/\s+/g,' ').toUpperCase()===label);
+  }
   async function pdf(doc,record,data,y){
     const bon=global.BonReference.resolve(record,data);
     if(!(bon.sourceDemandeId||bon.id||bon._dbKey)||!bon.company_id)throw Error('Identité du bon incomplète : QR code impossible. Actualisez les données.');
@@ -60,8 +66,10 @@
       const material=bon.materialService||{},servedMap=material.servedByItem||{},events=material.events||[];
       const serveRows=(bon.items||[]).map((item,index)=>{
         const progress=servedMap[String(index)]||{},served=Number(progress.qty||0),remaining=Math.max(0,Number(item.qty||0)-served);
+        if(remaining<=0||material.unavailableByItem?.[String(index)])return '';
         const servedBy=events.filter(event=>(event.items||[]).some(line=>Number(line.index)===index)).map(event=>event.name).filter(Boolean).join(', ');
-        return `<label class="grid grid-cols-[auto_1fr_100px] gap-3 items-center border rounded-xl p-3 ${remaining<=0?'bg-emerald-50':'bg-white'}"><input type="checkbox" data-serve-index="${index}" ${remaining<=0?'disabled':''}><span><b>${esc(item.label)}</b><small class="block">${esc(item.op||bon.op)} · demande ${esc(item.qty)} · déjà servi ${esc(served)} · reste ${esc(remaining)}${servedBy?` · par ${esc(servedBy)}`:''}</small></span><input type="number" data-serve-qty="${index}" min="0.000001" max="${remaining}" step="any" value="${remaining}" ${remaining<=0?'disabled':''} class="border rounded p-2 w-full" aria-label="Quantité à servir"></label>`;
+        const stock=stockFor(item,bon),available=Math.max(0,Number(stock?.qty||0)),cap=Math.min(remaining,available);
+        return `<div class="space-y-2 border rounded-xl p-3"><div class="grid grid-cols-[auto_1fr_100px] gap-3 items-center"><input type="checkbox" data-serve-index="${index}"><span><b>${esc(item.label)}</b><small class="block">${esc(item.op||bon.op)} · demande ${esc(item.qty)} · déjà servi ${esc(served)} · reste ${esc(remaining)} · stock ${stock?esc(available):'absent'}${servedBy?` · par ${esc(servedBy)}`:''}</small></span><input type="number" data-serve-qty="${index}" min="0" max="${cap}" step="any" value="${cap}" disabled class="border rounded p-2 w-full" aria-label="Quantité à servir"></div>${cap<remaining?`<label class="block"><input type="checkbox" data-unavailable-index="${index}"> Matériel indisponible pour le reliquat (${esc(remaining-cap)} restant)</label>`:''}</div>`;
       }).join('');
       if(activePdfUrl)URL.revokeObjectURL(activePdfUrl);activePdfUrl=null;
       try{if(global.generateSignedBonPdf){activePdfUrl=URL.createObjectURL(await global.generateSignedBonPdf(bon));}}catch(pdfError){console.warn('PDF du bon indisponible',pdfError);}
@@ -73,20 +81,22 @@
         ${activePdfUrl?`<div><a class="inline-block bg-indigo-700 text-white rounded-lg p-3" href="${activePdfUrl}" target="_blank" rel="noopener">Ouvrir / télécharger le PDF du bon</a><iframe title="PDF du bon" src="${activePdfUrl}" class="w-full h-[65vh] border rounded-xl mt-3"></iframe></div>`:'<p class="text-amber-800">Le PDF du bon est indisponible. Les articles restent consultables ci-dessous.</p>'}
         <section class="space-y-2"><h4 class="font-bold">Articles et suivi du service</h4>${serveRows||'<p>Aucun article sur ce bon.</p>'}</section>
         ${global.BonSignatures.html(bon)}
-        ${check.canIssue?`<form data-serve-form class="space-y-3"><p class="font-bold">Cochez uniquement les articles remis. Un autre magasinier pourra servir les articles restants.</p><label class="block">Nom et signature du magasinier<textarea data-signer name="signer" required maxlength="120" class="border rounded-xl p-3 w-full" placeholder="Nom complet"></textarea></label><button class="bg-green-700 text-white p-3 rounded-xl">Signer et valider la sortie cochée</button></form>`:''}
+        ${check.canIssue?`<form data-serve-form class="space-y-3"><p class="font-bold">Ajustez les quantités servies selon le stock. Indiquez les reliquats indisponibles pour clôturer le bon.</p><label class="block">Nom et signature du magasinier<textarea data-signer name="signer" required maxlength="120" class="border rounded-xl p-3 w-full" placeholder="Nom complet"></textarea></label><button class="bg-green-700 text-white p-3 rounded-xl">Signer et valider le service</button></form>`:''}
         <p>Controle serveur : ${esc(date(check.checkedAt))}. Le debit de stock sera enregistre uniquement apres validation de cette sortie.</p>
         <button data-recheck class="border p-3 rounded-xl">Actualiser le suivi du bon</button><p data-action-status role="status"></p></section>`;
       output.querySelector('[data-recheck]').onclick=()=>scan(value,container);
       output.querySelectorAll('[data-serve-index]').forEach(input=>input.onchange=()=>{const qty=output.querySelector(`[data-serve-qty="${input.dataset.serveIndex}"]`);if(qty)qty.disabled=!input.checked;});
+      output.querySelectorAll('[data-unavailable-index]').forEach(input=>input.onchange=()=>{const qty=output.querySelector(`[data-serve-qty="${input.dataset.unavailableIndex}"]`),serve=output.querySelector(`[data-serve-index="${input.dataset.unavailableIndex}"]`);if(input.checked&&serve&&!serve.checked){serve.checked=true;if(qty)qty.value=qty.max;}if(qty)qty.disabled=!serve?.checked;});
       output.querySelector('[data-serve-form]')?.addEventListener('submit',async event=>{
         event.preventDefault();if(busy||!valid())return;
-        const selected=Array.from(output.querySelectorAll('[data-serve-index]:checked'),checkBox=>({index:Number(checkBox.dataset.serveIndex),quantity:Number(output.querySelector(`[data-serve-qty="${checkBox.dataset.serveIndex}"]`).value)}));
-        if(!selected.length){output.querySelector('[data-action-status]').textContent='Cochez au moins un article a servir.';return;}
+        const selected=Array.from(output.querySelectorAll('[data-serve-index]:checked'),checkBox=>({index:Number(checkBox.dataset.serveIndex),quantity:Number(output.querySelector(`[data-serve-qty="${checkBox.dataset.serveIndex}"]`).value)})).filter(row=>row.quantity>0);
+        const unavailable_items=Array.from(output.querySelectorAll('[data-unavailable-index]:checked'),input=>Number(input.dataset.unavailableIndex));
+        if(!selected.length&&!unavailable_items.length){output.querySelector('[data-action-status]').textContent='Sélectionnez une quantité à servir ou un article indisponible.';return;}
         busy=true;const button=event.target.querySelector('button');button.disabled=true;
         try{
           const signature=await global.BonSignatures.capture('Signature du magasinier — service des articles',event.target.elements.signer.value||profile.name||'');
           if(!signature||!valid())return;
-          await rpc('dispense_stock_bon_signed',{request_key:check.requestKey,items:selected,signer_name:signature.name,signature_image:signature.image});
+          await rpc('dispense_stock_bon_signed_v2',{request_key:check.requestKey,items:selected,unavailable_items,signer_name:signature.name,signature_image:signature.image});
           if(valid()){busy=false;await scan(value,container);}
         }catch(error){if(valid())output.querySelector('[data-action-status]').textContent=error.message;}
         finally{busy=false;if(valid()&&button.isConnected)button.disabled=false;}

@@ -26,16 +26,28 @@
     return bon.items.map((item, index) => {
       const requested = Number(item?.qty);
       const delivered = Number(served[String(index)]?.qty || 0);
-      return { index, item, requested, delivered, remaining: requested - delivered };
-    }).filter(row => Number.isFinite(row.remaining) && row.remaining > 0);
+      const unavailable = bon.materialService?.unavailableByItem?.[String(index)];
+      return { index, item, requested, delivered, remaining: requested - delivered, unavailable };
+    }).filter(row => Number.isFinite(row.remaining) && row.remaining > 0 && !row.unavailable);
+  }
+
+  function matchingStock(item, bon) {
+    const stock = env?.data?.()?.stock || [];
+    const op = String(item?.op || bon?.op || '').trim().toUpperCase();
+    const label = String(item?.label || '').trim().replace(/\s+/g, ' ').toUpperCase();
+    const keyed = String(item?.stockKey || item?._dbKey || '');
+    return stock.find(row => (!keyed || String(row._dbKey || row.id || '') === keyed) &&
+      String(row.op || row.operator || '').trim().toUpperCase() === op &&
+      String(row.label || row.name || row.designation || '').trim().replace(/\s+/g, ' ').toUpperCase() === label);
   }
 
   function pendingBons() {
     const data = env?.data?.() || {};
     return (data.demandes || []).filter(bon => {
       const status = normalizedStatus(bon);
-      return ['EN ATTENTE MAGASINIER', 'PARTIELLEMENT SERVI'].includes(status) &&
-        Boolean(bon.managerSignedAt) && !alreadySigned(bon) && remainingItems(bon).length > 0;
+      return Boolean(bon.managerSignedAt) && remainingItems(bon).length > 0 && (
+        (status === 'EN ATTENTE MAGASINIER' && !alreadySigned(bon)) || status === 'PARTIELLEMENT SERVI'
+      );
     }).sort((a, b) => String(a.managerSignedAt || a.date || '').localeCompare(String(b.managerSignedAt || b.date || '')));
   }
 
@@ -84,17 +96,15 @@
             </div>
             <span class="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800">${items.length} article(s) · ${esc(total)} unité(s) restantes</span>
           </div>
-          <div class="divide-y rounded-xl border">${items.map(({item, remaining, delivered}) => `<div class="flex flex-wrap justify-between gap-2 p-3 text-sm"><span class="font-semibold">${esc(item.label || 'Article sans nom')} <span class="text-slate-500">· ${esc(item.op || bon.op || '')}</span></span><span>À remettre : <b>${esc(remaining)}</b>${delivered ? ` · déjà enregistré : ${esc(delivered)}` : ''}</span></div>`).join('')}</div>
-          <button type="button" data-regularize-index="${index}" data-request-key="${esc(key)}" class="rounded-xl bg-teal-700 px-5 py-3 text-sm font-black text-white hover:bg-teal-800">Confirmer la remise passée, signer et débiter le stock</button>
+          <form data-regularize-form="${index}" data-request-key="${esc(key)}" class="divide-y rounded-xl border">${items.map(({index:itemIndex,item,remaining,delivered}) => { const stock=matchingStock(item,bon); const available=Math.max(0,Number(stock?.qty||0)); const cap=Math.min(remaining,available); return `<div class="space-y-2 p-3 text-sm"><div class="flex justify-between gap-2"><span class="font-semibold">${esc(item.label || 'Article sans nom')} <span class="text-slate-500">· ${esc(item.op || bon.op || '')}</span></span><span>Reste demandé : <b>${esc(remaining)}</b>${delivered ? ` · déjà servi : ${esc(delivered)}` : ''}</span></div>${stock?`<label>Quantité à servir (stock disponible : ${esc(available)}) <input data-qty="${itemIndex}" type="number" min="0" max="${cap}" step="any" value="${cap}" class="ml-2 w-28 rounded border p-2"></label>${available<remaining?`<p class="text-amber-700">Le stock ne couvre pas toute la quantité demandée.</p>`:''}`:`<p class="text-red-700">Article absent du stock.</p>`}<label class="block"><input type="checkbox" data-unavailable="${itemIndex}" ${cap>=remaining?'disabled':''}> Matériel indisponible pour le reliquat</label></div>`; }).join('')}
+          <div class="p-3"><label>Nom du magasinier <input name="signer" required maxlength="120" value="${esc(env.profile()?.name||'')}" class="rounded border p-2"></label><button class="ml-3 rounded-xl bg-teal-700 px-5 py-3 text-sm font-black text-white">Valider, signer et débiter le stock</button></div></form>
           <p data-row-status="${index}" role="status" class="text-sm text-red-700"></p>
         </article>`;
       }).join('') || '<div class="rounded-2xl border border-dashed p-10 text-center text-slate-500">Aucun bon approuvé sans signature magasinier.</div>'}</div>
     </div>`;
 
     container.querySelector('[data-refresh]')?.addEventListener('click', () => enter(container));
-    container.querySelectorAll('[data-regularize-index]').forEach(button => {
-      button.addEventListener('click', () => regularize(Number(button.dataset.regularizeIndex), container));
-    });
+    container.querySelectorAll('[data-regularize-form]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); regularize(Number(form.dataset.regularizeForm), form, container); }));
   }
 
   async function enter(container) {
@@ -111,16 +121,17 @@
     }
   }
 
-  async function regularize(index, container) {
+  async function regularize(index, form, container) {
     if (busy || env?.profile?.()?.role !== 'Magasinier') return;
     const bon = pendingBons()[index];
     if (!bon) return render(container);
     const requestKey = bon._dbKey || bon.id;
     if (!requestKey) return;
-    const items = remainingItems(bon).map(row => ({ index: row.index, quantity: row.remaining }));
+    const items = remainingItems(bon).map(row => ({...row, quantity:Number(form.querySelector(`[data-qty="${row.index}"]`)?.value||0)})).filter(row=>row.quantity>0).map(row=>({index:row.index,quantity:row.quantity}));
+    const unavailable_items=Array.from(form.querySelectorAll('[data-unavailable]:checked'),input=>Number(input.dataset.unavailable));
     const summary = remainingItems(bon).map(({item, remaining}) => `• ${item.label || 'Article'} (${item.op || bon.op || 'stock'}) : ${remaining}`).join('\n');
-    if (!items.length) return render(container);
-    if (!global.confirm(`Confirmez-vous que cette remise a déjà été faite physiquement ? La signature magasinier sera ajoutée et le stock sera débité pour :\n${reference(bon)}\n${summary}`)) return;
+    if (!items.length && !unavailable_items.length) return global.alert('Saisissez une quantité à servir ou indiquez un matériel indisponible.');
+    if (!global.confirm(`Valider le service du bon ${reference(bon)} ? Les quantités servies seront déduites du stock et les articles cochés indisponibles seront clôturés comme non servis.`)) return;
 
     busy = true;
     const token = generation;
@@ -128,10 +139,10 @@
     const buttons = Array.from(container.querySelectorAll('[data-regularize-index], [data-refresh]'));
     buttons.forEach(button => { button.disabled = true; });
     try {
-      const signature = await global.BonSignatures.capture('Signature du magasinier — régularisation d’une remise passée', env.profile()?.name || '');
+      const signature = await global.BonSignatures.capture('Signature du magasinier — régularisation de remise', form.elements.signer.value || env.profile()?.name || '');
       if (!signature || token !== generation) return;
-      const { error } = await env.client().rpc('dispense_stock_bon_signed', {
-        request_key: String(requestKey), items, signer_name: signature.name, signature_image: signature.image,
+      const { error } = await env.client().rpc('dispense_stock_bon_signed_v2', {
+        request_key: String(requestKey), items, unavailable_items, signer_name: signature.name, signature_image: signature.image,
       });
       if (error) throw error;
       await env.refresh();

@@ -1698,7 +1698,7 @@
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
     <script src="assets/bon-scanner.js?v=20261003-storekeeper-pdf"></script>
-    <script src="assets/storekeeper-backlog.js?v=20261006-storekeeper-backlog"></script>
+    <script src="assets/storekeeper-backlog.js?v=20261007-partial-remainders"></script>
     <script src="assets/bon-signatures.js?v=20261001-storekeeper-signature"></script>
     <script src="assets/validator-workflow.js?v=20261001-manager-handoff"></script>
     <script src="assets/stock-control-store.js?v=20261006-supabase"></script>
@@ -2639,7 +2639,7 @@
         const r = currentUser.role.trim().toUpperCase();
         const isSuperAdmin = r === "SUPER_ADMIN";
         window.ManagerStock.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());},navigate:showSection,readNotifications:markNotificationsAsRead});
-        window.BonScanner.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend});
+        window.BonScanner.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData});
         window.StorekeeperBacklog.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
           refresh:async()=>{const generation=secureStore.generation;await secureStore.readCollections(['demandes','stock'],generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());}});
         window.ManagerLocations.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,navigate:showSection,
