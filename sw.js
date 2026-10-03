@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v64-storekeeper-backlog";
+const CACHE_NAME = "itc-gestion-materiels-v65-app-icon-badge";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
@@ -81,7 +81,8 @@ self.addEventListener("message", (event) => {
 self.addEventListener("push", event => {
   let data={};
   try { data=event.data?.json() || {}; } catch (_) { data={body:event.data?.text() || "Nouvelle notification."}; }
-  event.waitUntil(self.registration.showNotification(data.title || "ITC Gestion Matériels", {body:data.body || "Nouvelle notification.",icon:"./assets/pwa-icon-192.png",badge:"./assets/pwa-icon-192.png",tag:data.notificationId || "itc-notification",renotify:true,silent:false,data:{url:data.url || "./index.html"}}));
+  const badgePromise=Number.isFinite(Number(data.unreadCount)) && Number(data.unreadCount)>0 ? self.registration.setAppBadge?.(Number(data.unreadCount)) : Promise.resolve();
+  event.waitUntil(Promise.all([badgePromise,self.registration.showNotification(data.title || "ITC Gestion Matériels", {body:data.body || "Nouvelle notification.",icon:"./assets/pwa-icon-192.png",badge:"./assets/pwa-icon-192.png",tag:data.notificationId || "itc-notification",renotify:true,silent:false,data:{url:data.url || "./index.html"}})]));
 });
 self.addEventListener("notificationclick", event => {
   event.notification.close();

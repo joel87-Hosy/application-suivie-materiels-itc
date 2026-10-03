@@ -11577,6 +11577,13 @@
 
         // 3. Calcul du nombre de notifs non lues pour cet utilisateur précis
         const count = window.NotificationTabs.unread(notifications,currentUser).length;
+        // Keep the installed PWA icon badge synchronized with unread notifications.
+        try {
+          const badgeUpdate = count > 0
+            ? (navigator.setAppBadge ? navigator.setAppBadge(count) : navigator.serviceWorker?.ready.then(reg => reg.setAppBadge?.(count)))
+            : (navigator.clearAppBadge ? navigator.clearAppBadge() : navigator.serviceWorker?.ready.then(reg => reg.clearAppBadge?.()));
+          badgeUpdate?.catch?.(() => {});
+        } catch (_) { /* Icon badges are optional browser support. */ }
 
         // 3.1 Détecter nouvelles notifications : si le compteur a augmenté,
         // jouer un bip et activer vibration si possible (mobile).
@@ -11982,7 +11989,7 @@
         try {
           const historyPayload = {
             updatedAt: Date.now(),
-            messages: chatAssistantState.messages.slice(-12),
+            messages: chatAssistantState.messages.slice(-100),
           };
           localStorage.setItem(
             CHATBOT_STORAGE_KEY,
@@ -12069,7 +12076,7 @@
 
       function appendChatAssistantMessage(role, content) {
         chatAssistantState.messages.push({ role, content: String(content || "") });
-        chatAssistantState.messages = chatAssistantState.messages.slice(-20);
+        chatAssistantState.messages = chatAssistantState.messages.slice(-100);
         renderChatAssistantMessages();
         saveChatAssistantHistory();
         if (role === 'assistant') voiceAssistant?.speak(content);
@@ -12993,7 +13000,7 @@
         if (!apiKey) return null;
 
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
-        const history = chatAssistantState.messages.slice(-8).map((message) => ({
+        const history = chatAssistantState.messages.slice(-40).map((message) => ({
           role: message.role === "assistant" ? "model" : "user",
           parts: [{ text: message.content }],
         }));
@@ -13006,7 +13013,7 @@
           generationConfig: {
             temperature: 0.5,
             topP: 0.9,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 8192,
           },
         };
 
@@ -13042,7 +13049,7 @@
           body: JSON.stringify({
             userText,
             systemPrompt: getChatAssistantSystemPrompt(),
-            messages: chatAssistantState.messages.slice(-10),
+            messages: chatAssistantState.messages.slice(-40),
             context: {
               section: currentSectionId || "cockpit",
               userName: currentUser?.name || "inconnu",

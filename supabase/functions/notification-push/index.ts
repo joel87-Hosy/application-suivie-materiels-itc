@@ -21,10 +21,13 @@ Deno.serve(async request=>{
     if(profileError)throw profileError;
     const recipients=(profiles||[]).filter(p=>String(p.profile.id)===String(row.payload.userId)).map(p=>p.user_id);
     if(!recipients.length)return new Response('No recipient');
+    const {count:unreadCount,error:countError}=await db.from('app_records').select('record_key',{count:'exact',head:true})
+      .eq('collection','notifications').eq('company_id',row.company_id).eq('payload->>userId',String(row.payload.userId)).eq('payload->>lu','false');
+    if(countError)throw countError;
     const {data:devices,error:deviceError}=await db.from('app_push_subscriptions').select('endpoint,user_id,subscription').eq('company_id',row.company_id).in('user_id',recipients);
     if(deviceError)throw deviceError;
     if(!devices?.length)return new Response('No subscribed device');
-    const message=JSON.stringify({title:'ITC Gestion Matériels',body:String(row.payload.message||'Nouvelle notification.').slice(0,500),notificationId:event.record.record_key,url:'./index.html'});
+    const message=JSON.stringify({title:'ITC Gestion Matériels',body:String(row.payload.message||'Nouvelle notification.').slice(0,500),notificationId:event.record.record_key,unreadCount:unreadCount||1,url:'./index.html'});
     let failures=0;
     for(const device of devices){
       try{await webpush.sendNotification(device.subscription,message,{TTL:86400,urgency:'high'});}

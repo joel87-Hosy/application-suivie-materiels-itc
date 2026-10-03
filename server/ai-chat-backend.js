@@ -4,6 +4,9 @@ const AssistantKnowledge = require('../assets/assistant-knowledge');
 const PORT = Number(process.env.PORT || 8787);
 const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || "").trim();
 const GEMINI_MODEL = String(process.env.GEMINI_MODEL || "gemini-1.5-flash").trim();
+const GEMINI_OUTPUT_TOKENS = Math.min(32768, Math.max(1024, Number.parseInt(process.env.GEMINI_OUTPUT_TOKENS || "8192", 10) || 8192));
+const AI_HISTORY_MESSAGES = Math.min(100, Math.max(12, Number.parseInt(process.env.AI_HISTORY_MESSAGES || "40", 10) || 40));
+const AI_HISTORY_CHARS_PER_MESSAGE = Math.min(20000, Math.max(3000, Number.parseInt(process.env.AI_HISTORY_CHARS_PER_MESSAGE || "8000", 10) || 8000));
 const CHAT_BACKEND_TOKEN = String(process.env.CHAT_BACKEND_TOKEN || "").trim();
 const ENABLE_LOCAL_FALLBACK = !["0", "false", "no"].includes(
   String(process.env.ENABLE_LOCAL_FALLBACK || "true").trim().toLowerCase(),
@@ -66,10 +69,10 @@ function normalizeHistory(messages) {
 
   return messages
     .filter((message) => message && message.content)
-    .slice(-12)
+    .slice(-AI_HISTORY_MESSAGES)
     .map((message) => ({
       role: message.role === "assistant" ? "model" : "user",
-      parts: [{ text: String(message.content).slice(0, 3000) }],
+      parts: [{ text: String(message.content).slice(0, AI_HISTORY_CHARS_PER_MESSAGE) }],
     }));
 }
 
@@ -92,7 +95,7 @@ async function askGemini({ userText, systemPrompt, messages }) {
       parts: [
         {
           text:
-            AssistantKnowledge.facts + '\n' + String(systemPrompt || "Tu es un assistant ERP utile et concis.").slice(0, 24000),
+            AssistantKnowledge.facts + '\n' + String(systemPrompt || "Tu es un assistant ERP utile et concis.").slice(0, 100000),
         },
       ],
     },
@@ -100,7 +103,7 @@ async function askGemini({ userText, systemPrompt, messages }) {
     generationConfig: {
       temperature: 0.6,
       topP: 0.9,
-      maxOutputTokens: 700,
+      maxOutputTokens: GEMINI_OUTPUT_TOKENS,
     },
   };
 

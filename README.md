@@ -78,3 +78,5 @@ servent uniquement à l'import ou à l'historique et ne sont pas chargées par l
 Les notifications système utilisent Web Push avec des clés VAPID. Voir
 [docs/SUPABASE_PUSH_SETUP.md](docs/SUPABASE_PUSH_SETUP.md) pour configurer le
 secret Supabase, le webhook et l'inscription des appareils.
+
+Les limites de longueur du relais IA sont configurables : `GEMINI_OUTPUT_TOKENS` (défaut 8192, maximum 32768), `AI_HISTORY_MESSAGES` (défaut 40, maximum 100) et `AI_HISTORY_CHARS_PER_MESSAGE` (défaut 8000, maximum 20000). Les quotas et la fenêtre de contexte du modèle restent ceux du fournisseur.
