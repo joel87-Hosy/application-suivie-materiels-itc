@@ -11490,7 +11490,18 @@
         // finish, so newly keyed notifications are not left behind by a stale
         // snapshot captured when the tab was first opened.
         const visible = window.NotificationTabs.unread(appData.notifications,currentUser,section);
-        const unread = visible.filter(n => !n.lu);
+        const visibleKeys = new Set(visible.map(n => n._dbKey).filter(Boolean));
+        // Reconcile the visible notifications with the authoritative server
+        // state before deciding whether the tab and installed-app badge remain
+        // unread. Keep the captured keys so arrivals during this request stay unread.
+        if (visibleKeys.size && typeof secureStore.readCollections === 'function') {
+          await secureStore.readCollections(['notifications'],secureStore.generation,{notify:false});
+          if (currentUser?.id !== userId || secureStore.uid !== sessionUid) return;
+          appData = normalizeAppData(secureStore.value());
+        }
+        const unread = visibleKeys.size
+          ? appData.notifications.filter(n => visibleKeys.has(n._dbKey) && !n.lu)
+          : visible.filter(n => !n.lu);
         if (!unread.length) { updateNotifications(); return; }
         let finishMark;
         markingNotifications = new Promise(resolve => { finishMark = resolve; });
