@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v70-b01-transfer-services";
+const CACHE_NAME = "itc-gestion-materiels-v71-sync-app-badge";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
@@ -76,6 +76,13 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
+  }
+  if (event.data && event.data.type === "SYNC_APP_BADGE") {
+    const count = Number(event.data.count);
+    const badgeUpdate = Number.isFinite(count) && count > 0
+      ? self.registration.setAppBadge?.(count)
+      : self.registration.clearAppBadge?.();
+    event.waitUntil(Promise.resolve(badgeUpdate).catch(() => {}));
   }
 });
 

@@ -11600,6 +11600,13 @@
             : (navigator.clearAppBadge ? navigator.clearAppBadge() : navigator.serviceWorker?.ready.then(reg => reg.clearAppBadge?.()));
           badgeUpdate?.catch?.(() => {});
         } catch (_) { /* Icon badges are optional browser support. */ }
+        // Also sync through the active worker so stale OS/PWA badges are cleared
+        // even when the browser exposes badge methods only on the registration.
+        try {
+          navigator.serviceWorker?.ready.then(registration => {
+            registration.active?.postMessage({ type: "SYNC_APP_BADGE", count });
+          }).catch(() => {});
+        } catch (_) { /* Service worker badges are optional browser support. */ }
 
         // 3.1 Détecter nouvelles notifications : si le compteur a augmenté,
         // jouer un bip et activer vibration si possible (mobile).
