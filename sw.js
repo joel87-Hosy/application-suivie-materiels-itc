@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v65-app-icon-badge";
+const CACHE_NAME = "itc-gestion-materiels-v66-notification-badges";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
@@ -12,7 +12,7 @@ const APP_SHELL = [
   "./",
   "./index.html",
   "./assets/profile.js",
-  "./assets/notification-tabs.js?v=20260923-receipts",
+  "./assets/notification-tabs.js?v=20261004-notification-badges",
   "./assets/manager-stock.js?v=20260923-tabs",
   "./assets/account-affiliation.js",
   "./assets/company-users.js?v=20260926-affiliations",
