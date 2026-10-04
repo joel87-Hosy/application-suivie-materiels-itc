@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v68-notification-read-refresh";
+const CACHE_NAME = "itc-gestion-materiels-v69-custom-b01-substocks";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
@@ -7,6 +7,7 @@ const APP_SHELL = [
   "./assets/manager-locations.js",
   "./assets/manager-flux.js",
   "./assets/stock-substocks.js",
+  "./assets/manager-b01-substocks.js?v=20261004-custom-substocks",
   "./assets/stock-substocks.css?v=20260924",
   "./assets/manager-flux.css?v=20260924",
   "./",

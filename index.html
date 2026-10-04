@@ -1711,6 +1711,7 @@
     <script src="assets/bon-reference.js"></script>
     <script src="assets/manager-flux.js"></script>
     <script src="assets/stock-substocks.js"></script>
+    <script src="assets/manager-b01-substocks.js?v=20261004-custom-substocks"></script>
     <script src="assets/push-config.js"></script>
     <script src="assets/push-notifications.js"></script>
     <script>
@@ -2646,6 +2647,9 @@
           refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());},
           reloadProfile:async()=>{const generation=secureStore.generation;await secureStore.load(generation);if(generation!==secureStore.generation)throw new Error('Session remplacée.');currentUser={...currentUser,...secureStore.profile};appData=normalizeAppData(secureStore.value());updateMenuVisibility();updateUserInfo();}});
         window.StockSubstocks.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
+          onClose:()=>{if(currentSectionId==='cockpit')renderCockpit(document.getElementById('app-container'));},
+          refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());}});
+        window.ManagerB01Substocks.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
           onClose:()=>{if(currentSectionId==='cockpit')renderCockpit(document.getElementById('app-container'));},
           refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());}});
         window.ValidatorWorkflow.setup({profile:()=>secureStore.profile,uid:()=>secureStore.uid,client:()=>supabaseBackend,data:()=>appData,refresh:async()=>{const generation=secureStore.generation;await (secureStore.readCollections?secureStore.readCollections(['demandes'],generation):secureStore.read(generation,{notify:false}));if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());},navigate:showSection,readNotifications:markNotificationsAsRead});

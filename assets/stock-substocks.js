@@ -5,14 +5,17 @@
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const normalizeLabel=value=>String(value??'').normalize('NFKC').replace(/[\s\u200B-\u200D\uFEFF]+/g,' ').trim().toLocaleUpperCase('fr');
   let env,busy=false,pendingReceipt=null;
-  const enabled=()=>env?.profile()?.role==='Gestionnaire'&&(['ITC-B01','ITC-B02'].some(op=>env.profile().controlScopes?.[op]===true));
-  const owns=operator=>enabled()&&!global.ControlCore.operator(operator).startsWith('STK-')&&global.ControlCore.managerStocks(env.profile()).includes(global.ControlCore.operator(operator));
-  function quantities(item){const b=item.subStocks||{};return {...Object.fromEntries(Object.keys(names).filter(k=>k!=='unallocated').map(k=>[k,Number(b[k])||0])),unallocated:Math.max(0,Number(item.qty||0)-Object.values(b).reduce((s,v)=>s+Number(v||0),0))};}
+  const enabled=()=>env?.profile()?.role==='Gestionnaire'&&env.profile().controlScopes?.['ITC-B02']===true;
+  const operatorKey=operator=>global.ControlCore.operator(operator);
+  const isBureau01=operator=>['ITC-B01','OCI','CIC','MTN'].includes(operatorKey(operator));
+  const isBureau02=operator=>['ITC-B02','MOOV'].includes(operatorKey(operator));
+  const owns=operator=>env?.profile()?.role==='Gestionnaire'&&(isBureau01(operator)?env.profile().controlScopes?.['ITC-B01']===true:isBureau02(operator)&&env.profile().controlScopes?.['ITC-B02']===true)&&global.ControlCore.managerStocks(env.profile()).includes(operatorKey(operator));
+  function quantities(item,buckets=Object.entries(names).filter(([k])=>k!=='unallocated')){const b=item.subStocks||{};const allocated=Object.fromEntries(buckets.map(bucket=>{const id=Array.isArray(bucket)?bucket[0]:bucket.id;return [id,Number(b[id])||0];}));return {...allocated,unallocated:Math.max(0,Number(item.qty||0)-Object.values(allocated).reduce((s,v)=>s+v,0))};}
   const entries=operator=>(env.data().stock||[]).filter(s=>s.company_id===env.profile().company_id&&global.ControlCore.operator(s.op)===global.ControlCore.operator(operator));
-  async function rpc(name,args){const {data,error}=await env.client().rpc(name,args);if(error)throw new Error(error.code==='PGRST202'?'Appliquez la migration 202610080001_manager_substocks_b01.sql dans Supabase pour activer les sous-stocks B01.':error.message);return data;}
+  async function rpc(name,args){const {data,error}=await env.client().rpc(name,args);if(error)throw new Error(error.code==='PGRST202'?'Appliquez la migration 202610080001_manager_substocks_b01.sql dans Supabase pour activer les sous-stocks personnalisés B01.':error.message);return data;}
   function receptionField(){return enabled()?`<label class="block text-xs font-bold">Sous-stock destinataire<select id="r-substock" required class="w-full border-2 rounded-xl p-3 mt-2"><option value="">Choisir le sous-stock</option>${Object.entries(names).filter(([key])=>key!=='unallocated').map(([key,name])=>`<option value="${key}">${name}</option>`).join('')}</select></label>`:'';}
   async function receive(mat,substock){
-    if(!owns(mat.op))throw new Error('Stock hors de votre affectation.');
+    if(!enabled()||!isBureau02(mat.op)||!owns(mat.op))throw new Error('Stock hors de votre affectation Bureau 02.');
     if(!['production','deploiement','maintenance'].includes(substock))throw new Error('Choisissez un sous-stock destinataire.');
     const args={operator:mat.op,material_label:mat.label,material_type:mat.type,quantity:mat.qty,substock};
     const fingerprint=JSON.stringify([env.profile().uid,env.profile().company_id,args]);
@@ -21,11 +24,11 @@
     await env.refresh();pendingReceipt=null;
   }
   function pickerRows(operators){
-    return operators.filter(owns).flatMap(operator=>entries(operator).flatMap(s=>Object.entries(quantities(s)).filter(([,qty])=>qty>0).map(([substock,qty])=>({op:operator,label:s.label,substock,qty}))));
+    return operators.filter(operator=>enabled()&&isBureau02(operator)&&owns(operator)).flatMap(operator=>entries(operator).flatMap(s=>Object.entries(quantities(s)).filter(([,qty])=>qty>0).map(([substock,qty])=>({op:operator,label:s.label,substock,qty}))));
   }
   function pickerHtml(operators,previous=[]){
     const rows=pickerRows(operators);
-    return operators.filter(owns).map(operator=>`<section class="border rounded-xl p-3 bg-slate-50"><h4 class="font-bold text-blue-900 mb-3">${esc(operator)}</h4>${Object.entries(names).map(([bucket,name])=>{
+    return operators.filter(operator=>enabled()&&isBureau02(operator)&&owns(operator)).map(operator=>`<section class="border rounded-xl p-3 bg-slate-50"><h4 class="font-bold text-blue-900 mb-3">${esc(operator)}</h4>${Object.entries(names).map(([bucket,name])=>{
       const items=rows.filter(r=>r.op===operator&&r.substock===bucket);
       return `<div class="mb-4"><h5 class="font-bold mb-2" style="color:${colors[bucket]}">${name}</h5>${items.map(r=>{
         const before=previous.find(p=>p.op===r.op&&p.label===r.label&&p.substock===bucket);
@@ -45,7 +48,7 @@
       if(matches.length!==1)throw new Error(`Article absent ou ambigu : ${row.op} / ${row.label}.`);
       row.available=quantities(matches[0]);
       if(Number(matches[0].qty)<row.qty)throw new Error(`Stock total insuffisant : ${row.label}. Disponible : ${matches[0].qty}, demandé : ${row.qty}.`);
-      if(!owns(row.op)){automatic.push({op:row.op,label:row.label,qty:row.qty});continue;}
+      if(!enabled()||!isBureau02(row.op)||!owns(row.op)){automatic.push({op:row.op,label:row.label,qty:row.qty});continue;}
       if(preferred&&row.available[preferred]>=row.qty){automatic.push({op:row.op,label:row.label,qty:row.qty,substock:preferred});continue;}
       row.defaults=preferred?{[preferred]:Math.min(row.qty,row.available[preferred])}:{};
       rows.push(row);
