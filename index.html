@@ -6912,7 +6912,7 @@
         enhanceSectionUX(id);
 
         // 5. GESTION DES NOTIFICATIONS (Après le rendu)
-        if (window.NotificationTabs.sections.includes(id) && !['validation-bons','transferts-stocks','bons-signes','demandes-coordonnatrice'].includes(id)) {
+        if (window.NotificationTabs.sections.includes(id)) {
           markNotificationsAsRead(id);
         }
       }
@@ -11482,13 +11482,14 @@
         if (!currentUser || !Array.isArray(appData?.notifications)) return;
         const userId = currentUser.id;
         const sessionUid = secureStore.uid;
-        // Capture only notifications present in the view being read. A newer
-        // arrival while a save/read receipt is pending must remain unread.
-        const visible = window.NotificationTabs.unread(appData.notifications,currentUser,section);
         while (markingNotifications) await markingNotifications;
         // Wait for newly created notifications to receive their database keys.
         if (pendingSave) await pendingSave;
         if (currentUser?.id !== userId || secureStore.uid !== sessionUid) return;
+        // Resolve the unread set only after pending saves and other read receipts
+        // finish, so newly keyed notifications are not left behind by a stale
+        // snapshot captured when the tab was first opened.
+        const visible = window.NotificationTabs.unread(appData.notifications,currentUser,section);
         const unread = visible.filter(n => !n.lu);
         if (!unread.length) { updateNotifications(); return; }
         let finishMark;
