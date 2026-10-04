@@ -61,12 +61,17 @@
       const canTransfer=ops.some(source=>targets.some(target=>target!==source));
       const history=(env.data().sorties||[]).filter(b=>b.type==='TRANSFERT'&&(ops.includes(op(b.op))||ops.includes(op(b.destination)))).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
       const options=ops.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
+      const profile=env.profile()||{};
+      const bureau01Manager=profile.role==='Gestionnaire'&&profile.controlScopes?.['ITC-B01']===true&&profile.controlScopes?.['ITC-B02']!==true;
+      const transferServices=bureau01Manager?(global.AccountAffiliation?.bureau01Services||global.BonReference?.bureau01Services||{}):(global.BonReference?.services||{B2B:'B2B',DEP:'Déploiement',MAIN:'Maintenance'});
+      const attachedServices=(profile.services||[]).filter(code=>Object.hasOwn(transferServices,code));
+      const serviceOptions=Object.entries(transferServices).filter(([code])=>!attachedServices.length||attachedServices.includes(code)).map(([code,label])=>`<option value="${esc(code)}">${esc(label)} (${esc(code)})</option>`).join('');
       container.innerHTML=`<div class="p-4 space-y-5"><h2 class="text-xl font-bold">Transferts de matériel</h2><p>Le transfert débite votre stock source, crédite le destinataire et génère un bon de sortie avec les deux mouvements et votre signature.</p>${ops.includes('ITC-B02')?'<p class="bg-blue-50 p-3 rounded-xl">Bouaké, Yamoussoukro et San-Pédro : consultation et alimentation par transfert. Seul le gestionnaire affecté à chaque stock peut en modifier les articles.</p>':''}<button id="transfer-refresh" class="border p-3 rounded-xl">Actualiser</button><form class="bg-white p-5 rounded-2xl space-y-4">
         <label class="block">Stock source<select name="source" class="border p-3 w-full">${options}</select></label>
         <label class="block">Stock destinataire<select name="destination" class="border p-3 w-full" required></select></label>
         <label class="block">Article<select name="article" class="border p-3 w-full" required></select></label>
         <label class="block">Quantité<input name="quantity" type="number" min="0.001" step="any" required class="border p-3 w-full"></label>
-        <label class="block">Service<select name="service" class="border p-3 w-full"><option>B2B</option><option>DEP</option><option>MAIN</option></select></label>
+        <label class="block">Service<select name="service" class="border p-3 w-full" required><option value="" disabled selected>Choisir un service</option>${serviceOptions}</select></label>
         <label class="block">Motif<textarea name="reason" maxlength="1000" required class="border p-3 w-full"></textarea></label>
         <label class="block">Signature du gestionnaire<input name="signature" maxlength="500" required value="${esc(env.profile()?.name)}" class="border p-3 w-full"></label>
         <p role="status" id="transfer-status"></p><button type="submit" class="bg-indigo-700 text-white rounded-xl p-3" ${!canTransfer?'disabled':''}>Confirmer le transfert et créer le bon</button>
