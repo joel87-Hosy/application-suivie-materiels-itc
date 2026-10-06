@@ -1,4 +1,4 @@
-const CACHE_NAME = "itc-gestion-materiels-v76-manager-command-badge";
+const CACHE_NAME = "itc-gestion-materiels-v77-manager-command-receipts";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
@@ -29,7 +29,7 @@ const APP_SHELL = [
   "./assets/supabase-config.js?v=20260918-shared1",
   "./assets/cable-offcuts-transport.js?v=20260918-shared1",
   "./assets/supabase-store.js",
-  "./assets/supabase-store.js?v=20261009-manager-command-badge",
+  "./assets/supabase-store.js?v=20261009-manager-command-receipts",
   "./assets/validator-workflow.js?v=20261008-manager-debit",
   "./assets/validator-workflow.js",
   "./assets/assistant-knowledge.js",

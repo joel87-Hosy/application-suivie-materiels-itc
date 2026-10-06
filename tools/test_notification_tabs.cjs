@@ -16,6 +16,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
  await store.markNotificationsRead(['0']);assert.equal(changes.length,1);assert.equal(store.raw.notifications['0'].lu,true);
  for(const key of ['1','2','3','arrival'])assert.equal(store.raw.notifications[key].lu,false);
  changes=null;await store.markNotificationsRead([]);assert.equal(changes,null,'empty selection never marks everything');
+ store.raw.notifications={};await store.markNotificationsRead(['legacy-visible-key']);assert.deepEqual(Array.from(changes),['legacy-visible-key'],'receipt RPC handles visible keys missing from a partial client cache');
  // Menu badges are created once and hidden independently when read.
  const buttons=['demandes-coordonnatrice','gestion-retours-materiel','transferts-stocks','validation-bons'].map(section=>({dataset:{notificationSection:section},getAttribute:()=>'',querySelector(){return this.badge;},append(badge){this.badge=badge;}}));
  const document={querySelectorAll:selector=>selector.startsWith('aside')?buttons:buttons.map(b=>b.badge).filter(Boolean),getElementById:()=>null,createElement:()=>({dataset:{},setAttribute(){},classList:{toggle(name,hidden){this.hidden=hidden;}}})};

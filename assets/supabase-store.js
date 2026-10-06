@@ -200,25 +200,28 @@
       if (!this.ready || !this.profile || this.profile.id == null) return [];
       const generation = this.generation;
       const selected = recordKeys === undefined ? null : new Set(recordKeys);
-      const changes = Object.entries(this.raw.notifications || {})
+      const eligible = Object.entries(this.raw.notifications || {})
         .filter(([recordKey, row]) => {
           const company = this.notificationCompanies[recordKey] ?? row.company_id;
-          // Old notifications may not carry company_id in their payload. The
-          // read RPC checks the owning company on app_records itself, so pass
-          // these own-user receipts through instead of leaving them unread forever.
           return (!selected || selected.has(recordKey)) && String(row.userId) === String(this.profile.id) && !row.lu &&
             (company == null || String(company) === String(this.profile.company_id));
-        })
-        .map(([record_key, row]) => ({collection:'notifications', record_key, company_id:this.profile.company_id,
+        });
+      // When a tab supplies the IDs it just displayed, send them directly to
+      // the receipt RPC. The RPC validates both account and company in the
+      // database, including records missing from this client's partial cache.
+      const requestedKeys = selected ? [...selected] : eligible.map(([key]) => key);
+      if (!requestedKeys.length) return [];
+      const changes = eligible.map(([record_key, row]) => ({collection:'notifications', record_key, company_id:this.profile.company_id,
           previous:clone(row), payload:{...clone(row), lu:true}}));
-      if (!changes.length) return [];
-      let {data, error} = await this.client.rpc('mark_app_notifications_read', {record_keys:changes.map(row => row.record_key)});
+      let {data, error} = await this.client.rpc('mark_app_notifications_read', {record_keys:requestedKeys});
       // Compatibility with databases where the read-receipt migration is missing.
       // Keep the existing server authorization and optimistic concurrency checks.
       if (error?.code === 'PGRST202') {
-        const saved = await this.client.rpc('save_app_changes', {changes});
+        const fallbackChanges = changes.filter(change=>requestedKeys.includes(change.record_key));
+        if (!fallbackChanges.length) throw error;
+        const saved = await this.client.rpc('save_app_changes', {changes:fallbackChanges});
         error = saved.error;
-        if (!error) data = changes.map(row => row.record_key);
+        if (!error) data = fallbackChanges.map(row => row.record_key);
       }
       if (error) throw error;
       if (generation !== this.generation) return [];
