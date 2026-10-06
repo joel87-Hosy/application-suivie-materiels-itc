@@ -201,8 +201,14 @@
       const generation = this.generation;
       const selected = recordKeys === undefined ? null : new Set(recordKeys);
       const changes = Object.entries(this.raw.notifications || {})
-        .filter(([recordKey, row]) => (!selected || selected.has(recordKey)) && String(row.userId) === String(this.profile.id) && !row.lu &&
-          (this.notificationCompanies[recordKey] ?? row.company_id) === this.profile.company_id)
+        .filter(([recordKey, row]) => {
+          const company = this.notificationCompanies[recordKey] ?? row.company_id;
+          // Old notifications may not carry company_id in their payload. The
+          // read RPC checks the owning company on app_records itself, so pass
+          // these own-user receipts through instead of leaving them unread forever.
+          return (!selected || selected.has(recordKey)) && String(row.userId) === String(this.profile.id) && !row.lu &&
+            (company == null || String(company) === String(this.profile.company_id));
+        })
         .map(([record_key, row]) => ({collection:'notifications', record_key, company_id:this.profile.company_id,
           previous:clone(row), payload:{...clone(row), lu:true}}));
       if (!changes.length) return [];
