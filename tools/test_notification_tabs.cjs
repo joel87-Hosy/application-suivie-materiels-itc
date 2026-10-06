@@ -5,7 +5,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
  const tabs=context.window.NotificationTabs;
  const user={id:7,company_id:'A',role:'Gestionnaire'};
  const rows=['COMMANDE : BON-1','RETOUR : technicien','TRANSFERT TR-1','ENTRÉE STOCK : Câble'].map((message,i)=>({_dbKey:String(i),userId:'7',company_id:'A',lu:false,message}));
- for(const [index,section] of ['demandes-coordonnatrice','gestion-retours','transferts-stocks','reception'].entries())assert.deepEqual(Array.from(tabs.unread(rows,user,section),n=>n._dbKey),[String(index)]);
+ for(const [index,section] of ['demandes-coordonnatrice','gestion-retours-materiel','transferts-stocks','reception'].entries())assert.deepEqual(Array.from(tabs.unread(rows,user,section),n=>n._dbKey),[String(index)]);
  for(const [role,message,section] of [['Validateur','BON À VALIDER','validation-bons'],['Validatrice','BON','validation-bons'],['Technicien','VOTRE MATERIEL EST DISPONIBLE','tech-mes-demandes'],['Coordinatrice','BESOIN : équipe','coord-demandes-tech'],['Coordinateur','Votre commande est envoyée','bons-signes'],['Superviseur','TRANSFERT TR-1','trafic-audit']])assert.equal(tabs.section({message},{role}),section);
  assert.equal(tabs.unread([...rows,{...rows[0],userId:8},{...rows[0],company_id:'B'},{...rows[0],lu:true}],user).length,4);
  // Selective persistence: opening one tab does not clear other tabs or new arrivals.
@@ -17,7 +17,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
  for(const key of ['1','2','3','arrival'])assert.equal(store.raw.notifications[key].lu,false);
  changes=null;await store.markNotificationsRead([]);assert.equal(changes,null,'empty selection never marks everything');
  // Menu badges are created once and hidden independently when read.
- const buttons=['demandes-coordonnatrice','gestion-retours','transferts-stocks','validation-bons'].map(section=>({dataset:{notificationSection:section},getAttribute:()=>'',querySelector(){return this.badge;},append(badge){this.badge=badge;}}));
+ const buttons=['demandes-coordonnatrice','gestion-retours-materiel','transferts-stocks','validation-bons'].map(section=>({dataset:{notificationSection:section},getAttribute:()=>'',querySelector(){return this.badge;},append(badge){this.badge=badge;}}));
  const document={querySelectorAll:selector=>selector.startsWith('aside')?buttons:buttons.map(b=>b.badge).filter(Boolean),getElementById:()=>null,createElement:()=>({dataset:{},setAttribute(){},classList:{toggle(name,hidden){this.hidden=hidden;}}})};
  tabs.update(document,rows,user);assert.equal(buttons[0].badge.innerText,1);assert.equal(buttons[3].badge.classList.hidden,true);
  const first=buttons[0].badge;rows[0].lu=true;tabs.update(document,rows,user);assert.equal(buttons[0].badge,first);assert.equal(first.classList.hidden,true);assert.equal(buttons[1].badge.classList.hidden,false);
