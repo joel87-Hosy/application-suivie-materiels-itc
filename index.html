@@ -4458,6 +4458,26 @@
         return user?.controlScopes?.['ITC-B01'] === true && user?.controlScopes?.['ITC-B02'] !== true;
       }
 
+      function isSpecialDualOfficeDirectCoordinator(user) {
+        return user?.crossOfficeDirectOrder===true && ['Coordinateur','Coordinatrice'].includes(user?.role) && ['B01','B02'].every(code=>(window.AccountAffiliation?.officeList(user)||[]).includes(code));
+      }
+
+      function getBureau02ManagerStockOps() {
+        const company=currentUser?.company_id;
+        const stockOps=new Set(((appData?.stock)||[]).map(item=>normalizeOperatorKey(item.op)).filter(Boolean));
+        const assigned=(appData?.users||[]).filter(user=>user?.company_id===company&&user?.role==='Gestionnaire')
+          .filter(user=>(window.AccountAffiliation?.officeList(user)||[]).includes('B02')||getManagedOpsNormalized(user).some(op=>['ITC-B02','MOOV'].includes(op)))
+          .flatMap(user=>getManagedOpsNormalized(user));
+        return [...new Set(assigned.map(normalizeOperatorKey))].filter(op=>stockOps.has(op)&&['ITC-B02','MOOV'].includes(op)).sort();
+      }
+
+      function onDirectOfficeSelectionChange() {
+        const office=document.getElementById('s-office')?.value;if(!office)return;window.AccountAffiliation?.refreshCommandServices();
+        const allowed=office==='B01'?['ITC-B01','OCI','CIC','MTN']:['ITC-B02','MOOV'];
+        document.querySelectorAll('.sortie-op-check').forEach(input=>{const valid=allowed.includes(normalizeOperatorKey(input.value));input.closest('label').hidden=!valid;if(!valid)input.checked=false;});
+        updateSortieOperatorSummary();refreshSortieDestinatairesDatalist();refreshSortieReferencesDatalist();renderSortieMaterialPicker();
+      }
+
       function getBureau01ManagerStockOps() {
         const company=currentUser?.company_id;
         const stockOps=new Set(((appData?.stock)||[]).map(item=>normalizeOperatorKey(item.op)).filter(Boolean));
@@ -4473,11 +4493,13 @@
       }
 
       function isDirectSortieOperatorAllowed(user, opValue) {
+        if (isSpecialDualOfficeDirectCoordinator(user)) return [...getBureau01ManagerStockOps(),...getBureau02ManagerStockOps()].includes(normalizeOperatorKey(opValue));
         if (isBureau01Coordinator(user)) return getBureau01ManagerStockOps().includes(normalizeOperatorKey(opValue));
         return isOperatorAllowedForUser(user,opValue);
       }
 
       function getAllowedSortieOperators(direct=false) {
+        if (direct && isSpecialDualOfficeDirectCoordinator(currentUser)) return [...new Set([...getBureau01ManagerStockOps(),...getBureau02ManagerStockOps()])];
         if (direct && isBureau01Coordinator(currentUser)) return getBureau01ManagerStockOps();
         const knownOps = ["ITC-B01", "ITC-B02", "OCI", "CIC", "MOOV", "MTN", "ITC-BOUAKE", "ITC-SAN-PEDRO", "ITC-YAMOUSSOUKRO"];
         const stockOps = ((appData && appData.stock) || [])
@@ -4772,7 +4794,7 @@
         refreshSortieEmetteursDatalist();
         refreshSortieReferencesDatalist();
         renderSortieMaterialPicker(savedItems);
-        if(direct)window.RequestRouting.mount(container);
+        if(direct){window.RequestRouting.mount(container);if(isSpecialDualOfficeDirectCoordinator(currentUser))onDirectOfficeSelectionChange();}
       }
 
       // Fonction pour ajouter une ligne d'article dynamiquement
@@ -4843,7 +4865,7 @@
         const serviceIsListed=serviceSelect?Array.from(serviceSelect.options).some(option=>option.value===serviceAbbreviation):Boolean(BonReference.physicalServices(currentUser)[serviceAbbreviation]);
         if (!serviceIsListed) return alert("Choisissez un service émetteur dans la liste de votre bureau.");
         if (direct && ['Coordinateur','Coordinatrice'].includes(secureStore.profile?.role) && (
-          !secureStore.profile?.serviceAbbreviation || (window.AccountAffiliation?.office(currentUser)==='B01' && secureStore.profile.serviceAbbreviation!==serviceAbbreviation)
+          !secureStore.profile?.serviceAbbreviation || (currentUser?.crossOfficeDirectOrder!==true && window.AccountAffiliation?.office(currentUser)==='B01' && secureStore.profile.serviceAbbreviation!==serviceAbbreviation)
         )) {
           const office=window.AccountAffiliation?.office(currentUser);
           if (office && office !== 'B01' && secureStore.profile?.serviceAbbreviation) return alert('Votre rattachement de service doit être renseigné par un responsable.');
