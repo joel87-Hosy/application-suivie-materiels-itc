@@ -3,7 +3,7 @@ const html=fs.readFileSync('index.html','utf8');
 function extract(name){const start=html.search(new RegExp('^      (?:async )?function '+name+'\\(','m'));assert.ok(start>=0,name);return html.slice(start,html.indexOf('\n      }',start)+8);}
 (async()=>{
  const badge={innerText:0,hidden:true,classList:{toggle(name,value){badge.hidden=value;}}};
- const context={window:{},console,navigator:{},currentUser:{id:7,company_id:'A',role:'Gestionnaire'},document:{querySelectorAll:()=>[],getElementById:id=>id==='notif-gest-coord'?badge:null}};
+ const context={window:{},console,navigator:{},currentUser:{id:7,company_id:'A',role:'Gestionnaire'},normalizeAppData:data=>data,document:{querySelectorAll:()=>[],getElementById:id=>id==='notif-gest-coord'?badge:null}};
  vm.createContext(context);
  vm.runInContext(fs.readFileSync('assets/notification-tabs.js','utf8'),context);
  vm.runInContext(fs.readFileSync('assets/supabase-store.js','utf8'),context);
@@ -14,7 +14,7 @@ function extract(name){const start=html.search(new RegExp('^      (?:async )?fun
   {record_key:'other',company_id:'A',payload:{userId:8,company_id:'A',lu:false}},
  ];
  let writes=0,fail=false;
- const client={from:()=>({select:()=>({eq:async()=>({data:[],error:null})})}),rpc:async(name,{record_keys})=>{
+ const client={from:table=>{const filters={};let offset=0;const query={select(){return this;},eq(column,value){filters[column]=value;return this;},order(){return this;},range(start){offset=start;return this;},then(resolve,reject){const data=table==='app_records'&&offset===0?rows.filter(row=>Object.entries(filters).every(([column,value])=>column==='collection'?value==='notifications':column==='company_id'?row.company_id===value:true)).map(row=>({collection:'notifications',...row})):[];return Promise.resolve({data,error:null}).then(resolve,reject);}};return query;},rpc:async(name,{record_keys})=>{
   assert.equal(name,'mark_app_notifications_read');if(fail)return {error:Error('Offline')};
   for(const key of record_keys){
    const row=rows.find(r=>r.record_key===key);

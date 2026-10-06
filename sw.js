@@ -1,4 +1,4 @@
-﻿const CACHE_NAME = "itc-gestion-materiels-v74-tech-material-labels";
+const CACHE_NAME = "itc-gestion-materiels-v75-technician-returns";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
@@ -13,7 +13,7 @@ const APP_SHELL = [
   "./",
   "./index.html",
   "./assets/profile.js",
-  "./assets/notification-tabs.js?v=20261004-notification-badges",
+  "./assets/notification-tabs.js?v=20261009-material-return-workflow",
   "./assets/manager-stock.js?v=20260923-tabs",
   "./assets/account-affiliation.js",
   "./assets/company-users.js?v=20260926-affiliations",

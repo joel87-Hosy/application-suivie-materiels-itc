@@ -1,5 +1,5 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
-const source=fs.readFileSync('index.html','utf8');
+const source=fs.readFileSync('index.html','utf8').replace(/\r\n/g,'\n');
 function extract(name){const start=source.search(new RegExp('^      (?:async )?function '+name+'\\(','m'));assert.ok(start>=0,name);return source.slice(start,source.indexOf('\n      }',start)+8);}
 const authStart=source.indexOf('      let authStateGeneration = 0;');
 const auth=source.slice(authStart,source.indexOf('      {\n        supabaseBackend.auth.onAuthStateChange',authStart));

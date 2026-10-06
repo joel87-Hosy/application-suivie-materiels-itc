@@ -1295,7 +1295,7 @@
                   >0</span
                 >
               </div>
-              <button type="button" onclick="showSection('coord-retour-materiel'); toggleSidebarMobile();" class="w-full text-left py-2 px-8 hover:text-white italic"><i class="fas fa-rotate-left w-5 text-cyan-400"></i> Retour de matériel</button>
+              <button type="button" onclick="showSection('coord-retour-materiel'); toggleSidebarMobile();" class="w-full text-left py-2 px-8 hover:text-white italic"><i class="fas fa-rotate-left w-5 text-cyan-400"></i> Retour de matériel <span id="notif-coord-retour" class="notification-badge hidden">0</span></button>
               <div
                 onclick="
                   showSection('coord-creation-directe');
@@ -1320,6 +1320,7 @@
             <div id="menu-gestionnaire" class="mt-6 hidden">
               <button type="button" onclick="showSection('mes-stocks'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-teal-300"><i class="fas fa-boxes-stacked mr-2"></i> Mes stocks et sous-stocks</button>
               <button type="button" onclick="showSection('transferts-stocks'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-teal-300"><i class="fas fa-exchange-alt mr-2"></i> Transferts de matériel</button>
+              <button type="button" onclick="showSection('gestion-retours-materiel'); toggleSidebarMobile();" class="w-full text-left py-3 px-8 text-emerald-300"><i class="fas fa-rotate-left mr-2"></i> Retours à réception <span id="notif-gest-retours-materiel" class="notification-badge hidden">0</span></button>
               <p
                 class="px-6 text-[10px] text-slate-500 uppercase mb-2 opacity-50"
               >
@@ -6889,6 +6890,9 @@
           renderCoordCreationDirecte(container);
         } else if (id === "coord-retour-materiel") {
           loadCoordinatorMaterialReturns(container);
+        } else if (id === "gestion-retours-materiel") {
+          viewTitle.innerText = "RETOURS MATÉRIEL À RÉCEPTIONNER";
+          loadManagerMaterialReturns(container);
         } else if (id === "bons-signes") {
           viewTitle.innerText = "HISTORIQUE DES BONS SIGNES";
           loadSignedBonsHistory(container);
@@ -9943,6 +9947,7 @@
           if (generation !== secureStore.generation || currentSectionId !== 'coord-retour-materiel') return;
           appData = normalizeAppData(secureStore.value());
           renderCoordinatorMaterialReturns(container);
+          await markNotificationsAsRead('coord-retour-materiel');
         } catch (error) {
           if (generation !== secureStore.generation) return;
           container.innerHTML = `<p class="p-8 text-red-700">Chargement impossible : ${escapeHtml(error.message)}</p>`;
@@ -9954,9 +9959,11 @@
           container.innerHTML = '<p class="p-8">Accès réservé aux coordinateurs et coordinatrices.</p>'; return;
         }
         const allowed = new Set(getAllowedSortieOperators(true));
-        const stocks = (appData.stock || []).filter(s => allowed.has(normalizeOperatorKey(s.op)) && Number(s.qty || 0) > 0);
+        const stocks = (appData.stock || []).filter(s => allowed.has(normalizeOperatorKey(s.op)));
         const mine = (appData.demandes || []).filter(d => d.workflow === 'COORD_MATERIAL_RETURN' && (String(d.coordinateurId) === String(currentUser.id) || d.createdByUid === secureStore.uid)).sort((a,b) => String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+        const incoming = (appData.demandes || []).filter(d => d.workflow === 'COORD_MATERIAL_RETURN' && d.status === 'EN ATTENTE COORDINATEUR' && d.assignedCoordinateurUid === secureStore.uid).sort((a,b) => String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
         container.innerHTML = `<div class="max-w-4xl mx-auto space-y-6 p-4">
+          <section class="bg-white rounded-2xl shadow p-6"><h2 class="text-xl font-black text-indigo-900">Retours des techniciens à valider (${incoming.length})</h2><div class="space-y-3 mt-4">${incoming.map(d=>`<article class="border rounded-xl p-4"><b>${escapeHtml(d.demandeurName || d.technicienName || 'Technicien')} — ${escapeHtml(d.items?.[0]?.label || '')} × ${escapeHtml(d.items?.[0]?.qty || '')}</b><p>Stock d’origine : ${escapeHtml(getOperatorMeta(d.items?.[0]?.op || d.op).label)}</p><p>Motif : ${escapeHtml(d.motif || '')}</p><div class="flex gap-2 mt-3"><button type="button" onclick="decideTechnicianMaterialReturn(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'),true)" class="bg-emerald-700 text-white rounded-lg px-4 py-2">Transmettre au gestionnaire</button><button type="button" onclick="decideTechnicianMaterialReturn(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'),false)" class="bg-red-700 text-white rounded-lg px-4 py-2">Refuser</button></div></article>`).join('') || '<p class="text-slate-500">Aucun retour en attente.</p>'}</div></section>
           <section class="bg-white rounded-2xl shadow p-6"><h2 class="text-xl font-black text-indigo-900">Retour de matériel</h2><p class="text-sm text-slate-600 mt-2">Choisissez le stock d’origine et la quantité à retourner. Le retour sera soumis à un validateur puis au gestionnaire de ce stock.</p>
           <form id="coord-material-return-form" class="space-y-4 mt-5">
             <label class="block font-bold">Matériel<select name="stock" required class="border rounded-xl p-3 w-full mt-1"><option value="">Choisir un matériel</option>${stocks.map(s=>`<option value="${escapeHtml(s._dbKey)}">${escapeHtml(getOperatorMeta(s.op).label)} — ${escapeHtml(s.label)} (disponible : ${escapeHtml(s.qty)})</option>`).join('')}</select></label>
@@ -9994,6 +10001,19 @@
         } catch (error) { alert(error.message || 'Impossible de traiter le retour.'); }
       }
 
+      async function loadManagerMaterialReturns(container) {
+        const generation = secureStore.generation;
+        container.innerHTML = '<p class="p-8">Chargement des retours à réception...</p>';
+        try {
+          await (secureStore.readCollections ? secureStore.readCollections(['demandes'], generation) : secureStore.read(generation, {notify:false}));
+          if (generation !== secureStore.generation || currentSectionId !== 'gestion-retours-materiel') return;
+          appData = normalizeAppData(secureStore.value());
+          const rows = (appData.demandes || []).filter(d => d.workflow === 'COORD_MATERIAL_RETURN' && d.status === 'EN ATTENTE GESTIONNAIRE' && d.assignedGestionnaireUid === secureStore.uid).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+          container.innerHTML = `<div class="max-w-5xl mx-auto p-6 bg-white rounded-2xl shadow"><h2 class="text-2xl font-black text-emerald-900">Retours à réception (${rows.length})</h2><p class="text-slate-600 mt-2">La réception rajoute la quantité au stock exact d’où elle provient.</p><div class="space-y-3 mt-5">${rows.map(d=>`<article class="border rounded-xl p-4"><b>${escapeHtml(d.items?.[0]?.label || '')} × ${escapeHtml(d.items?.[0]?.qty || '')}</b><p>Stock : ${escapeHtml(getOperatorMeta(d.items?.[0]?.op || d.op).label)} · Technicien : ${escapeHtml(d.demandeurName || '')}</p><p>Coordinateur : ${escapeHtml(d.coordinatorDecision?.name || '')} · Motif : ${escapeHtml(d.motif || '')}</p><div class="flex gap-2 mt-3"><button type="button" onclick="decideCoordinatorMaterialReturn(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'),true)" class="bg-emerald-700 text-white rounded-lg px-4 py-2">Confirmer la réception</button><button type="button" onclick="decideCoordinatorMaterialReturn(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'),false)" class="bg-red-700 text-white rounded-lg px-4 py-2">Refuser</button></div></article>`).join('') || '<p class="text-slate-500 py-6">Aucun retour en attente de réception.</p>'}</div></div>`;
+          await markNotificationsAsRead('gestion-retours-materiel');
+        } catch (error) { if (generation === secureStore.generation) container.innerHTML = `<p class="p-8 text-red-700">Chargement impossible : ${escapeHtml(error.message)}</p>`; }
+      }
+
       function renderCoordCreationDirecte(container) {
         if (!['Coordinateur','Coordinatrice','Superviseur Terrain'].includes(secureStore.profile?.role)) {
           container.textContent = 'Accès réservé à la coordination.';
@@ -10015,26 +10035,39 @@
 
       // --- RETOURS TERRAIN ---
       function renderRetourForm(container) {
+        const offices = AccountAffiliation.officeList(currentUser);
+        const officeOps = [...new Set(offices.flatMap(office => office === 'B01' ? ['ITC-B01','OCI','CIC','MTN'] : office === 'B02' ? ['ITC-B02','MOOV'] : office === 'BOUAKE' ? ['ITC-BOUAKE'] : office === 'SAN-PEDRO' ? ['ITC-SAN-PEDRO'] : office === 'YAMOUSSOUKRO' ? ['ITC-YAMOUSSOUKRO'] : []))];
+        const issuedItems = (appData.demandes || []).filter(d => d.status === 'LIVREE' && (String(d.technicienUid || d.createdByUid || '') === String(secureStore.uid) || String(d.demandeurOriginalId || '') === String(currentUser.id))).flatMap(d => (d.items || []).map(item => ({...item, op:normalizeOperatorKey(item.op || d.op)})));
+        const reservedReturns = (appData.demandes || []).filter(d => d.workflow === 'COORD_MATERIAL_RETURN' && ['EN ATTENTE COORDINATEUR','EN ATTENTE GESTIONNAIRE','RETOUR REINTEGRE'].includes(d.status) && String(d.technicienUid || '') === String(secureStore.uid));
+        const stocks = (appData.stock || []).filter(s => officeOps.includes(normalizeOperatorKey(s.op))).map(s => {
+          const same = item => normalizeOperatorKey(item.op) === normalizeOperatorKey(s.op) && String(item.label || '').trim().toUpperCase() === String(s.label || '').trim().toUpperCase();
+          const delivered = issuedItems.filter(same).reduce((sum,item)=>sum+Number(item.qty||0),0);
+          const alreadyReturned = reservedReturns.filter(d=>same({...d.items?.[0],op:d.items?.[0]?.op || d.op})).reduce((sum,d)=>sum+Number(d.items?.[0]?.qty||0),0);
+          return {...s, _returnableQty:Math.max(0,delivered-alreadyReturned)};
+        }).filter(s=>s._returnableQty>0);
+        const coordinators = getCoordinatorUsers();
+        const mine = (appData.demandes || []).filter(d => d.workflow === 'COORD_MATERIAL_RETURN' && d.technicienUid === secureStore.uid).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
         container.innerHTML = `
               <div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl font-bold italic font-black">
-                <div class="mb-5 border border-teal-200 bg-teal-50 rounded-xl p-4 not-italic">
-                  <p class="text-sm mb-3">Un câble en bon état avec une longueur restante ? Déclarez sa distance en mètres et son bon d’origine pour alimenter le stock de chutes après les deux validations.</p>
-                  <button type="button" onclick="showSection('stocks-chutes')" class="bg-teal-700 text-white rounded-lg p-3 text-xs">Retour de câble en bon état → stock de chutes</button>
-                </div>
                 <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-orange-700 via-amber-600 to-yellow-500 text-white">
                   <p class="text-[8px] tracking-[0.2em] opacity-80">RETOUR TERRAIN</p>
-                  <h3 class="mt-1 uppercase text-xl"><i class="fas fa-rotate-left mr-2"></i>Déclarer un Retour</h3>
+                  <h3 class="mt-1 uppercase text-xl"><i class="fas fa-rotate-left mr-2"></i>Retourner un matériel reçu</h3>
                 </div>
-                <form onsubmit="handleRetourSubmit(event)" class="space-y-4">
-                  <input id="ret-label" type="text" placeholder="MATÉRIEL RENDU" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-50" required />
-                  <div class="grid grid-cols-2 gap-4">
-                    <input id="ret-qty" type="number" placeholder="QTÉ" class="w-full border-2 p-3 rounded-xl text-xs" required min="1" />
-                    <select id="ret-etat" class="w-full border-2 p-3 rounded-xl text-xs uppercase bg-slate-100"><option value="NEUF">NEUF</option><option value="DÉFECTUEUX">DÉFECTUEUX</option></select>
-                  </div>
-                  <textarea id="ret-motif" placeholder="MOTIF DU RETOUR..." class="w-full border-2 p-3 rounded-xl text-xs h-24 uppercase bg-slate-50" required></textarea>
-                  <button type="submit" class="w-full bg-orange-500 text-white py-4 rounded-2xl text-[10px] uppercase font-black inline-flex items-center justify-center gap-2"><i class="fas fa-paper-plane"></i>Valider Retour</button>
+                <form id="tech-material-return-form" class="space-y-4 not-italic">
+                  <label class="block">Matériel à retourner<select name="stock" class="w-full border-2 p-3 rounded-xl text-sm bg-slate-50" required><option value="">Choisir le matériel et son stock d’origine</option>${stocks.map(s=>`<option value="${escapeHtml(s._dbKey)}">${escapeHtml(getOperatorMeta(s.op).label)} — ${escapeHtml(s.label)} (en votre possession : ${escapeHtml(s._returnableQty)})</option>`).join('')}</select></label>
+                  <div class="grid grid-cols-2 gap-4"><label>Quantité<input name="quantity" type="number" class="w-full border-2 p-3 rounded-xl text-sm" required min="0.000001" step="any" /></label><label>État<select name="condition" class="w-full border-2 p-3 rounded-xl text-sm"><option value="NEUF">Bon état</option><option value="DÉFECTUEUX">Défectueux</option></select></label></div>
+                  <label class="block">Coordinateur<select name="coordinator" class="w-full border-2 p-3 rounded-xl text-sm" required><option value="">Choisir votre coordinateur</option>${coordinators.map(u=>`<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)} — ${escapeHtml((u.offices || [u.office || u.validationBureau]).filter(Boolean).join(', '))}</option>`).join('')}</select></label>
+                  <textarea name="reason" placeholder="Motif du retour" class="w-full border-2 p-3 rounded-xl text-sm h-24 bg-slate-50" required maxlength="1000"></textarea>
+                  <p role="status" class="text-red-700"></p><button type="submit" class="w-full bg-orange-600 text-white py-4 rounded-2xl text-sm uppercase font-black">Envoyer au coordinateur</button>
                 </form>
+                <section class="mt-8 not-italic"><h3 class="font-black mb-3">Mes retours</h3><div class="space-y-2">${mine.map(d=>`<article class="border rounded-xl p-3"><b>${escapeHtml(d.items?.[0]?.label || '')} × ${escapeHtml(d.items?.[0]?.qty || '')}</b><p>${escapeHtml(d.status || '')}</p>${d.coordinatorDecision ? `<p>Coordinateur : ${escapeHtml(d.coordinatorDecision.name || '')}</p>` : ''}</article>`).join('') || '<p class="text-slate-500">Aucun retour envoyé.</p>'}</div></section>
               </div>`;
+        const form = document.getElementById('tech-material-return-form');
+        form.onsubmit = async event => {
+          event.preventDefault(); const values = new FormData(form); const status = form.querySelector('[role=status]'); const button = form.querySelector('[type=submit]'); button.disabled = true; status.textContent = 'Envoi en cours...';
+          try { const {error} = await supabaseBackend.rpc('submit_technician_material_return', {stock_key:String(values.get('stock')), quantity:Number(values.get('quantity')), reason:String(values.get('reason')).trim(), coordinator_id:String(values.get('coordinator')), item_condition:String(values.get('condition'))}); if (error) throw error; alert('Retour envoyé à votre coordinateur pour validation.'); await refreshAppDataFromServer({render:false}); showSection('tech-retour-materiel'); }
+          catch(error) { status.textContent = error.message || 'Impossible d’envoyer le retour.'; button.disabled = false; }
+        };
       }
 
       async function handleRetourSubmit(e) {
@@ -10091,6 +10124,7 @@
         const uid = secureStore.uid;
         const owned = new Set(getManagedOpsNormalized(currentUser));
         const scoped = (appData.demandes || []).filter(d =>
+          d.workflow !== 'COORD_MATERIAL_RETURN' &&
           (!d.company_id || d.company_id === currentUser?.company_id) &&
           (d.assignedGestionnaireUid === uid || (d.correctionHistory || []).some(c => c.by === uid) ||
            (!d.validatorDecision && !d.assignedGestionnaireUid && getDemandeOps(d).length > 0 && getDemandeOps(d).every(op => owned.has(op)) &&
@@ -11546,6 +11580,11 @@
         const userId = currentUser.id;
         const sessionUid = secureStore.uid;
         while (markingNotifications) await markingNotifications;
+        let finishMark;
+        markingNotifications = new Promise(resolve => { finishMark = resolve; });
+        try {
+        const displayedSnapshot = window.NotificationTabs.unread(appData.notifications,currentUser,section);
+        const displayedKeys = new Set(displayedSnapshot.map(n => n._dbKey).filter(Boolean));
         // Wait for newly created notifications to receive their database keys.
         if (pendingSave) await pendingSave;
         if (currentUser?.id !== userId || secureStore.uid !== sessionUid) return;
@@ -11553,7 +11592,8 @@
         // finish, so newly keyed notifications are not left behind by a stale
         // snapshot captured when the tab was first opened.
         const visible = window.NotificationTabs.unread(appData.notifications,currentUser,section);
-        const visibleKeys = new Set(visible.map(n => n._dbKey).filter(Boolean));
+        const displayed = visible.filter(n => displayedSnapshot.includes(n) || displayedKeys.has(n._dbKey));
+        const visibleKeys = new Set(displayed.map(n => n._dbKey).filter(Boolean));
         // Reconcile the visible notifications with the authoritative server
         // state before deciding whether the tab and installed-app badge remain
         // unread. Keep the captured keys so arrivals during this request stay unread.
@@ -11564,11 +11604,8 @@
         }
         const unread = visibleKeys.size
           ? appData.notifications.filter(n => visibleKeys.has(n._dbKey) && !n.lu)
-          : visible.filter(n => !n.lu);
+          : (displayedSnapshot.length ? displayed : visible).filter(n => !n.lu);
         if (!unread.length) { updateNotifications(); return; }
-        let finishMark;
-        markingNotifications = new Promise(resolve => { finishMark = resolve; });
-        try {
           if (typeof secureStore.markNotificationsRead === 'function') {
             const updated = new Set(await secureStore.markNotificationsRead(unread.map(n => n._dbKey).filter(Boolean)));
             if (currentUser?.id !== userId || secureStore.uid !== sessionUid) return;

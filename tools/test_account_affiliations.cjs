@@ -44,7 +44,7 @@ const migration=name=>fs.readFileSync('supabase/migrations/'+name,'utf8');
  const context={window:{}};vm.createContext(context);vm.runInContext(fs.readFileSync('assets/account-affiliation.js','utf8'),context);const module=context.window.AccountAffiliation;
  const tech={role:'Technicien',company_id:company,office:'B02',serviceAbbreviation:'B2B'},coords=[{...tech,id:1,role:'Coordinateur'},{...tech,id:2,role:'Coordinateur',office:'B01'},{...tech,id:3,role:'Coordinatrice',serviceAbbreviation:'DEP'},{...tech,id:4,role:'Coordinateur',is_active:false},{...tech,id:5,role:'Coordinateur',company_id:'OTHER'},{...tech,id:6,role:'Superviseur Terrain'}];
  assert.equal(JSON.stringify(module.coordinators(tech,coords).map(u=>u.id)),'[1]');assert.equal(module.coordinators({...tech,office:''},coords).length,0);
- vm.runInContext(fs.readFileSync('assets/validator-workflow.js','utf8'),context);context.window.ValidatorWorkflow.setup({profile:()=>({role:'Validateur',office:'B02',serviceAbbreviation:'MAIN',controlScopes:{}})});assert.equal(context.window.ValidatorWorkflow.covers({originOffice:'B02',serviceAbbreviation:'B2B'}),true);assert.equal(context.window.ValidatorWorkflow.covers({originOffice:'B01'}),false);assert.equal(context.window.ValidatorWorkflow.covers({}),false);
+ vm.runInContext(fs.readFileSync('assets/validator-workflow.js','utf8'),context);context.window.ValidatorWorkflow.setup({profile:()=>({id:6,role:'Validateur',office:'B02',serviceAbbreviation:'MAIN',controlScopes:{'ITC-B02':true}})});assert.equal(context.window.ValidatorWorkflow.covers({originOffice:'B02',serviceAbbreviation:'B2B',items:[{op:'ITC-B02'}]}),true);assert.equal(context.window.ValidatorWorkflow.covers({originOffice:'B01',items:[{op:'ITC-B01'}]}),false);assert.equal(context.window.ValidatorWorkflow.covers({}),false);
  assert.match(module.ownSection({role:'Coordinateur',canChooseInitialService:true}),/Enregistrer mon service/);assert.doesNotMatch(module.ownSection({role:'Coordinateur',serviceAbbreviation:'B2B'}),/Enregistrer mon service/);assert.equal(module.ownSection({role:'Contrôleur'}),'');
  // The exceptional B01 coordinator routes to B02, without broadening other accounts.
  await db.exec('RESET ROLE');await db.query('UPDATE auth.users SET email=$1 WHERE id=$2',['moovmaintenance@ivoiretechnocom.ci',uuid(4)]);
@@ -72,6 +72,6 @@ const migration=name=>fs.readFileSync('supabase/migrations/'+name,'utf8');
  assert.equal((await request('special')).bonRenewals.length,1);
  assert.equal(module.requestOffice({originOffice:'B01',validationOffice:'B02'}),'B02');
  assert.equal(module.requestOffice({originOffice:'B01'}),'B01');
- assert.equal(context.window.ValidatorWorkflow.covers({originOffice:'B01',validationOffice:'B02'}),true);
+ assert.equal(context.window.ValidatorWorkflow.covers({originOffice:'B01',validationOffice:'B02',items:[{op:'ITC-B02'}]}),true);
  await db.close();console.log('PASS: existing technician migration, coordinator self-service, account creation rollback, office/service routing, cross-company denial, office-wide validation and immutable request origin.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

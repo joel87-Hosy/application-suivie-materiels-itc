@@ -1,7 +1,7 @@
 (function(global){
   'use strict';
-  const sections=['trafic-audit','coord-demandes-tech','bons-signes','tech-mes-demandes','demandes-coordonnatrice','gestion-retours','reception','transferts-stocks','validation-bons'];
-  const legacyBadges={'trafic-audit':'notif-superviseur','coord-demandes-tech':'notif-coord','tech-mes-demandes':'notif-tech','demandes-coordonnatrice':'notif-gest-coord'};
+  const sections=['trafic-audit','coord-demandes-tech','coord-retour-materiel','bons-signes','tech-mes-demandes','demandes-coordonnatrice','gestion-retours','gestion-retours-materiel','reception','transferts-stocks','validation-bons'];
+  const legacyBadges={'trafic-audit':'notif-superviseur','coord-demandes-tech':'notif-coord','coord-retour-materiel':'notif-coord-retour','tech-mes-demandes':'notif-tech','demandes-coordonnatrice':'notif-gest-coord','gestion-retours-materiel':'notif-gest-retours-materiel'};
   const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
   function section(notification,user){
     if(sections.includes(notification.section))return notification.section;
@@ -9,10 +9,10 @@
     if(['SUPERVISEUR','SUPER_ADMIN','DG'].includes(role))return 'trafic-audit';
     if(['VALIDATEUR','VALIDATRICE'].includes(role))return 'validation-bons';
     if(role==='TECHNICIEN')return 'tech-mes-demandes';
-    if(['COORDINATEUR','COORDINATRICE','SUPERVISEUR TERRAIN'].includes(role))return /VOTRE COMMANDE|SIGNE|LIVREE/.test(message)?'bons-signes':'coord-demandes-tech';
+    if(['COORDINATEUR','COORDINATRICE','SUPERVISEUR TERRAIN'].includes(role))return /RETOUR/.test(message)?'coord-retour-materiel':(/VOTRE COMMANDE|SIGNE|LIVREE/.test(message)?'bons-signes':'coord-demandes-tech');
     if(role==='GESTIONNAIRE'){
       if(/TRANSFERT|STOCK_TRANSFER/.test(message))return 'transferts-stocks';
-      if(/RETOUR/.test(message))return 'gestion-retours';
+      if(/RETOUR/.test(message))return 'gestion-retours-materiel';
       if(/ENTREE|RECEPTION/.test(message))return 'reception';
       return 'demandes-coordonnatrice';
     }
