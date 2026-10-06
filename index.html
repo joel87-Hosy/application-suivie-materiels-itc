@@ -1697,10 +1697,10 @@
     <script src="assets/supabase-store.js?v=20261005-fast-connect"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
-    <script src="assets/bon-scanner.js?v=20261003-storekeeper-pdf"></script>
-    <script src="assets/storekeeper-backlog.js?v=20261008-b02-shared-bons"></script>
+    <script src="assets/bon-scanner.js?v=20261008-manager-debit"></script>
+    <script src="assets/storekeeper-backlog.js?v=20261008-office-auto-bons"></script>
     <script src="assets/bon-signatures.js?v=20261001-storekeeper-signature"></script>
-    <script src="assets/validator-workflow.js?v=20261008-office-assigned-signing"></script>
+    <script src="assets/validator-workflow.js?v=20261008-manager-debit"></script>
     <script src="assets/stock-control-store.js?v=20261006-supabase"></script>
     <script src="assets/stock-control.js?v=20261006-supabase"></script>
     <script src="assets/cable-offcuts-transport.js?v=20260918-shared1"></script>
@@ -2207,7 +2207,7 @@
         return BonReference.format(bon,{data:appData});
       }
       function bonServiceField(id, selected='') {
-        if (id === 's-service' && (['Coordinateur','Coordinatrice'].includes(currentUser?.role) || (currentUser?.role === 'Superviseur Terrain' && currentSectionId === 'coord-creation-directe')) && window.AccountAffiliation) return AccountAffiliation.requestFields(currentUser,'s')+AccountAffiliation.serviceField(currentUser,id);
+        if (id === 's-service' && (['Coordinateur','Coordinatrice'].includes(currentUser?.role) || (currentUser?.role === 'Superviseur Terrain' && currentSectionId === 'coord-creation-directe')) && window.AccountAffiliation) return AccountAffiliation.serviceField(currentUser,id);
         const services = id === 's-service' ? BonReference.physicalServices(currentUser) : BonReference.services;
         return `<label class="block text-xs font-bold">Service émetteur<select id="${id}" required class="w-full border-2 p-3 rounded-xl text-xs bg-white"><option value="">Choisir le service</option>${Object.entries(services).map(([code,name])=>`<option value="${code}" ${code===selected?'selected':''}>${escapeHtml(name)} (${code})</option>`).join('')}</select></label>`;
       }
@@ -4707,8 +4707,9 @@
                         </div>
                       </div>
                   </div>
-                  ${direct ? '<p class="mb-4 text-sm text-indigo-800">Votre demande sera transmise au validateur affecté à votre bureau. Après validation, elle sera envoyée au gestionnaire dédié. Un bon sera créé pour chaque stock sélectionné ; le stock sera débité à la remise physique.</p>' : ''}
+                  ${direct ? '<p class="mb-4 text-sm text-indigo-800">Votre demande sera transmise au validateur affecté à votre bureau. Après validation, elle sera envoyée au gestionnaire dédié. Un bon sera créé pour chaque stock sélectionné ; le stock sera débité à la signature du gestionnaire; le magasinier signera ensuite la remise.</p>' : ''}
                   <form onsubmit="${direct ? 'handleDirectSubmit(event)' : 'handleSortiePhysique(event)'}" class="space-y-6">
+                      ${direct && (['Coordinateur','Coordinatrice'].includes(currentUser?.role) || (currentUser?.role === 'Superviseur Terrain' && currentSectionId === 'coord-creation-directe')) && window.AccountAffiliation ? AccountAffiliation.requestFields(currentUser,'s') : ''}
                       ${direct?'<div data-request-routing></div>':''}
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border-2">
                           <div class="md:col-span-2">
@@ -4955,7 +4956,7 @@
             status:'EN ATTENTE VALIDATEUR',statut:'EN ATTENTE VALIDATEUR'}));
           if (!(await save())) return;
           localStorage.removeItem(getSortieDraftStorageKey());
-          alert('Demande transmise au validateur. Le stock sera débité après validation et remise physique.');
+          alert('Demande transmise au validateur. Le stock sera débité après validation et signature du gestionnaire; le magasinier signera ensuite la remise.');
           showSection('cockpit');
           return;
         }
@@ -9326,7 +9327,11 @@
         }
 
         container.innerHTML = `
-          <div class="grid grid-cols-1 gap-2 max-h-[420px] overflow-y-auto pr-1">
+          <div class="space-y-2">
+            <label class="block text-xs font-bold text-slate-700" for="tech-material-search">Rechercher un matériel par son nom</label>
+            <input id="tech-material-search" type="search" autocomplete="off" placeholder="Ex. routeur, câble, connecteur…" oninput="filterTechMaterialPicker(this.value)" class="w-full border-2 border-slate-300 rounded-xl p-3 text-base bg-white" />
+            <p class="text-xs text-slate-500">Les désignations sont affichées en entier. Faites défiler la liste ou recherchez un mot du nom.</p>
+            <div class="grid grid-cols-1 gap-2 max-h-[55vh] overflow-y-auto pr-1">
             ${
               stockRows.length
                 ? stockRows.map((item) => {
@@ -9337,19 +9342,29 @@
                     const checked = previousByKey.has(key);
                     const available = Number(item._techAvailable) || 0;
                     return `
-                      <div class="tech-stock-row grid grid-cols-[auto_1fr_92px] gap-3 items-center bg-white border border-slate-200 rounded-xl p-3" data-op="${escapeHtml(op)}" data-label="${escapeHtml(label)}" data-available="${available}">
+                      <div class="tech-stock-row grid grid-cols-[auto_minmax(0,1fr)_76px] gap-2 items-start bg-white border border-slate-200 rounded-xl p-3" data-op="${escapeHtml(op)}" data-label="${escapeHtml(label)}" data-available="${available}">
                         <input type="checkbox" class="tech-stock-check h-4 w-4 accent-indigo-600" ${checked ? "checked" : ""} onchange="const qtyInput = this.closest('.tech-stock-row').querySelector('.tech-stock-qty'); if (this.checked && !qtyInput.value) qtyInput.value = 1;" />
                         <div class="min-w-0">
-                          <p class="text-[9px] font-black uppercase text-slate-800 truncate">${escapeHtml(label)}</p>
-                          <p class="text-[7px] uppercase text-slate-400">${escapeHtml(getOperatorMeta(op).label)} | disponible: ${available}${isBureau02B2B ? ' (sous-stock Production)' : ''}</p>
+                          <p class="text-sm leading-snug font-bold uppercase text-slate-800 whitespace-normal break-words" title="${escapeHtml(label)}">${escapeHtml(label)}</p>
+                          <p class="mt-1 text-xs text-slate-500">${escapeHtml(getOperatorMeta(op).label)} · disponible : ${available}${isBureau02B2B ? ' (sous-stock Production)' : ''}</p>
                         </div>
-                        <input type="number" class="tech-stock-qty border-2 rounded-lg p-2 text-[9px] font-black text-center" min="1" max="${available}" value="${previousQty || ""}" placeholder="QTE" oninput="this.closest('.tech-stock-row').querySelector('.tech-stock-check').checked = Number(this.value) > 0;" />
+                        <input type="number" aria-label="Quantité à demander pour ${escapeHtml(label)}" class="tech-stock-qty w-full min-w-0 border-2 rounded-lg p-2 text-sm font-bold text-center" min="1" max="${available}" value="${previousQty || ""}" placeholder="Qté" oninput="this.closest('.tech-stock-row').querySelector('.tech-stock-check').checked = Number(this.value) > 0;" />
                       </div>`;
                   }).join("")
                 : `<div class="p-6 text-center text-[10px] uppercase text-slate-400 bg-white border rounded-2xl">Aucun materiel disponible dans les stocks selectionnes.</div>`
             }
+            </div>
           </div>`;
         updateTechOperatorSummary();
+      }
+
+      function filterTechMaterialPicker(query = "") {
+        const normalized = String(query).trim().toLocaleLowerCase("fr");
+        document.querySelectorAll("#tech-material-picker .tech-stock-row").forEach((row) => {
+          const label = String(row.dataset.label || "").toLocaleLowerCase("fr");
+          const operator = String(row.dataset.op || "").toLocaleLowerCase("fr");
+          row.hidden = Boolean(normalized) && !label.includes(normalized) && !operator.includes(normalized);
+        });
       }
 
       function onTechOperatorSelectionChange() {
@@ -10146,7 +10161,7 @@
                                 </div>
                                 ${d.workflow === 'COORD_MATERIAL_RETURN' ? `<button type="button" onclick="decideCoordinatorMaterialReturn(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'),true)" class="bg-emerald-700 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow">Confirmer la réception</button><button type="button" onclick="decideCoordinatorMaterialReturn(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'),false)" class="bg-red-700 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow">Refuser le retour</button>` : `<button onclick="${d.status === 'REFUSEE VALIDATEUR' ? `ValidatorWorkflow.correct(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))` : `prepSortie('${d.id}')`}" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-indigo-700 transition inline-flex items-center gap-2">
                                     <i class="fas fa-boxes-stacked"></i>
-                                    ${d.status === 'REFUSEE VALIDATEUR' ? 'Corriger et renvoyer' : (bureau01OnlyManager ? 'Valider, signer et débiter le stock' : 'Signer et valider pour magasinier')}
+                                    ${d.status === 'REFUSEE VALIDATEUR' ? 'Corriger et renvoyer' : (bureau01OnlyManager ? 'Valider, signer et débiter le stock' : 'Valider, signer et debiter le stock')}
                                 </button>`}
                                 ${bureau01OnlyManager && d.status === 'EN ATTENTE GESTIONNAIRE' ? `<button type="button" onclick="removeBureau01Command(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))" class="bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-red-800 transition inline-flex items-center gap-2"><i class="fas fa-trash"></i>Supprimer pour reprendre</button>` : ''}
                                 ${bureau02Manager && d.status === 'EN ATTENTE GESTIONNAIRE' ? `<button type="button" onclick="removeBureau02Command(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))" class="bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-red-800 transition inline-flex items-center gap-2"><i class="fas fa-trash"></i>Supprimer le bon</button>` : ''}
@@ -10260,7 +10275,7 @@
               </div>
             </div>
             <button onclick="managerSignAndValidateDemande('${d.id}')" class="w-full bg-green-600 text-white py-4 rounded-2xl text-[10px] mt-6 uppercase font-black shadow-lg hover:bg-green-700 transition inline-flex items-center justify-center gap-2">
-              <i class="fas fa-check-circle"></i> ${currentUser?.controlScopes?.['ITC-B01'] === true && currentUser?.controlScopes?.['ITC-B02'] !== true ? 'Valider, signer et débiter le stock' : 'Valider le bon et transmettre au magasinier'}
+              <i class="fas fa-check-circle"></i> ${currentUser?.controlScopes?.['ITC-B01'] === true && currentUser?.controlScopes?.['ITC-B02'] !== true ? 'Valider, signer et débiter le stock' : 'Valider, signer et debiter le stock'}
             </button>
           </div>`;
       }

@@ -1,9 +1,9 @@
-const CACHE_NAME = "itc-gestion-materiels-v71-sync-app-badge";
+﻿const CACHE_NAME = "itc-gestion-materiels-v74-tech-material-labels";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
-  "./assets/bon-scanner.js",
-  "./assets/storekeeper-backlog.js?v=20261006-storekeeper-backlog",
+  "./assets/bon-scanner.js?v=20261008-manager-debit",
+  "./assets/storekeeper-backlog.js?v=20261008-office-auto-bons",
   "./assets/manager-locations.js",
   "./assets/manager-flux.js",
   "./assets/stock-substocks.js",
@@ -30,7 +30,7 @@ const APP_SHELL = [
   "./assets/cable-offcuts-transport.js?v=20260918-shared1",
   "./assets/supabase-store.js",
   "./assets/supabase-store.js?v=20260923-receipts",
-  "./assets/validator-workflow.js?v=20260923-corrections",
+  "./assets/validator-workflow.js?v=20261008-manager-debit",
   "./assets/validator-workflow.js",
   "./assets/assistant-knowledge.js",
   "./assets/assistant-reports.js",
@@ -90,7 +90,7 @@ self.addEventListener("push", event => {
   let data={};
   try { data=event.data?.json() || {}; } catch (_) { data={body:event.data?.text() || "Nouvelle notification."}; }
   const badgePromise=Number.isFinite(Number(data.unreadCount)) && Number(data.unreadCount)>0 ? self.registration.setAppBadge?.(Number(data.unreadCount)) : Promise.resolve();
-  event.waitUntil(Promise.all([badgePromise,self.registration.showNotification(data.title || "ITC Gestion Matériels", {body:data.body || "Nouvelle notification.",icon:"./assets/pwa-icon-192.png",badge:"./assets/pwa-icon-192.png",tag:data.notificationId || "itc-notification",renotify:true,silent:false,data:{url:data.url || "./index.html"}})]));
+  event.waitUntil(Promise.all([badgePromise,self.registration.showNotification(data.title || "ITC Gestion MatÃ©riels", {body:data.body || "Nouvelle notification.",icon:"./assets/pwa-icon-192.png",badge:"./assets/pwa-icon-192.png",tag:data.notificationId || "itc-notification",renotify:true,silent:false,data:{url:data.url || "./index.html"}})]));
 });
 self.addEventListener("notificationclick", event => {
   event.notification.close();
@@ -164,3 +164,4 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+

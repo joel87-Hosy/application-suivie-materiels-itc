@@ -33,13 +33,12 @@
     container.innerHTML='<p class="p-6">Chargement des bons…</p>';
     try {
       await env.refresh();
-      const [managers,storekeepers]=await Promise.all([rpc('workflow_managers',{}),rpc('workflow_storekeepers',{})]);
+      const managers=await rpc('workflow_managers',{});
       if(!container.isConnected||token!==generation)return;
       const requests=(env.data().demandes||[]).filter(r=>r.status==='EN ATTENTE VALIDATEUR' && covers(r));
       const renewals=(env.data().demandes||[]).filter(r=>r.status==='EN ATTENTE GESTIONNAIRE' && r.bonRenewalRequestedAt && covers(r) && r.validatorDecision?.uid===(env.uid?.()||env.profile()?.uid));
       const history=(env.data().demandes||[]).filter(r=>r.validatorDecision && covers(r)).sort((a,b)=>b.validatorDecision.at.localeCompare(a.validatorDecision.at));
-      const unassigned=(env.data().demandes||[]).filter(r=>['EN ATTENTE MAGASINIER','PARTIELLEMENT SERVI'].includes(r.status)&&r.managerSignedAt&&!r.assignedMagasinierUid&&covers(r));
-      container.innerHTML=`<div class="space-y-5 p-4"><header class="bg-indigo-800 text-white p-6 rounded-2xl"><h2 class="text-xl font-bold">Validation des bons</h2><p>${requests.length} bon(s) à traiter. Une validation transmet le bon au gestionnaire dédié ; le stock sera débité à la remise physique.</p><button type="button" id="validation-refresh" class="border rounded-lg p-2 mt-3">Actualiser les bons</button></header>
+      container.innerHTML=`<div class="space-y-5 p-4"><header class="bg-indigo-800 text-white p-6 rounded-2xl"><h2 class="text-xl font-bold">Validation des bons</h2><p>${requests.length} bon(s) à traiter. Une validation transmet le bon au gestionnaire dédié ; le stock sera débité à la signature du gestionnaire; le magasinier signera ensuite la remise.</p><button type="button" id="validation-refresh" class="border rounded-lg p-2 mt-3">Actualiser les bons</button></header>
         <p class="font-bold">Bureaux de validation : ${esc(global.AccountAffiliation?.officeList(env.profile()).join(', ') || env.profile()?.validationBureau || 'Non affecté')} · Stocks : ${esc(Object.keys(env.profile()?.controlScopes || {}).filter(key=>env.profile().controlScopes[key]===true).join(', ') || 'Aucun')}</p>
         ${enabled()?'':'<p>Le nouveau circuit est en cours de préparation.</p>'}
         <p role="status" id="validation-message"></p>
@@ -47,20 +46,16 @@
         ${requests.map((r,index)=>{
           const ops=[...new Set((r.items||[]).map(i=>op(i.op||r.op)))];
           const eligible=managers.filter(m=>(!r.requestedManagerUid||m.uid===r.requestedManagerUid)&&ops.every(o=>m.scopes?.[o]===true));
-          const office=global.AccountAffiliation?.requestOffice(r,env.data()?.users)||r.validationOffice||r.originOffice;
-          const eligibleStorekeepers=storekeepers.filter(m=>(m.offices||[]).includes(office)||m.office===office);
           return `<form data-index="${index}" class="bg-white border rounded-2xl p-5 space-y-3"><h3 class="font-bold">${esc(r.ref||r.id)} — ${esc(r.demandeurName||r.tech||r.createdBy)}</h3><p>${esc(r.motif||'')} · ${esc(ops.join(', '))}</p>
             <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th class="text-left">Stock</th><th class="text-left">Matériel</th><th class="text-right">Quantité</th></tr></thead><tbody>${(r.items||[]).map(i=>`<tr><td>${esc(op(i.op||r.op))}</td><td>${esc(i.label)}</td><td class="text-right">${esc(i.qty)}</td></tr>`).join('')}</tbody></table></div>
             ${corrections(r)}
             ${r.coordinationSignatureText?`<p>${esc(r.coordinationSignerRole||'Coordination')} : ${esc(r.coordinationSignatureText)}</p>`:''}
             <label class="block">Gestionnaire dédié<select name="manager" class="border p-3 rounded-lg w-full"><option value="">Choisir le gestionnaire</option>${eligible.map(m=>`<option value="${esc(m.uid)}" ${r.assignedGestionnaireUid===m.uid||eligible.length===1?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>
             ${eligible.length?'':'<p class="text-amber-800">Aucun gestionnaire ne couvre tous les stocks de ce bon. Contactez le superviseur pour corriger les affectations avant de traiter ce bon.</p>'}
-            ${office==='B01'?'':`<label class="block">Magasinier chargé de ce bon<select name="storekeeper" class="border p-3 rounded-lg w-full"><option value="">Choisir le magasinier de ${esc(office||'ce bureau')}</option>${eligibleStorekeepers.map(m=>`<option value="${esc(m.uid)}" ${r.assignedMagasinierUid===m.uid?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>${eligibleStorekeepers.length?'':'<p class="text-amber-800">Aucun magasinier actif n’est rattaché à ce bureau. Faites attribuer le bureau au compte avant de valider.</p>'}`}
             <label class="block">Observation / motif du refus<textarea name="reason" maxlength="1000" class="border p-3 rounded-lg w-full"></textarea></label>
             <button type="submit" name="decision" value="approve" class="bg-green-700 text-white p-3 rounded-lg">Valider et transmettre</button>
             <button type="submit" name="decision" value="reject" class="bg-red-700 text-white p-3 rounded-lg">Refuser et retourner pour correction</button></form>`;
         }).join('') || '<p>Aucun bon en attente de validation.</p>'}
-        ${unassigned.length?`<section class="bg-amber-50 border border-amber-300 p-5 rounded-2xl"><h3 class="font-bold">Bons existants à affecter à un magasinier</h3><p class="text-sm">Ces bons sont déjà validés par le gestionnaire. Affectez-les à un magasinier du même bureau pour permettre leur service.</p>${unassigned.map((r,index)=>{const office=global.AccountAffiliation?.requestOffice(r,env.data()?.users)||r.validationOffice||r.originOffice;const eligible=storekeepers.filter(m=>(m.offices||[]).includes(office)||m.office===office);return `<form data-assign-existing="${index}" class="bg-white rounded-xl p-3 mt-3 flex gap-3 items-end flex-wrap"><b>${esc(r.ref||r.id)} · ${esc(office||'Bureau inconnu')}</b><select name="storekeeper" required class="border rounded p-2"><option value="">Choisir le magasinier</option>${eligible.map(m=>`<option value="${esc(m.uid)}">${esc(m.name)}</option>`).join('')}</select><button class="bg-amber-700 text-white rounded p-2">Affecter</button></form>`;}).join('')}</section>`:''}
         <section class="bg-white border p-5 rounded-2xl"><h3 class="font-bold">Décisions et suivi</h3>${history.map(r=>`<div class="border-b py-3"><b>${esc(r.ref||r.id)}</b> — ${esc(r.status)}<p>${esc(trace(r))}</p>${corrections(r)}${r.validatedAt?`<p>Sortie physique : ${esc(r.validatedBy)} · ${esc(new Date(r.validatedAt).toLocaleString('fr-FR'))}</p>`:''}</div>`).join('')||'<p>Aucune décision.</p>'}</section></div>`;
       container.querySelector('#validation-refresh').onclick=()=>{if(!busy)enter(container);};
       container.querySelectorAll('[data-renewal]').forEach(form=>{form.onsubmit=async event=>{
@@ -77,18 +72,15 @@
         finally{busy=false;container.querySelectorAll('button').forEach(b=>b.disabled=false);}
       };});
       container.onsubmit=async event=>{
-        const assignForm=event.target.closest('[data-assign-existing]');
-        if(assignForm){event.preventDefault();if(busy)return;const request=unassigned[Number(assignForm.dataset.assignExisting)],storekeeperUid=assignForm.elements.storekeeper.value;if(!storekeeperUid)return;busy=true;try{await rpc('assign_storekeeper_to_pending_bon',{request_key:request._dbKey,storekeeper_uid:storekeeperUid});await enter(container);}catch(error){container.querySelector('#validation-message').textContent=error.message;}finally{busy=false;}return;}
         const form=event.target.closest('[data-index]'); if(!form)return;event.preventDefault();if(busy)return;
         const approve=event.submitter?.value==='approve',values=new FormData(form),request=requests[Number(form.dataset.index)];
         if(!values.get('manager'))return global.alert('Choisissez le gestionnaire dédié : il recevra le bon, y compris en cas de refus pour correction.');
-        if(approve&&(global.AccountAffiliation?.requestOffice(request,env.data()?.users)||request.validationOffice)!=='B01'&&!values.get('storekeeper'))return global.alert('Choisissez le magasinier qui signera la remise dans le bureau de ce bon.');
         if(!approve&&!String(values.get('reason')||'').trim())return global.alert('Indiquez le motif du refus.');
         busy=true;container.querySelectorAll('button').forEach(b=>b.disabled=true);
         try {
           const signature=await global.BonSignatures.capture('Signature du validateur',env.profile()?.name||'');
           if(!signature||token!==generation)return;
-          await rpc('decide_stock_request_signed_assigned',{request_key:request._dbKey,approve,manager_uid:values.get('manager'),storekeeper_uid:values.get('storekeeper')||null,reason:values.get('reason')||'',signer_name:signature.name,signature_image:signature.image});await enter(container);
+          await rpc('decide_stock_request_signed',{request_key:request._dbKey,approve,manager_uid:values.get('manager'),reason:values.get('reason')||'',signer_name:signature.name,signature_image:signature.image});await enter(container);
         }
         catch(error){container.querySelector('#validation-message').textContent=error.message;}
         finally{busy=false;container.querySelectorAll('button').forEach(b=>b.disabled=false);}
@@ -101,13 +93,11 @@
     const token=generation;
     busy=true;
     try {
-      const profile=env.profile();
-      const bureau01=profile?.role==='Gestionnaire'&&profile?.controlScopes?.['ITC-B01']===true&&profile?.controlScopes?.['ITC-B02']!==true;
       const signature=await global.BonSignatures.capture('Signature du gestionnaire pour autoriser le bon',request.managerSignatureText||env.profile()?.name||'');
       if(!signature||token!==generation)return;
-      if(!global.confirm(bureau01?'Confirmer la validation et la signature ? Le stock sera débité immédiatement.':'Confirmer la validation du bon et sa transmission au magasinier ? Aucun stock ne sera debite a cette etape.'))return;
+      if(!global.confirm('Confirmer la validation et la signature ? Le stock sera debite immediatement.'))return;
       if(token!==generation)return;
-await rpc('issue_stock_request_signed',{request_key:request._dbKey,signer_name:signature.name,signature_image:signature.image,service:request.serviceAbbreviation,selections:null});await env.refresh();global.alert(bureau01?'Bon validé et signé. Le stock a été débité.':'Bon validé et transmis au magasinier. Aucun stock n’est encore débité.');busy=false;env.navigate('demandes-coordonnatrice');}
+await rpc('issue_stock_request_signed',{request_key:request._dbKey,signer_name:signature.name,signature_image:signature.image,service:request.serviceAbbreviation,selections:null});await env.refresh();global.alert('Bon valide et signe. Le stock a ete debite. Le magasinier signera la remise sans nouveau debit.');busy=false;env.navigate('demandes-coordonnatrice');}
     catch(error){global.alert(error.message);}finally{busy=false;}
   }
   async function removeRejected(requestKey) {
