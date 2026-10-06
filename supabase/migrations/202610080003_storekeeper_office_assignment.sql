@@ -1,4 +1,4 @@
--- Attach each storekeeper to at least three offices and route signed service by office.
+-- Attach each storekeeper to one to three offices and route signed service by office.
 -- the bon's office and the selected storekeeper account.
 BEGIN;
 
@@ -13,7 +13,7 @@ BEGIN
  SELECT * INTO target FROM public.app_profiles WHERE user_id=target_id FOR UPDATE;
  IF actor.user_id IS NULL OR actor.role NOT IN ('Superviseur','DG','SUPER_ADMIN') OR target.user_id IS NULL OR (actor.role<>'SUPER_ADMIN' AND actor.company_id<>target.company_id) THEN RAISE EXCEPTION 'Affectation réservée au responsable de cette entreprise.'; END IF;
  IF target.role='Magasinier' THEN
-  IF coalesce(cardinality(office_codes),0)<3 OR cardinality(office_codes)>5 OR EXISTS(SELECT 1 FROM unnest(office_codes) x WHERE x IS NULL OR x NOT IN ('B01','B02','BOUAKE','SAN-PEDRO','YAMOUSSOUKRO')) OR cardinality(ARRAY(SELECT DISTINCT x FROM unnest(office_codes) x))<>cardinality(office_codes) THEN RAISE EXCEPTION 'Attribuez au moins trois bureaux distincts au magasinier.'; END IF;
+  IF coalesce(cardinality(office_codes),0)<1 OR cardinality(office_codes)>3 OR EXISTS(SELECT 1 FROM unnest(office_codes) x WHERE x IS NULL OR x NOT IN ('B01','B02','BOUAKE','SAN-PEDRO','YAMOUSSOUKRO')) OR cardinality(ARRAY(SELECT DISTINCT x FROM unnest(office_codes) x))<>cardinality(office_codes) THEN RAISE EXCEPTION 'Attribuez un à trois bureaux distincts au magasinier.'; END IF;
   changes:=jsonb_build_object('office',office_codes[1],'offices',to_jsonb(office_codes),'validationBureau',office_codes[1],
     'serviceAbbreviation',NULL,'services','[]'::jsonb,'allowedCoordinatorIds','[]'::jsonb,'allowedValidatorIds','[]'::jsonb,
     'affiliationUpdatedAt',clock_timestamp(),'affiliationUpdatedBy',actor_id);
@@ -64,7 +64,7 @@ END $$;
 
 CREATE OR REPLACE FUNCTION public.storekeeper_office(details jsonb,scopes jsonb DEFAULT '{}') RETURNS text
 LANGUAGE sql IMMUTABLE SET search_path=public AS $$
- SELECT CASE WHEN jsonb_array_length(public.account_offices(details,scopes)) BETWEEN 3 AND 5 THEN public.account_offices(details,scopes)->>0 ELSE NULL END;
+ SELECT CASE WHEN jsonb_array_length(public.account_offices(details,scopes)) BETWEEN 1 AND 3 THEN public.account_offices(details,scopes)->>0 ELSE NULL END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.storekeeper_has_office(details jsonb,scopes jsonb,office_code text) RETURNS boolean
@@ -216,7 +216,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; result jsonb; request jsonb;
 BEGIN
  SELECT * INTO actor FROM public.current_app_profile();
- IF actor.role IS DISTINCT FROM 'Magasinier' OR public.storekeeper_office(actor.profile,actor.control_scopes) IS NULL THEN RAISE EXCEPTION 'Le compte magasinier doit avoir au moins trois bureaux attribués.'; END IF;
+ IF actor.role IS DISTINCT FROM 'Magasinier' OR public.storekeeper_office(actor.profile,actor.control_scopes) IS NULL THEN RAISE EXCEPTION 'Attribuez un à trois bureaux au magasinier.'; END IF;
  result:=public.inspect_stock_bon_unscoped(bon_id);
  request:=result->'bon';
  IF NOT public.storekeeper_covers_request(actor.profile,actor.control_scopes,actor.company_id,request) THEN RAISE EXCEPTION 'Bon non affecté à votre compte ou à votre bureau.'; END IF;

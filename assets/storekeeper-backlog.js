@@ -45,7 +45,7 @@
     const data = env?.data?.() || {};
     const profile=env?.profile?.(),uid=String(profile?.uid||'');
     const offices=global.AccountAffiliation?.officeList(profile)||[];
-    if(!uid||offices.length<3)return [];
+    if(!uid||offices.length<1||offices.length>3)return [];
     return (data.demandes || []).filter(bon => {
       const status = normalizedStatus(bon);
       const requestOffice=global.AccountAffiliation?.requestOffice(bon,data.users||[])||bon.validationOffice||bon.originOffice;
