@@ -49,7 +49,7 @@
     return (data.demandes || []).filter(bon => {
       const status = normalizedStatus(bon);
       const requestOffice=global.AccountAffiliation?.requestOffice(bon,data.users||[])||bon.validationOffice||bon.originOffice;
-      if(String(bon.assignedMagasinierUid||'')!==uid||!offices.includes(requestOffice))return false;
+      if(!offices.includes(requestOffice)||(requestOffice!=='B02'&&String(bon.assignedMagasinierUid||'')!==uid))return false;
       return Boolean(bon.managerSignedAt) && remainingItems(bon).length > 0 && (
         (status === 'EN ATTENTE MAGASINIER' && !alreadySigned(bon)) || status === 'PARTIELLEMENT SERVI'
       );

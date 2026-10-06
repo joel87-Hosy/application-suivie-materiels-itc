@@ -1698,7 +1698,7 @@
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
     <script src="assets/bon-scanner.js?v=20261003-storekeeper-pdf"></script>
-    <script src="assets/storekeeper-backlog.js?v=20261008-assigned-office-bons-max3"></script>
+    <script src="assets/storekeeper-backlog.js?v=20261008-b02-shared-bons"></script>
     <script src="assets/bon-signatures.js?v=20261001-storekeeper-signature"></script>
     <script src="assets/validator-workflow.js?v=20261008-office-assigned-signing"></script>
     <script src="assets/stock-control-store.js?v=20261006-supabase"></script>
@@ -9560,11 +9560,12 @@
                                   <p class="text-[7px] text-slate-300 mt-2">ÉMIS LE : ${d.date || "Date inconnue"}</p>
                               </div>
 
-                                <div class="text-right">
+                              <div class="text-right">
                                   <button onclick="preparerCmd('${d.id}')" class="bg-indigo-600 text-white px-6 py-3 rounded-xl text-[9px] uppercase font-black shadow-md hover:bg-indigo-700 transition inline-flex items-center gap-2">
                                     <i class="fas fa-gears"></i>
                                       Traiter & Assigner
                                   </button>
+                                  ${d.workflow === "TECH_BON_SORTIE" && d._dbKey && d.status === "EN ATTENTE COORDINATION" && ["Coordinateur", "Coordinatrice"].includes(secureStore.profile?.role || currentUser?.role) && String(d.coordinateurId || "") === String(currentUser?.id || "") ? `<button type="button" onclick="removeDuplicateTechBon(decodeURIComponent('${encodeURIComponent(String(d._dbKey)).replace(/'/g,'%27')}'))" class="ml-2 bg-red-700 text-white px-4 py-3 rounded-xl text-[9px] uppercase font-black shadow-md hover:bg-red-800 transition inline-flex items-center gap-2"><i class="fas fa-trash"></i> Supprimer le doublon</button>` : ""}
                               </div>
                           </div>
                       `,
@@ -9579,10 +9580,30 @@
                               <p class="text-slate-400 italic uppercase">Aucun nouveau besoin terrain à traiter</p>
                           </div>
                       `
-                          : ""
+                      : ""
                       }
                   </div>
               </div>`;
+      }
+      async function removeDuplicateTechBon(requestKey) {
+        const request = (appData?.demandes || []).find(item => String(item._dbKey || "") === String(requestKey || ""));
+        const role = secureStore.profile?.role || currentUser?.role;
+        if (!request || request.workflow !== "TECH_BON_SORTIE" || request.status !== "EN ATTENTE COORDINATION" || !["Coordinateur", "Coordinatrice"].includes(role) || String(request.coordinateurId || "") !== String(currentUser?.id || "")) {
+          return alert("Seul le coordinateur destinataire peut supprimer un doublon encore en attente.");
+        }
+        if (!confirm(`Supprimer le bon ${getBonReference(request)} en doublon ? Cette action sera enregistrée dans la trace d’audit.`)) return;
+        try {
+          const { error } = await supabaseBackend.rpc("remove_duplicate_tech_bon", {
+            request_key: String(requestKey),
+            expected_bon_id: String(request.id || ""),
+          });
+          if (error) throw error;
+          await refreshAppDataFromServer({render:false});
+          renderCoordFluxTech(document.getElementById("app-container"));
+          alert("Bon en doublon supprimé.");
+        } catch (error) {
+          alert(`Suppression impossible : ${error.message}`);
+        }
       }
       function canCurrentUserReviewTechDemande(demande) {
         const role = secureStore.profile?.role || currentUser?.role;
