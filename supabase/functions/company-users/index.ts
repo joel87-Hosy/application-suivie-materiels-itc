@@ -29,14 +29,14 @@ Deno.serve(async request=>{
   }
   if(!['Gestionnaire','Magasinier','Contrôleur','Coordinateur','Coordinatrice','Superviseur Terrain','Technicien','Validateur','Validatrice'].includes(c.role))return json({error:'Le rôle choisi pour le nouveau compte n’est pas autorisé.'},400);
   if(typeof c.email!=='string'||!/^\S+@\S+\.\S+$/.test(c.email)||typeof c.name!=='string'||!c.name.trim()||c.name.length>120||typeof c.password!=='string'||c.password.length<12||c.password.length>128)return json({error:'Nom, email ou mot de passe invalide (12 caractères minimum).'},400);
-  const affiliated=['Gestionnaire','Coordinateur','Coordinatrice','Technicien','Validateur','Validatrice','Superviseur Terrain'].includes(c.role);
+  const affiliated=['Gestionnaire','Coordinateur','Coordinatrice','Technicien','Validateur','Validatrice','Superviseur Terrain','Magasinier'].includes(c.role);
   const officeCodes=c.offices??[c.office],serviceCodes=c.services??[c.serviceAbbreviation],coordinatorIds=c.allowedCoordinatorIds??[],validatorIds=c.allowedValidatorIds??[];
   const otherOffices=Array.isArray(officeCodes)&&officeCodes.some((v:unknown)=>['B02','BOUAKE','SAN-PEDRO','YAMOUSSOUKRO'].includes(v as string));
   const validService=(value:unknown)=>typeof value==='string'&&(
    (otherOffices&&['B2B','DEP','MAIN'].includes(value))||
    (Array.isArray(officeCodes)&&officeCodes.includes('B01')&&['PROD','MBM','MFTTH','DR','MNM','DESS','LS','CIDATA'].includes(value))
   );
-  if(affiliated && (!Array.isArray(officeCodes)||!officeCodes.length||officeCodes.length>5||officeCodes.some((v:unknown)=>!['B01','B02','BOUAKE','SAN-PEDRO','YAMOUSSOUKRO'].includes(v as string))||!Array.isArray(serviceCodes)||!serviceCodes.length||serviceCodes.length>3||serviceCodes.some((v:unknown)=>!validService(v))))return json({error:'Choisissez les bureaux et services du compte.'},400);
+  if(affiliated && (!Array.isArray(officeCodes)||(c.role==='Magasinier'?officeCodes.length<3||officeCodes.length>5:!officeCodes.length||officeCodes.length>5)||officeCodes.some((v:unknown)=>!['B01','B02','BOUAKE','SAN-PEDRO','YAMOUSSOUKRO'].includes(v as string))||(c.role!=='Magasinier'&&(!Array.isArray(serviceCodes)||!serviceCodes.length||serviceCodes.length>3||serviceCodes.some((v:unknown)=>!validService(v))))))return json({error:c.role==='Magasinier'?'Attribuez au moins trois bureaux au magasinier.':'Choisissez les bureaux et services du compte.'},400);
   if([coordinatorIds,validatorIds].some(ids=>!Array.isArray(ids)||ids.length>100||ids.some((id:unknown)=>typeof id!=='string'||!id||id.length>200)))return json({error:'Liste de coordinateurs ou validateurs invalide.'},400);
   if(!Array.isArray(c.managedOps)||c.managedOps.some((op:unknown)=>typeof op!=='string'))return json({error:'Liste de stocks invalide.'},400);
   const ops=['Contrôleur','Magasinier'].includes(c.role)?[]:[...new Set(c.managedOps)];

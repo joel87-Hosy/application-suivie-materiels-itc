@@ -1690,7 +1690,7 @@
     <script src="assets/supabase-public-config.js?v=20260918-shared1"></script>
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
     <script src="assets/control-core.js?v=20260923-regional"></script>
-    <script src="assets/account-affiliation.js"></script>
+    <script src="assets/account-affiliation.js?v=20261008-storekeeper-office"></script>
     <script src="assets/request-routing.js"></script>
     <script src="assets/company-users.js?v=20261006-company-users-deploy"></script>
     <script src="assets/notification-tabs.js?v=20261004-notification-badges"></script>
@@ -1698,9 +1698,9 @@
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
     <script src="assets/bon-scanner.js?v=20261003-storekeeper-pdf"></script>
-    <script src="assets/storekeeper-backlog.js?v=20261007-partial-remainders"></script>
+    <script src="assets/storekeeper-backlog.js?v=20261008-assigned-office-bons"></script>
     <script src="assets/bon-signatures.js?v=20261001-storekeeper-signature"></script>
-    <script src="assets/validator-workflow.js?v=20261001-manager-handoff"></script>
+    <script src="assets/validator-workflow.js?v=20261008-office-assigned-signing"></script>
     <script src="assets/stock-control-store.js?v=20261006-supabase"></script>
     <script src="assets/stock-control.js?v=20261006-supabase"></script>
     <script src="assets/cable-offcuts-transport.js?v=20260918-shared1"></script>
@@ -8397,7 +8397,7 @@
                 <td class="py-3">
                   <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${badge}">${escapeHtml(user.role || "-")}</span>
                 </td>
-                <td class="py-3 text-slate-400">${user.role === "Contrôleur" ? "Tous les stocks de l’entreprise" : user.role === "Magasinier" ? "Tous les bureaux · service des bons" : Array.isArray(user.managedOps) ? escapeHtml(user.managedOps.join(", ")) : "-"}</td>
+                <td class="py-3 text-slate-400">${user.role === "Contrôleur" ? "Tous les stocks de l’entreprise" : user.role === "Magasinier" ? `Bureaux : ${escapeHtml(AccountAffiliation.officeList(user).join(", ")||"à attribuer")}` : Array.isArray(user.managedOps) ? escapeHtml(user.managedOps.join(", ")) : "-"}</td>
                 <td class="py-3">
                   <span class="px-2 py-1 rounded-lg border text-[8px] font-black uppercase ${
                     getCompanyUserStatus(user) === "active"
@@ -10103,7 +10103,7 @@
                                 </div>
                                 ${d.workflow === 'COORD_MATERIAL_RETURN' ? `<button type="button" onclick="decideCoordinatorMaterialReturn(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'),true)" class="bg-emerald-700 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow">Confirmer la réception</button><button type="button" onclick="decideCoordinatorMaterialReturn(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'),false)" class="bg-red-700 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow">Refuser le retour</button>` : `<button onclick="${d.status === 'REFUSEE VALIDATEUR' ? `ValidatorWorkflow.correct(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))` : `prepSortie('${d.id}')`}" class="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-indigo-700 transition inline-flex items-center gap-2">
                                     <i class="fas fa-boxes-stacked"></i>
-                                    ${d.status === 'REFUSEE VALIDATEUR' ? 'Corriger et renvoyer' : 'Signer et valider pour magasinier'}
+                                    ${d.status === 'REFUSEE VALIDATEUR' ? 'Corriger et renvoyer' : (bureau01OnlyManager ? 'Valider, signer et débiter le stock' : 'Signer et valider pour magasinier')}
                                 </button>`}
                                 ${bureau01OnlyManager && d.status === 'EN ATTENTE GESTIONNAIRE' ? `<button type="button" onclick="removeBureau01Command(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))" class="bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-red-800 transition inline-flex items-center gap-2"><i class="fas fa-trash"></i>Supprimer pour reprendre</button>` : ''}
                                 ${bureau02Manager && d.status === 'EN ATTENTE GESTIONNAIRE' ? `<button type="button" onclick="removeBureau02Command(decodeURIComponent('${encodeURIComponent(d._dbKey).replace(/'/g,'%27')}'))" class="bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow hover:bg-red-800 transition inline-flex items-center gap-2"><i class="fas fa-trash"></i>Supprimer le bon</button>` : ''}
@@ -10217,7 +10217,7 @@
               </div>
             </div>
             <button onclick="managerSignAndValidateDemande('${d.id}')" class="w-full bg-green-600 text-white py-4 rounded-2xl text-[10px] mt-6 uppercase font-black shadow-lg hover:bg-green-700 transition inline-flex items-center justify-center gap-2">
-              <i class="fas fa-check-circle"></i> Valider le bon et transmettre au magasinier
+              <i class="fas fa-check-circle"></i> ${currentUser?.controlScopes?.['ITC-B01'] === true && currentUser?.controlScopes?.['ITC-B02'] !== true ? 'Valider, signer et débiter le stock' : 'Valider le bon et transmettre au magasinier'}
             </button>
           </div>`;
       }
@@ -11196,8 +11196,9 @@
           if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'magasinier-historique') return;
           appData = normalizeAppData(secureStore.value());
           const myUid = String(uid || secureStore.profile?.uid || '');
+          const myOffices = AccountAffiliation.officeList(secureStore.profile);
           const entries = (appData.demandes || []).flatMap(bon => magasinierEventsForBon(bon)
-            .filter(event => String(event.uid || event.storekeeperUid || '') === myUid)
+            .filter(event => String(event.uid || event.storekeeperUid || '') === myUid && myOffices.includes(AccountAffiliation.requestOffice(bon,appData.users||[])||bon.validationOffice||bon.originOffice))
             .map(event => ({bon, event})))
             .sort((a,b) => getSortieTimestamp(b.event.at) - getSortieTimestamp(a.event.at));
           container.innerHTML = `<div class="bg-white rounded-3xl p-8 shadow-xl">
