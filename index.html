@@ -8899,9 +8899,14 @@
                                   </p>
                               </div>
 
-                                <button onclick="downloadPDF('${bs.id}')" class="bg-indigo-600 text-white px-5 py-3 rounded-xl text-[9px] font-black uppercase shadow-lg hover:bg-indigo-700 hover:scale-105 transition transform inline-flex items-center gap-2">
-                                  <i class="fas fa-file-pdf mr-2"></i> PDF
-                              </button>
+                                <div class="flex items-center gap-2">
+                                  <button onclick="downloadPDF('${bs.id}')" class="bg-indigo-600 text-white px-5 py-3 rounded-xl text-[9px] font-black uppercase shadow-lg hover:bg-indigo-700 hover:scale-105 transition transform inline-flex items-center gap-2">
+                                    <i class="fas fa-file-pdf"></i> PDF
+                                  </button>
+                                  <button type="button" onclick="previewTechnicianBon('${bs.id}')" class="bg-white text-indigo-700 border border-indigo-200 px-5 py-3 rounded-xl text-[9px] font-black uppercase shadow-sm hover:bg-indigo-50 transition inline-flex items-center gap-2">
+                                    <i class="fas fa-eye"></i> Voir
+                                  </button>
+                                </div>
                           </div>
                       `,
                               )
@@ -10078,19 +10083,44 @@
                   <h3 class="mt-1 uppercase text-xl"><i class="fas fa-rotate-left mr-2"></i>Retourner un matériel reçu</h3>
                 </div>
                 <form id="tech-material-return-form" class="space-y-4 not-italic">
-                  <label class="block">Matériel à retourner<select name="stock" class="w-full border-2 p-3 rounded-xl text-sm bg-slate-50" required><option value="">Choisir le matériel et son stock d’origine</option>${stocks.map(s=>`<option value="${escapeHtml(s._dbKey)}">${escapeHtml(getOperatorMeta(s.op).label)} — ${escapeHtml(s.label)} (en votre possession : ${escapeHtml(s._returnableQty)})</option>`).join('')}</select></label>
-                  <div class="grid grid-cols-2 gap-4"><label>Quantité<input name="quantity" type="number" class="w-full border-2 p-3 rounded-xl text-sm" required min="0.000001" step="any" /></label><label>État<select name="condition" class="w-full border-2 p-3 rounded-xl text-sm"><option value="NEUF">Bon état</option><option value="DÉFECTUEUX">Défectueux</option></select></label></div>
+                  <fieldset class="space-y-3"><legend class="block mb-2">Matériel(s) à retourner — choisissez le matériel et son stock d’origine</legend>${stocks.map((s,index)=>`<div class="rounded-xl border bg-slate-50 p-3"><label class="flex items-start gap-3"><input type="checkbox" name="returnStock" value="${escapeHtml(s._dbKey)}" data-return-index="${index}" data-return-max="${escapeHtml(s._returnableQty)}" class="mt-1"><span><b>${escapeHtml(getOperatorMeta(s.op).label)} — ${escapeHtml(s.label)}</b><span class="block text-xs text-slate-600">En votre possession : ${escapeHtml(s._returnableQty)}</span></span></label><div class="grid grid-cols-2 gap-3 mt-3"><label class="text-sm">Quantité<input name="quantity-${index}" data-return-field="${index}" type="number" class="w-full border-2 p-2 rounded-xl text-sm" min="0.000001" max="${escapeHtml(s._returnableQty)}" step="any" disabled></label><label class="text-sm">État<select name="condition-${index}" data-return-field="${index}" class="w-full border-2 p-2 rounded-xl text-sm" disabled><option value="NEUF">Bon état</option><option value="DÉFECTUEUX">Défectueux</option></select></label></div></div>`).join('') || '<p class="text-sm text-slate-600">Aucun matériel remis et encore disponible pour un retour dans vos stocks autorisés.</p>'}</fieldset>
                   <label class="block">Coordinateur<select name="coordinator" class="w-full border-2 p-3 rounded-xl text-sm" required><option value="">Choisir votre coordinateur</option>${coordinators.map(u=>`<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)} — ${escapeHtml((u.offices || [u.office || u.validationBureau]).filter(Boolean).join(', '))}</option>`).join('')}</select></label>
                   <textarea name="reason" placeholder="Motif du retour" class="w-full border-2 p-3 rounded-xl text-sm h-24 bg-slate-50" required maxlength="1000"></textarea>
                   <p role="status" class="text-red-700"></p><button type="submit" class="w-full bg-orange-600 text-white py-4 rounded-2xl text-sm uppercase font-black">Envoyer au coordinateur</button>
                 </form>
-                <section class="mt-8 not-italic"><h3 class="font-black mb-3">Mes retours</h3><div class="space-y-2">${mine.map(d=>`<article class="border rounded-xl p-3"><b>${escapeHtml(d.items?.[0]?.label || '')} × ${escapeHtml(d.items?.[0]?.qty || '')}</b><p>${escapeHtml(d.status || '')}</p>${d.coordinatorDecision ? `<p>Coordinateur : ${escapeHtml(d.coordinatorDecision.name || '')}</p>` : ''}</article>`).join('') || '<p class="text-slate-500">Aucun retour envoyé.</p>'}</div></section>
+                <section class="mt-8 not-italic"><h3 class="font-black mb-3">Mes retours</h3><div class="space-y-2">${mine.map(d=>`<article class="border rounded-xl p-3"><b>${escapeHtml(d.items?.[0]?.label || '')} × ${escapeHtml(d.items?.[0]?.qty || '')}</b><p>Stock d’origine : ${escapeHtml(getOperatorMeta(d.items?.[0]?.op || d.op).label)} · ${escapeHtml(d.condition || '')}</p><p>${escapeHtml(d.status || '')}</p>${d.coordinatorDecision ? `<p>Coordinateur : ${escapeHtml(d.coordinatorDecision.name || '')}${d.coordinatorDecision.reason ? ' · '+escapeHtml(d.coordinatorDecision.reason) : ''}</p>` : ''}</article>`).join('') || '<p class="text-slate-500">Aucun retour envoyé.</p>'}</div></section>
               </div>`;
         const form = document.getElementById('tech-material-return-form');
+        form.querySelectorAll('[data-return-index]').forEach(checkbox => checkbox.addEventListener('change', () => {
+          form.querySelectorAll(`[data-return-field="${checkbox.dataset.returnIndex}"]`).forEach(field => { field.disabled = !checkbox.checked; field.required = checkbox.checked && field.tagName === 'INPUT'; });
+        }));
         form.onsubmit = async event => {
-          event.preventDefault(); const values = new FormData(form); const status = form.querySelector('[role=status]'); const button = form.querySelector('[type=submit]'); button.disabled = true; status.textContent = 'Envoi en cours...';
-          try { const {error} = await supabaseBackend.rpc('submit_technician_material_return', {stock_key:String(values.get('stock')), quantity:Number(values.get('quantity')), reason:String(values.get('reason')).trim(), coordinator_id:String(values.get('coordinator')), item_condition:String(values.get('condition'))}); if (error) throw error; alert('Retour envoyé à votre coordinateur pour validation.'); await refreshAppDataFromServer({render:false}); showSection('tech-retour-materiel'); }
-          catch(error) { status.textContent = error.message || 'Impossible d’envoyer le retour.'; button.disabled = false; }
+          event.preventDefault(); const values = new FormData(form); const status = form.querySelector('[role=status]'); const button = form.querySelector('[type=submit]');
+          const selected = [...form.querySelectorAll('[name="returnStock"]:checked')];
+          if (!selected.length) { status.textContent = 'Choisissez au moins un matériel à retourner.'; return; }
+          const reason = String(values.get('reason') || '').trim();
+          if (!reason || !values.get('coordinator')) { status.textContent = 'Indiquez le motif et choisissez votre coordinateur.'; return; }
+          for (const checkbox of selected) {
+            const index = checkbox.dataset.returnIndex;
+            const qty = Number(values.get(`quantity-${index}`));
+            const max = Number(checkbox.dataset.returnMax);
+            if (!Number.isFinite(qty) || qty <= 0 || qty > max) { status.textContent = 'Vérifiez les quantités : elles doivent être positives et ne pas dépasser le matériel en votre possession.'; return; }
+          }
+          button.disabled = true; status.textContent = 'Envoi des retours en cours...';
+          const errors = []; let sent = 0;
+          for (const checkbox of selected) {
+            const index = checkbox.dataset.returnIndex;
+            try {
+              const {error} = await supabaseBackend.rpc('submit_technician_material_return', {stock_key:String(checkbox.value), quantity:Number(values.get(`quantity-${index}`)), reason, coordinator_id:String(values.get('coordinator')), item_condition:String(values.get(`condition-${index}`))});
+              if (error) throw error;
+              sent++;
+            } catch(error) { errors.push(error.message || 'Erreur inconnue'); }
+          }
+          if (!sent) { status.textContent = errors.join(' · ') || 'Impossible d’envoyer les retours.'; button.disabled = false; return; }
+          await refreshAppDataFromServer({render:false});
+          showSection('tech-retour-materiel');
+          if (errors.length) alert(`${sent} retour(s) envoyé(s) au coordinateur. Certains matériels n’ont pas été envoyés : ${errors.join(' · ')}`);
+          else alert(`${sent} retour(s) envoyé(s) à votre coordinateur pour validation.`);
         };
       }
 
@@ -11603,6 +11633,25 @@
           doc.save(`Bon_Sortie_${getBonReference(d)}.pdf`);
         } catch (error) {
           alert("Generation du bon impossible : " + error.message);
+        }
+      }
+
+      async function previewTechnicianBon(id) {
+        const d = appData.demandes.find((x) => x.id === id);
+        if (!d || !isCurrentTechnicianBon(d)) return alert("Bon introuvable ou inaccessible.");
+        const preview = window.open("about:blank", "_blank");
+        if (!preview) return alert("Autorisez l’ouverture des fenêtres pour afficher le bon.");
+        preview.document.title = "Aperçu du bon";
+        preview.document.body.innerHTML = '<p style="font:16px sans-serif;padding:24px">Préparation de l’aperçu…</p>';
+        try {
+          const doc = new window.jspdf.jsPDF();
+          await drawSortieBonBesoinPdf(doc, d);
+          const url = URL.createObjectURL(doc.output("blob"));
+          preview.location.replace(url);
+          preview.addEventListener("beforeunload", () => URL.revokeObjectURL(url), { once: true });
+        } catch (error) {
+          preview.close();
+          alert("Génération de l’aperçu impossible : " + error.message);
         }
       }
 
