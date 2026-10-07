@@ -4844,7 +4844,18 @@
         renderSortiePhysiqueForm(undefined, currentSectionId === 'coord-creation-directe');
       }
 
+      let sortieSubmissionPending = false;
       async function handleSortiePhysique(e, direct = false) {
+        e.preventDefault();
+        if (sortieSubmissionPending) return;
+        sortieSubmissionPending = true;
+        const button = e.submitter || e.target?.querySelector('[type=submit]');
+        if (button) button.disabled = true;
+        try { return await submitSortiePhysique(e, direct); }
+        finally { sortieSubmissionPending = false; if (button) button.disabled = false; }
+      }
+
+      async function submitSortiePhysique(e, direct = false) {
         e.preventDefault();
         if (direct && !['Coordinateur','Coordinatrice','Superviseur Terrain'].includes(secureStore.profile?.role)) return alert('Commande réservée à la coordination.');
 
@@ -4946,15 +4957,16 @@
           const coordinationInk = direct ? await window.BonSignatures.capture(`Signature du ${signerRole}`, coordinationSignatureText) : null;
           if (direct && (!coordinationInk || signingSession !== secureStore.generation)) return;
           appData.demandes ||= [];
-          const groups = direct ? [...new Set(selectedItems.map(item => normalizeOperatorKey(item.op)))].map(op => ({ops:[op],items:selectedItems.filter(item => normalizeOperatorKey(item.op)===op)})) : [{ops:selectedOps,items:selectedItems}];
-          groups.forEach(group => appData.demandes.push({id:`BON-${crypto.randomUUID()}`,ref,serviceAbbreviation,
-            op:group.ops.join('/'),ops:group.ops,tech,emetteur,items:group.items,
+          const submissionBatchId=crypto.randomUUID();
+          appData.demandes.push({id:`BON-${crypto.randomUUID()}`,ref,serviceAbbreviation,
+            op:selectedOps.join('/'),ops:selectedOps,tech,emetteur,items:selectedItems,
+            submissionBatchId,
             originOffice: document.getElementById('s-office')?.value || window.AccountAffiliation?.office(currentUser),
             ...routing,
             demandeurName:tech,demandeurOriginalId:currentUser.id,createdBy:currentUser.name,createdByUid:secureStore.uid,
             ...(direct ? {workflow:'COORD_DIRECT_BON',createdByRole:currentUser.role,emitterRole:currentUser.role,coordinationSignerRole:signerRole,coordinationSignatureText:coordinationInk.name,bonSignatures:{coordination:coordinationInk},coordinationSignedAt:new Date().toISOString(),coordinateurId:currentUser.id} : {}),
             date:new Date().toISOString(),dateBon:dateBonValue,motif:ref,
-            status:'EN ATTENTE VALIDATEUR',statut:'EN ATTENTE VALIDATEUR'}));
+            status:'EN ATTENTE VALIDATEUR',statut:'EN ATTENTE VALIDATEUR'});
           if (!(await save())) return;
           localStorage.removeItem(getSortieDraftStorageKey());
           alert('Demande transmise au validateur. Le stock sera débité après validation et signature du gestionnaire; le magasinier signera ensuite la remise.');
@@ -9447,7 +9459,18 @@
           .join("");
       }
 
+      let techBonSubmissionPending = false;
       async function handleTechSubmit(e) {
+        e.preventDefault();
+        if (techBonSubmissionPending) return;
+        techBonSubmissionPending = true;
+        const button = e.submitter || e.target?.querySelector('[type=submit]');
+        if (button) button.disabled = true;
+        try { return await submitTechBon(e); }
+        finally { techBonSubmissionPending = false; if (button) button.disabled = false; }
+      }
+
+      async function submitTechBon(e) {
         e.preventDefault();
         const serviceAbbreviation = getFormTextValue("t-service");
         if (!BonReference.services[serviceAbbreviation]) return alert("Demandez au responsable de renseigner votre bureau et votre service.");
@@ -9484,7 +9507,8 @@
           const now = new Date().toLocaleString();
           const motif = getFormTextValue("t-objectif");
           const d = {
-            id: "BS-" + Date.now().toString(),
+            id: "BS-" + crypto.randomUUID(),
+            submissionBatchId: crypto.randomUUID(),
             workflow: "TECH_BON_SORTIE",
             originOffice: document.getElementById('t-office')?.value || AccountAffiliation.office(currentUser),
             serviceAbbreviation,
