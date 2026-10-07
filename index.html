@@ -827,7 +827,11 @@
                   class="text-orange-600 hover:underline"
                   >Politique de confidentialité</a
                 >
-              </p>
+                </p>
+              <div id="auth-resume-notice" role="alert" class="hidden rounded-xl border border-amber-300 bg-amber-50 p-3 text-left text-xs text-amber-900 normal-case">
+                <p id="auth-resume-message">La session est conservée, mais le chargement n’a pas abouti.</p>
+                <button type="button" onclick="resumeAppSession()" class="mt-2 rounded-lg bg-amber-700 px-3 py-2 font-bold text-white">Reprendre la connexion</button>
+              </div>
             </form>
           </div>
         </div>
@@ -1273,6 +1277,9 @@
               >
                 <i class="fas fa-file-download w-5 text-pink-500"></i> Mes Bons
                 <span id="notif-tech" class="notification-badge hidden">0</span>
+              </div>
+              <div onclick="showSection('tech-materiels-livres'); toggleSidebarMobile();" class="cursor-pointer py-2 px-8 hover:text-white flex items-center transition italic">
+                <i class="fas fa-boxes-stacked w-5 text-cyan-400"></i> Matériels livrés
               </div>
             </div>
 
@@ -1974,6 +1981,8 @@
             window.StorekeeperBacklog?.render(container);
           } else if (currentSectionId === "tech-mes-demandes") {
             renderTechMesDemandes(container); // <--- AJOUTÉ : Pour le technicien
+          } else if (currentSectionId === "tech-materiels-livres") {
+            renderTechDeliveredMaterials(container);
           } else if (currentSectionId === "bons-signes") {
             renderSignedBonsHistory(container);
           } else if (currentSectionId === "livraison") {
@@ -2549,6 +2558,7 @@
               return;
             }
             currentUser = {...userProfile, ...secureStore.profile};
+            document.getElementById('auth-resume-notice')?.classList.add('hidden');
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("main-app").classList.remove("hidden");
 
@@ -2579,6 +2589,7 @@
         // Hide private content synchronously, before any network operation.
         document.getElementById("main-app").classList.add("hidden");
         document.getElementById("login-screen").classList.remove("hidden");
+        document.getElementById('auth-resume-notice')?.classList.add('hidden');
         document.getElementById("app-container").innerHTML = "";
         const password = document.getElementById('login-password');
         if (password) password.value = '';
@@ -6894,6 +6905,8 @@
           renderTechDemandeForm(container);
         } else if (id === "tech-mes-demandes") {
           loadTechMesDemandes(container);
+        } else if (id === "tech-materiels-livres") {
+          loadTechDeliveredMaterials(container);
         } else if (id === "tech-retour-materiel") {
           renderRetourForm(container);
         } else if (id === "coord-demandes-tech") {
@@ -8820,6 +8833,77 @@
         }
       }
 
+      function techDeliveredDate(value) {
+        const timestamp = getSortieTimestamp(value);
+        return timestamp ? new Date(timestamp) : null;
+      }
+
+      function getTechDeliveredMaterialRows(period = 'month') {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if (period === 'week') start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+        if (period === 'month') start.setDate(1);
+        const delivered = (appData.demandes || []).filter(d => technicianBonStage(d) === 'delivered' && isCurrentTechnicianBon(d));
+        return delivered.flatMap(bon => {
+          const date = techDeliveredDate(bon.dateLivraison || bon.validatedAt || bon.managerSignedAt || bon.date);
+          if (!date || date < start || date > now) return [];
+          return (bon.items || []).map(item => ({
+            date,
+            dateLabel: date.toLocaleDateString('fr-FR'),
+            reference: getBonReference(bon),
+            material: String(item.label || 'Matériel non renseigné'),
+            quantity: Number(item.qty || 0),
+            stock: getOperatorMeta(item.op || bon.op).label,
+          }));
+        }).sort((a, b) => b.date - a.date || a.material.localeCompare(b.material, 'fr'));
+      }
+
+      async function loadTechDeliveredMaterials(container) {
+        const generation = secureStore.generation;
+        container.innerHTML = '<p class="p-8">Chargement des matériels livrés...</p>';
+        try {
+          await (secureStore.readCollections ? secureStore.readCollections(['demandes'], generation) : secureStore.read(generation, {notify:false}));
+          if (generation !== secureStore.generation || currentSectionId !== 'tech-materiels-livres') return;
+          appData = normalizeAppData(secureStore.value());
+          renderTechDeliveredMaterials(container);
+        } catch (error) {
+          if (generation === secureStore.generation) container.innerHTML = '<p class="p-8 text-red-700">Chargement impossible. Rouvrez cet onglet pour réessayer.</p>';
+        }
+      }
+
+      function renderTechDeliveredMaterials(container, period = 'month') {
+        const rows = getTechDeliveredMaterialRows(period);
+        const labels = {day:'Aujourd’hui', week:'Cette semaine', month:'Ce mois'};
+        const total = rows.reduce((sum, row) => sum + row.quantity, 0);
+        container.innerHTML = `<div class="max-w-6xl mx-auto bg-white p-6 md:p-8 rounded-3xl shadow-xl">
+          <header class="rounded-2xl p-5 bg-gradient-to-r from-cyan-700 via-sky-600 to-indigo-600 text-white"><p class="text-[9px] tracking-[0.2em] opacity-80">ESPACE TECHNICIEN</p><h3 class="text-xl font-black mt-1"><i class="fas fa-boxes-stacked mr-2"></i>Matériels livrés</h3><p class="text-sm mt-2">Liste des articles remis sur vos bons livrés.</p></header>
+          <div class="mt-5 flex flex-wrap items-center gap-3"><label class="text-sm font-bold">Période <select id="tech-delivered-period" onchange="renderTechDeliveredMaterials(document.getElementById('app-container'),this.value)" class="ml-2 border rounded-xl p-2"><option value="day" ${period==='day'?'selected':''}>Jour</option><option value="week" ${period==='week'?'selected':''}>Semaine</option><option value="month" ${period==='month'?'selected':''}>Mois</option></select></label><span class="text-sm text-slate-600">${escapeHtml(labels[period])} : <b>${rows.length}</b> ligne(s), <b>${escapeHtml(total)}</b> unité(s)</span><div class="ml-auto flex gap-2"><button type="button" onclick="exportTechDeliveredMaterials('excel')" class="bg-emerald-700 text-white rounded-xl px-4 py-2 text-xs font-black"><i class="fas fa-file-excel mr-1"></i>Excel</button><button type="button" onclick="exportTechDeliveredMaterials('pdf')" class="bg-red-700 text-white rounded-xl px-4 py-2 text-xs font-black"><i class="fas fa-file-pdf mr-1"></i>PDF</button></div></div>
+          <div class="mt-5 overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-100 text-left"><tr><th class="p-3">Date</th><th class="p-3">Bon</th><th class="p-3">Matériel</th><th class="p-3">Stock d’origine</th><th class="p-3 text-right">Quantité</th></tr></thead><tbody>${rows.map(row => `<tr class="border-b"><td class="p-3">${escapeHtml(row.dateLabel)}</td><td class="p-3">${escapeHtml(row.reference)}</td><td class="p-3 font-bold">${escapeHtml(row.material)}</td><td class="p-3">${escapeHtml(row.stock)}</td><td class="p-3 text-right font-black">${escapeHtml(row.quantity)}</td></tr>`).join('') || '<tr><td colspan="5" class="p-8 text-center text-slate-500">Aucun matériel livré sur cette période.</td></tr>'}</tbody></table></div>
+        </div>`;
+      }
+
+      async function exportTechDeliveredMaterials(format) {
+        const period = document.getElementById('tech-delivered-period')?.value || 'month';
+        const rows = getTechDeliveredMaterialRows(period);
+        if (!rows.length) return alert('Aucun matériel livré à exporter pour cette période.');
+        const title = `Matériels livrés — ${{day:'Jour',week:'Semaine',month:'Mois'}[period]}`;
+        const tableRows = rows.map(row => [row.dateLabel, row.reference, row.material, row.stock, row.quantity]);
+        if (format === 'excel') {
+          const workbook = new ExcelJS.Workbook();
+          const sheet = workbook.addWorksheet('Matériels livrés');
+          sheet.addRow([title]); sheet.addRow(['Date','Bon','Matériel','Stock d’origine','Quantité']);
+          tableRows.forEach(row => sheet.addRow(row));
+          sheet.columns = [{width:14},{width:22},{width:40},{width:22},{width:12}];
+          sheet.getRow(1).font = {bold:true,size:14}; sheet.getRow(2).font = {bold:true};
+          await saveExcelJsWorkbook(workbook, `Materiels_livres_${period}_${new Date().toISOString().slice(0,10)}.xlsx`);
+        } else {
+          const doc = new window.jspdf.jsPDF({orientation:'landscape'});
+          doc.setFontSize(16); doc.text(title, 14, 16);
+          doc.autoTable({startY:24, head:[['Date','Bon','Matériel','Stock d’origine','Quantité']], body:tableRows});
+          doc.save(`Materiels_livres_${period}_${new Date().toISOString().slice(0,10)}.pdf`);
+        }
+      }
+
       function isCurrentTechnicianBon(bon) {
         if (!currentUser || (bon.company_id && bon.company_id !== currentUser.company_id)) return false;
         const matches = (a, b) => a != null && b != null && String(a).trim() !== '' && String(a) === String(b);
@@ -10093,7 +10177,7 @@
                   <h3 class="mt-1 uppercase text-xl"><i class="fas fa-rotate-left mr-2"></i>Retourner un matériel reçu</h3>
                 </div>
                 <form id="tech-material-return-form" class="space-y-4 not-italic">
-                  <fieldset class="space-y-3"><legend class="block mb-2">Matériel(s) des bons livrés — choisissez le matériel et son stock d’origine</legend>${stocks.map((s,index)=>`<div class="rounded-xl border bg-slate-50 p-3"><label class="flex items-start gap-3"><input type="checkbox" name="returnStock" value="${escapeHtml(s._dbKey)}" data-return-index="${index}" data-return-max="${escapeHtml(s._returnableQty)}" class="mt-1" ${s._returnableQty>0?'':'disabled'}><span><b>${escapeHtml(getOperatorMeta(s.op).label)} — ${escapeHtml(s.label)}</b><span class="block text-xs text-slate-600">${s._returnableQty>0?'Reste à retourner : '+escapeHtml(s._returnableQty):'Déjà retourné'}</span></span></label><div class="grid grid-cols-2 gap-3 mt-3"><label class="text-sm">Quantité<input name="quantity-${index}" data-return-field="${index}" type="number" class="w-full border-2 p-2 rounded-xl text-sm" min="0.000001" max="${escapeHtml(s._returnableQty)}" step="any" disabled></label><label class="text-sm">État<select name="condition-${index}" data-return-field="${index}" class="w-full border-2 p-2 rounded-xl text-sm" disabled><option value="NEUF">Bon état</option><option value="DÉFECTUEUX">Défectueux</option></select></label></div></div>`).join('') || '<p class="text-sm text-slate-600">Aucun matériel trouvé dans vos bons livrés pour vos stocks autorisés.</p>'}</fieldset>
+                  <fieldset class="space-y-3"><legend class="block mb-2">Matériel(s) des bons livrés — choisissez le matériel et son stock d’origine</legend>${stocks.map((s,index)=>`<div class="rounded-xl border bg-slate-50 p-3"><label class="flex items-start gap-3"><input type="checkbox" name="returnStock" value="${escapeHtml(s._dbKey)}" data-return-index="${index}" data-return-max="${escapeHtml(s._returnableQty)}" class="mt-1" ${s._returnableQty>0?'':'disabled'}><span><b>${escapeHtml(getOperatorMeta(s.op).label)} — ${escapeHtml(s.label)}</b><span class="block text-xs text-slate-600">${s._returnableQty>0?'Disponible pour un retour':'Déjà retourné'}</span></span></label><div class="grid grid-cols-2 gap-3 mt-3"><label class="text-sm">Quantité<input name="quantity-${index}" data-return-field="${index}" type="number" class="w-full border-2 p-2 rounded-xl text-sm" min="0.000001" max="${escapeHtml(s._returnableQty)}" step="any" disabled></label><label class="text-sm">État<select name="condition-${index}" data-return-field="${index}" class="w-full border-2 p-2 rounded-xl text-sm" disabled><option value="NEUF">Bon état</option><option value="DÉFECTUEUX">Défectueux</option></select></label></div></div>`).join('') || '<p class="text-sm text-slate-600">Aucun matériel trouvé dans vos bons livrés pour vos stocks autorisés.</p>'}</fieldset>
                   <label class="block">Coordinateur<select name="coordinator" class="w-full border-2 p-3 rounded-xl text-sm" required><option value="">Choisir votre coordinateur</option>${coordinators.map(u=>`<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)} — ${escapeHtml((u.offices || [u.office || u.validationBureau]).filter(Boolean).join(', '))}</option>`).join('')}</select></label>
                   <textarea name="reason" placeholder="Motif du retour" class="w-full border-2 p-3 rounded-xl text-sm h-24 bg-slate-50" required maxlength="1000"></textarea>
                   <p role="status" class="text-red-700"></p><button type="submit" class="w-full bg-orange-600 text-white py-4 rounded-2xl text-sm uppercase font-black">Envoyer au coordinateur</button>
@@ -11860,7 +11944,14 @@
           } catch (e) {
             if (generation !== authStateGeneration) return;
             console.error("Session non autorisée", e);
-            logout();
+            const authDenied = e?.status === 401 || e?.status === 403 || /compte non autorisé|compte.*suspendu|invalid.*refresh token/i.test(String(e?.message || ''));
+            if (authDenied) { logout(); return; }
+            document.getElementById("main-app").classList.add("hidden");
+            document.getElementById("login-screen").classList.remove("hidden");
+            const notice = document.getElementById('auth-resume-notice');
+            const message = document.getElementById('auth-resume-message');
+            if (message) message.textContent = 'Votre session est conservée. Le réseau n’a pas permis de charger vos données ; réessayez sans ressaisir votre mot de passe.';
+            notice?.classList.remove('hidden');
             return;
           }
           if (generation !== authStateGeneration) return;
@@ -11875,6 +11966,7 @@
             : null);
           if (userProfile) {
             currentUser = {...userProfile, ...secureStore.profile};
+            document.getElementById('auth-resume-notice')?.classList.add('hidden');
             updateMenuVisibility();
             updateUserInfo();
             updateNotifications();
@@ -11910,6 +12002,39 @@
           }, 0);
         });
       }
+      let appResumePending = null;
+      async function resumeAppSession() {
+        if (logoutRequested || manualLoginInProgress || appResumePending) return appResumePending;
+        appResumePending = (async () => {
+          const notice = document.getElementById('auth-resume-notice');
+          const retryButton = notice?.querySelector('button');
+          if (retryButton) retryButton.disabled = true;
+          try {
+            const {data, error} = await supabaseBackend.auth.getSession();
+            if (error) throw error;
+            const user = data.session?.user;
+            if (!user) {
+              notice?.classList.add('hidden');
+              return;
+            }
+            if (!currentUser || !secureStore.ready) await handleActiveAuthState(user);
+          } catch (error) {
+            const message = document.getElementById('auth-resume-message');
+            if (message) message.textContent = 'La session est conservée, mais la connexion n’est pas encore rétablie. Vérifiez le réseau puis réessayez.';
+            notice?.classList.remove('hidden');
+            console.warn('Reprise de session différée', error);
+          } finally {
+            if (retryButton) retryButton.disabled = false;
+            appResumePending = null;
+          }
+        })();
+        return appResumePending;
+      }
+      window.addEventListener('pageshow', resumeAppSession);
+      window.addEventListener('focus', resumeAppSession);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') resumeAppSession();
+      });
     </script>
 
     <script>
