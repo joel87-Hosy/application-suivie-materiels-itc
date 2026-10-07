@@ -1712,7 +1712,7 @@
     <script src="assets/bon-reference.js"></script>
     <script src="assets/manager-flux.js"></script>
     <script src="assets/stock-substocks.js"></script>
-    <script src="assets/manager-b01-substocks.js?v=20261004-custom-substocks"></script>
+    <script src="assets/manager-b01-substocks.js?v=20261007-direct-reception"></script>
     <script src="assets/push-config.js"></script>
     <script src="assets/push-notifications.js"></script>
     <script>
@@ -10708,7 +10708,15 @@
         const companyId = secureStore.profile.company_id;
         mat.op = normalizeOperatorKey(mat.op);
         mat.company_id = companyId;
-        if (typeof window !== 'undefined' && window.StockSubstocks?.enabled()) {
+        if (window.ManagerB01Substocks?.owned(mat.op)) {
+          try {
+            await window.ManagerB01Substocks.receive(mat);
+            localStorage.removeItem('draft_reception');
+            alert('Entrée enregistrée dans le sous-stock choisi.');showSection('cockpit');
+          } catch(error) { alert(error.message); }
+          return;
+        }
+        if (typeof window !== 'undefined' && window.StockSubstocks?.enabled() && ['ITC-B02','MOOV'].includes(mat.op) && window.StockSubstocks?.owns(mat.op)) {
           try {
             await window.StockSubstocks.receive(mat,document.getElementById('r-substock')?.value);
             localStorage.removeItem('draft_reception');

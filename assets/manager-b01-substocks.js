@@ -2,10 +2,18 @@
   'use strict';
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const colors=['#7c3aed','#0891b2','#059669','#d97706','#db2777','#2563eb'];
-  let env,busy=false;
+  let env,busy=false,pendingReceipt=null;
   const owned=op=>env?.profile()?.role==='Gestionnaire'&&['ITC-B01','OCI','CIC','MTN'].includes(global.ControlCore.operator(op))&&global.StockSubstocks?.owns(op);
   const items=op=>(env.data().stock||[]).filter(row=>row.company_id===env.profile().company_id&&global.ControlCore.operator(row.op)===global.ControlCore.operator(op));
   async function rpc(name,args){const {data,error}=await env.client().rpc(name,args);if(error)throw new Error(error.code==='PGRST202'?'Appliquez la migration 202610080001_manager_substocks_b01.sql dans Supabase.':error.message);return data;}
+  async function receive(mat){
+    if(!owned(mat.op))throw new Error('Stock hors de votre affectation Bureau 01.');
+    const fingerprint=JSON.stringify([env.profile().uid,env.profile().company_id,mat.op,mat.label,mat.type,mat.qty]);
+    if(pendingReceipt?.fingerprint!==fingerprint)pendingReceipt={fingerprint,id:global.crypto.randomUUID()};
+    const operationId=pendingReceipt.id;
+    await rpc('receive_manager_b01_stock_item',{operation_id:operationId,stock_op:global.ControlCore.operator(mat.op),material_label:mat.label,material_type:mat.type,quantity:mat.qty});
+    await env.refresh();pendingReceipt=null;
+  }
   async function open(op){
     if(!owned(op))return;
     const dialog=document.createElement('dialog');dialog.className='substock-dialog';dialog.innerHTML='<p>Chargement des sous-stocks…</p>';document.body.append(dialog);dialog.showModal();
@@ -37,7 +45,7 @@
     };
     try{await env.refresh();await refreshCategories();draw();}catch(error){dialog.textContent=error.message;const close=document.createElement('button');close.textContent='Fermer';close.onclick=()=>dialog.close();dialog.append(close);}
   }
-  global.ManagerB01Substocks={setup:config=>{env=config;},open};
+  global.ManagerB01Substocks={setup:config=>{env=config;},open,owned,receive};
   const baseOpen=global.StockSubstocks?.open;
   if(baseOpen)global.StockSubstocks.open=operator=>owned(operator)?open(operator):baseOpen(operator);
 })(window);
