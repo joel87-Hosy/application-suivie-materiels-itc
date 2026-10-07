@@ -8838,24 +8838,43 @@
         return timestamp ? new Date(timestamp) : null;
       }
 
-      function getTechDeliveredMaterialRows(period = 'month') {
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      function techDeliveredReferenceDate(value) {
+        const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date();
+      }
+
+      function techDeliveredDateInput(date = new Date()) {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      }
+
+      function techDeliveredPeriodBounds(period, referenceValue) {
+        const start = techDeliveredReferenceDate(referenceValue);
         if (period === 'week') start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
         if (period === 'month') start.setDate(1);
+        const end = new Date(start);
+        if (period === 'day') end.setDate(end.getDate() + 1);
+        if (period === 'week') end.setDate(end.getDate() + 7);
+        if (period === 'month') end.setMonth(end.getMonth() + 1);
+        return {start, end};
+      }
+
+      function getTechDeliveredMaterialRows(period = 'month', referenceValue = techDeliveredDateInput()) {
+        const {start, end} = techDeliveredPeriodBounds(period, referenceValue);
         const delivered = (appData.demandes || []).filter(d => technicianBonStage(d) === 'delivered' && isCurrentTechnicianBon(d));
-        return delivered.flatMap(bon => {
+        const grouped = new Map();
+        delivered.forEach(bon => {
           const date = techDeliveredDate(bon.dateLivraison || bon.validatedAt || bon.managerSignedAt || bon.date);
-          if (!date || date < start || date > now) return [];
-          return (bon.items || []).map(item => ({
-            date,
-            dateLabel: date.toLocaleDateString('fr-FR'),
-            reference: getBonReference(bon),
-            material: String(item.label || 'Matériel non renseigné'),
-            quantity: Number(item.qty || 0),
-            stock: getOperatorMeta(item.op || bon.op).label,
-          }));
-        }).sort((a, b) => b.date - a.date || a.material.localeCompare(b.material, 'fr'));
+          if (!date || date < start || date >= end) return;
+          (bon.items || []).forEach(item => {
+            const material = String(item.label || 'Matériel non renseigné');
+            const stock = getOperatorMeta(item.op || bon.op).label;
+            const key = `${normalizeOperatorKey(item.op || bon.op)}|${material.trim().toUpperCase()}`;
+            const row = grouped.get(key) || {material, stock, quantity:0};
+            row.quantity += Number(item.qty || 0);
+            grouped.set(key, row);
+          });
+        });
+        return [...grouped.values()].sort((a, b) => a.material.localeCompare(b.material, 'fr') || a.stock.localeCompare(b.stock, 'fr'));
       }
 
       async function loadTechDeliveredMaterials(container) {
@@ -8871,35 +8890,45 @@
         }
       }
 
-      function renderTechDeliveredMaterials(container, period = 'month') {
-        const rows = getTechDeliveredMaterialRows(period);
-        const labels = {day:'Aujourd’hui', week:'Cette semaine', month:'Ce mois'};
+      function renderTechDeliveredMaterials(container, period = 'month', referenceValue = techDeliveredDateInput()) {
+        const rows = getTechDeliveredMaterialRows(period, referenceValue);
+        const technicianName = currentUser?.name || currentUser?.full_name || currentUser?.username || 'Technicien';
+        const {start, end} = techDeliveredPeriodBounds(period, referenceValue);
+        const labels = {day:'Jour sélectionné', week:'Semaine sélectionnée', month:'Mois sélectionné'};
+        const rangeEnd = new Date(end); rangeEnd.setDate(rangeEnd.getDate() - 1);
+        const rangeLabel = period === 'day' ? start.toLocaleDateString('fr-FR') : `${start.toLocaleDateString('fr-FR')} au ${rangeEnd.toLocaleDateString('fr-FR')}`;
         const total = rows.reduce((sum, row) => sum + row.quantity, 0);
         container.innerHTML = `<div class="max-w-6xl mx-auto bg-white p-6 md:p-8 rounded-3xl shadow-xl">
           <header class="rounded-2xl p-5 bg-gradient-to-r from-cyan-700 via-sky-600 to-indigo-600 text-white"><p class="text-[9px] tracking-[0.2em] opacity-80">ESPACE TECHNICIEN</p><h3 class="text-xl font-black mt-1"><i class="fas fa-boxes-stacked mr-2"></i>Matériels livrés</h3><p class="text-sm mt-2">Liste des articles remis sur vos bons livrés.</p></header>
-          <div class="mt-5 flex flex-wrap items-center gap-3"><label class="text-sm font-bold">Période <select id="tech-delivered-period" onchange="renderTechDeliveredMaterials(document.getElementById('app-container'),this.value)" class="ml-2 border rounded-xl p-2"><option value="day" ${period==='day'?'selected':''}>Jour</option><option value="week" ${period==='week'?'selected':''}>Semaine</option><option value="month" ${period==='month'?'selected':''}>Mois</option></select></label><span class="text-sm text-slate-600">${escapeHtml(labels[period])} : <b>${rows.length}</b> ligne(s), <b>${escapeHtml(total)}</b> unité(s)</span><div class="ml-auto flex gap-2"><button type="button" onclick="exportTechDeliveredMaterials('excel')" class="bg-emerald-700 text-white rounded-xl px-4 py-2 text-xs font-black"><i class="fas fa-file-excel mr-1"></i>Excel</button><button type="button" onclick="exportTechDeliveredMaterials('pdf')" class="bg-red-700 text-white rounded-xl px-4 py-2 text-xs font-black"><i class="fas fa-file-pdf mr-1"></i>PDF</button></div></div>
-          <div class="mt-5 overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-100 text-left"><tr><th class="p-3">Date</th><th class="p-3">Bon</th><th class="p-3">Matériel</th><th class="p-3">Stock d’origine</th><th class="p-3 text-right">Quantité</th></tr></thead><tbody>${rows.map(row => `<tr class="border-b"><td class="p-3">${escapeHtml(row.dateLabel)}</td><td class="p-3">${escapeHtml(row.reference)}</td><td class="p-3 font-bold">${escapeHtml(row.material)}</td><td class="p-3">${escapeHtml(row.stock)}</td><td class="p-3 text-right font-black">${escapeHtml(row.quantity)}</td></tr>`).join('') || '<tr><td colspan="5" class="p-8 text-center text-slate-500">Aucun matériel livré sur cette période.</td></tr>'}</tbody></table></div>
+          <div class="mt-5 flex flex-wrap items-center gap-3"><label class="text-sm font-bold">Période <select id="tech-delivered-period" onchange="renderTechDeliveredMaterials(document.getElementById('app-container'),this.value,document.getElementById('tech-delivered-date').value)" class="ml-2 border rounded-xl p-2"><option value="day" ${period==='day'?'selected':''}>Jour</option><option value="week" ${period==='week'?'selected':''}>Semaine</option><option value="month" ${period==='month'?'selected':''}>Mois</option></select></label><label class="text-sm font-bold">Date <input id="tech-delivered-date" type="date" value="${escapeHtml(referenceValue)}" onchange="renderTechDeliveredMaterials(document.getElementById('app-container'),document.getElementById('tech-delivered-period').value,this.value)" class="ml-2 border rounded-xl p-2"></label><div class="ml-auto flex gap-2"><button type="button" onclick="exportTechDeliveredMaterials('excel')" class="bg-emerald-700 text-white rounded-xl px-4 py-2 text-xs font-black"><i class="fas fa-file-excel mr-1"></i>Excel</button><button type="button" onclick="exportTechDeliveredMaterials('pdf')" class="bg-red-700 text-white rounded-xl px-4 py-2 text-xs font-black"><i class="fas fa-file-pdf mr-1"></i>PDF</button></div></div>
+          <p class="mt-3 text-sm text-slate-600">Destinataire : <b>${escapeHtml(technicianName)}</b> · ${escapeHtml(labels[period])} : <b>${escapeHtml(rangeLabel)}</b> · <b>${rows.length}</b> matériel(s) · <b>${escapeHtml(total)}</b> unité(s) livrées.</p>
+          <div class="mt-5 overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-100 text-left"><tr><th class="p-3">Technicien destinataire</th><th class="p-3">Matériel</th><th class="p-3">Stock d’origine</th><th class="p-3 text-right">Quantité livrée cumulée</th></tr></thead><tbody>${rows.map(row => `<tr class="border-b"><td class="p-3">${escapeHtml(technicianName)}</td><td class="p-3 font-bold">${escapeHtml(row.material)}</td><td class="p-3">${escapeHtml(row.stock)}</td><td class="p-3 text-right font-black">${escapeHtml(row.quantity)}</td></tr>`).join('') || '<tr><td colspan="4" class="p-8 text-center text-slate-500">Aucun matériel livré sur cette période.</td></tr>'}</tbody></table></div>
         </div>`;
       }
 
       async function exportTechDeliveredMaterials(format) {
         const period = document.getElementById('tech-delivered-period')?.value || 'month';
-        const rows = getTechDeliveredMaterialRows(period);
+        const referenceValue = document.getElementById('tech-delivered-date')?.value || techDeliveredDateInput();
+        const rows = getTechDeliveredMaterialRows(period, referenceValue);
         if (!rows.length) return alert('Aucun matériel livré à exporter pour cette période.');
-        const title = `Matériels livrés — ${{day:'Jour',week:'Semaine',month:'Mois'}[period]}`;
-        const tableRows = rows.map(row => [row.dateLabel, row.reference, row.material, row.stock, row.quantity]);
+        const {start, end} = techDeliveredPeriodBounds(period, referenceValue);
+        const rangeEnd = new Date(end); rangeEnd.setDate(rangeEnd.getDate() - 1);
+        const rangeLabel = period === 'day' ? start.toLocaleDateString('fr-FR') : `${start.toLocaleDateString('fr-FR')} au ${rangeEnd.toLocaleDateString('fr-FR')}`;
+        const title = `Matériels livrés — ${rangeLabel}`;
+        const technicianName = currentUser?.name || currentUser?.full_name || currentUser?.username || 'Technicien';
+        const tableRows = rows.map(row => [technicianName, row.material, row.stock, row.quantity]);
         if (format === 'excel') {
           const workbook = new ExcelJS.Workbook();
           const sheet = workbook.addWorksheet('Matériels livrés');
-          sheet.addRow([title]); sheet.addRow(['Date','Bon','Matériel','Stock d’origine','Quantité']);
+          sheet.addRow([title]); sheet.addRow(['Technicien destinataire','Matériel','Stock d’origine','Quantité livrée cumulée']);
           tableRows.forEach(row => sheet.addRow(row));
-          sheet.columns = [{width:14},{width:22},{width:40},{width:22},{width:12}];
+          sheet.columns = [{width:28},{width:40},{width:22},{width:24}];
           sheet.getRow(1).font = {bold:true,size:14}; sheet.getRow(2).font = {bold:true};
           await saveExcelJsWorkbook(workbook, `Materiels_livres_${period}_${new Date().toISOString().slice(0,10)}.xlsx`);
         } else {
           const doc = new window.jspdf.jsPDF({orientation:'landscape'});
           doc.setFontSize(16); doc.text(title, 14, 16);
-          doc.autoTable({startY:24, head:[['Date','Bon','Matériel','Stock d’origine','Quantité']], body:tableRows});
+          doc.autoTable({startY:24, head:[['Technicien destinataire','Matériel','Stock d’origine','Quantité livrée cumulée']], body:tableRows});
           doc.save(`Materiels_livres_${period}_${new Date().toISOString().slice(0,10)}.pdf`);
         }
       }
