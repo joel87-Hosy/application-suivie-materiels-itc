@@ -10066,14 +10066,24 @@
       function renderRetourForm(container) {
         const offices = AccountAffiliation.officeList(currentUser);
         const officeOps = [...new Set(offices.flatMap(office => office === 'B01' ? ['ITC-B01','OCI','CIC','MTN'] : office === 'B02' ? ['ITC-B02','MOOV'] : office === 'BOUAKE' ? ['ITC-BOUAKE'] : office === 'SAN-PEDRO' ? ['ITC-SAN-PEDRO'] : office === 'YAMOUSSOUKRO' ? ['ITC-YAMOUSSOUKRO'] : []))];
-        const issuedItems = (appData.demandes || []).filter(d => d.status === 'LIVREE' && (String(d.technicienUid || d.createdByUid || '') === String(secureStore.uid) || String(d.demandeurOriginalId || '') === String(currentUser.id))).flatMap(d => (d.items || []).map(item => ({...item, op:normalizeOperatorKey(item.op || d.op)})));
+        const issuedItems = (appData.demandes || []).filter(d => technicianBonStage(d) === 'delivered' && isCurrentTechnicianBon(d)).flatMap(d => (d.items || []).map(item => ({...item, op:normalizeOperatorKey(item.op || d.op)}))).filter(item => item.label && officeOps.includes(item.op));
         const reservedReturns = (appData.demandes || []).filter(d => d.workflow === 'COORD_MATERIAL_RETURN' && ['EN ATTENTE COORDINATEUR','EN ATTENTE GESTIONNAIRE','RETOUR REINTEGRE'].includes(d.status) && String(d.technicienUid || '') === String(secureStore.uid));
-        const stocks = (appData.stock || []).filter(s => officeOps.includes(normalizeOperatorKey(s.op))).map(s => {
-          const same = item => normalizeOperatorKey(item.op) === normalizeOperatorKey(s.op) && String(item.label || '').trim().toUpperCase() === String(s.label || '').trim().toUpperCase();
-          const delivered = issuedItems.filter(same).reduce((sum,item)=>sum+Number(item.qty||0),0);
-          const alreadyReturned = reservedReturns.filter(d=>same({...d.items?.[0],op:d.items?.[0]?.op || d.op})).reduce((sum,d)=>sum+Number(d.items?.[0]?.qty||0),0);
-          return {...s, _returnableQty:Math.max(0,delivered-alreadyReturned)};
-        }).filter(s=>s._returnableQty>0);
+        const stockRows = (appData.stock || []).filter(s => officeOps.includes(normalizeOperatorKey(s.op)));
+        const materialKey = item => String(item.stockKey || item.sourceStockKey || `${normalizeOperatorKey(item.op)}|${String(item.label || '').trim().toUpperCase()}`);
+        const deliveredByMaterial = new Map();
+        issuedItems.forEach(item => {
+          const key = materialKey(item);
+          const group = deliveredByMaterial.get(key) || {op:item.op,label:String(item.label).trim(),qty:0,stockKey:item.stockKey || item.sourceStockKey || null};
+          group.qty += Number(item.qty || 0);
+          if (!group.stockKey && (item.stockKey || item.sourceStockKey)) group.stockKey = item.stockKey || item.sourceStockKey;
+          deliveredByMaterial.set(key, group);
+        });
+        const stocks = [...deliveredByMaterial.values()].map(item => {
+          const source = (item.stockKey && stockRows.find(s => String(s._dbKey) === String(item.stockKey))) || stockRows.find(s => normalizeOperatorKey(s.op) === item.op && String(s.label || '').trim().toUpperCase() === item.label.toUpperCase());
+          if (!source) return null;
+          const alreadyReturned = reservedReturns.filter(d => d.sourceStockKey || d.items?.[0]?.stockKey ? String(d.sourceStockKey || d.items?.[0]?.stockKey) === String(source._dbKey) : (normalizeOperatorKey(d.items?.[0]?.op || d.op) === item.op && String(d.items?.[0]?.label || '').trim().toUpperCase() === item.label.toUpperCase())).reduce((sum,d)=>sum+Number(d.items?.[0]?.qty||0),0);
+          return {...source,_returnableQty:Math.max(0,item.qty-alreadyReturned)};
+        }).filter(Boolean);
         const coordinators = getCoordinatorUsers();
         const mine = (appData.demandes || []).filter(d => d.workflow === 'COORD_MATERIAL_RETURN' && d.technicienUid === secureStore.uid).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
         container.innerHTML = `
@@ -10083,7 +10093,7 @@
                   <h3 class="mt-1 uppercase text-xl"><i class="fas fa-rotate-left mr-2"></i>Retourner un matériel reçu</h3>
                 </div>
                 <form id="tech-material-return-form" class="space-y-4 not-italic">
-                  <fieldset class="space-y-3"><legend class="block mb-2">Matériel(s) à retourner — choisissez le matériel et son stock d’origine</legend>${stocks.map((s,index)=>`<div class="rounded-xl border bg-slate-50 p-3"><label class="flex items-start gap-3"><input type="checkbox" name="returnStock" value="${escapeHtml(s._dbKey)}" data-return-index="${index}" data-return-max="${escapeHtml(s._returnableQty)}" class="mt-1"><span><b>${escapeHtml(getOperatorMeta(s.op).label)} — ${escapeHtml(s.label)}</b><span class="block text-xs text-slate-600">En votre possession : ${escapeHtml(s._returnableQty)}</span></span></label><div class="grid grid-cols-2 gap-3 mt-3"><label class="text-sm">Quantité<input name="quantity-${index}" data-return-field="${index}" type="number" class="w-full border-2 p-2 rounded-xl text-sm" min="0.000001" max="${escapeHtml(s._returnableQty)}" step="any" disabled></label><label class="text-sm">État<select name="condition-${index}" data-return-field="${index}" class="w-full border-2 p-2 rounded-xl text-sm" disabled><option value="NEUF">Bon état</option><option value="DÉFECTUEUX">Défectueux</option></select></label></div></div>`).join('') || '<p class="text-sm text-slate-600">Aucun matériel remis et encore disponible pour un retour dans vos stocks autorisés.</p>'}</fieldset>
+                  <fieldset class="space-y-3"><legend class="block mb-2">Matériel(s) des bons livrés — choisissez le matériel et son stock d’origine</legend>${stocks.map((s,index)=>`<div class="rounded-xl border bg-slate-50 p-3"><label class="flex items-start gap-3"><input type="checkbox" name="returnStock" value="${escapeHtml(s._dbKey)}" data-return-index="${index}" data-return-max="${escapeHtml(s._returnableQty)}" class="mt-1" ${s._returnableQty>0?'':'disabled'}><span><b>${escapeHtml(getOperatorMeta(s.op).label)} — ${escapeHtml(s.label)}</b><span class="block text-xs text-slate-600">${s._returnableQty>0?'Reste à retourner : '+escapeHtml(s._returnableQty):'Déjà retourné'}</span></span></label><div class="grid grid-cols-2 gap-3 mt-3"><label class="text-sm">Quantité<input name="quantity-${index}" data-return-field="${index}" type="number" class="w-full border-2 p-2 rounded-xl text-sm" min="0.000001" max="${escapeHtml(s._returnableQty)}" step="any" disabled></label><label class="text-sm">État<select name="condition-${index}" data-return-field="${index}" class="w-full border-2 p-2 rounded-xl text-sm" disabled><option value="NEUF">Bon état</option><option value="DÉFECTUEUX">Défectueux</option></select></label></div></div>`).join('') || '<p class="text-sm text-slate-600">Aucun matériel trouvé dans vos bons livrés pour vos stocks autorisés.</p>'}</fieldset>
                   <label class="block">Coordinateur<select name="coordinator" class="w-full border-2 p-3 rounded-xl text-sm" required><option value="">Choisir votre coordinateur</option>${coordinators.map(u=>`<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)} — ${escapeHtml((u.offices || [u.office || u.validationBureau]).filter(Boolean).join(', '))}</option>`).join('')}</select></label>
                   <textarea name="reason" placeholder="Motif du retour" class="w-full border-2 p-3 rounded-xl text-sm h-24 bg-slate-50" required maxlength="1000"></textarea>
                   <p role="status" class="text-red-700"></p><button type="submit" class="w-full bg-orange-600 text-white py-4 rounded-2xl text-sm uppercase font-black">Envoyer au coordinateur</button>
