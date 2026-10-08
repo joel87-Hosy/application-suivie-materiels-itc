@@ -64,12 +64,16 @@
       const history=container.querySelector('[data-scan-history]');if(history)history.innerHTML=historyHtml(check.scansToday);
       const labels={VALIDE:'BON PRET A SERVIR',EXPIRE:'BON EXPIRE',DEJA_LIVRE:'BON ENTIEREMENT SERVI',A_VALIDER:'BON EN ATTENTE DE VALIDATION',REFUSE:'BON REFUSE OU ANNULE'};
       const material=bon.materialService||{},servedMap=material.servedByItem||{},events=material.events||[];
+      const managerDebited=Boolean(bon.managerDebitAt);
       const serveRows=(bon.items||[]).map((item,index)=>{
         const progress=servedMap[String(index)]||{},served=Number(progress.qty||0),remaining=Math.max(0,Number(item.qty||0)-served);
         if(remaining<=0||material.unavailableByItem?.[String(index)])return '';
         const servedBy=events.filter(event=>(event.items||[]).some(line=>Number(line.index)===index)).map(event=>event.name).filter(Boolean).join(', ');
-        const stock=stockFor(item,bon),available=Math.max(0,Number(stock?.qty||0)),cap=bon.managerDebitAt?remaining:Math.min(remaining,available);
-        return `<div class="space-y-2 border rounded-xl p-3"><div class="grid grid-cols-[auto_1fr_100px] gap-3 items-center"><input type="checkbox" data-serve-index="${index}"><span><b>${esc(item.label)}</b><small class="block">${esc(item.op||bon.op)} | demande ${esc(item.qty)} | deja servi ${esc(served)} | reste ${esc(remaining)} | ${bon.managerDebitAt?'debite par le gestionnaire':`stock ${stock?esc(available):'absent'}`}${servedBy?` | par ${esc(servedBy)}`:''}</small></span><input type="number" data-serve-qty="${index}" min="0" max="${cap}" step="any" value="${cap}" disabled class="border rounded p-2 w-full" aria-label="Quantite a servir"></div>${cap<remaining&&!bon.managerDebitAt?`<label class="block"><input type="checkbox" data-unavailable-index="${index}"> Materiel indisponible pour le reliquat (${esc(remaining-cap)} restant)</label>`:''}</div>`;
+        const stock=managerDebited?null:stockFor(item,bon),available=Math.max(0,Number(stock?.qty||0)),cap=managerDebited?remaining:Math.min(remaining,available);
+        const stockStatus=managerDebited
+          ? 'Déjà débité par le gestionnaire : signez uniquement la remise physique'
+          : `stock ${stock?esc(available):'absent'}`;
+        return `<div class="space-y-2 border rounded-xl p-3"><div class="grid grid-cols-[auto_1fr_100px] gap-3 items-center"><input type="checkbox" data-serve-index="${index}"><span><b>${esc(item.label)}</b><small class="block">${esc(item.op||bon.op)} | demande ${esc(item.qty)} | deja servi ${esc(served)} | reste ${esc(remaining)} | ${stockStatus}${servedBy?` | par ${esc(servedBy)}`:''}</small></span><input type="number" data-serve-qty="${index}" min="0" max="${cap}" step="any" value="${cap}" disabled class="border rounded p-2 w-full" aria-label="Quantite a servir"></div>${cap<remaining&&!managerDebited?`<label class="block"><input type="checkbox" data-unavailable-index="${index}"> Materiel indisponible pour le reliquat (${esc(remaining-cap)} restant)</label>`:''}</div>`;
       }).join('');
       if(activePdfUrl)URL.revokeObjectURL(activePdfUrl);activePdfUrl=null;
       try{if(global.generateSignedBonPdf){activePdfUrl=URL.createObjectURL(await global.generateSignedBonPdf(bon));}}catch(pdfError){console.warn('PDF du bon indisponible',pdfError);}
@@ -81,7 +85,7 @@
         ${activePdfUrl?`<div><a class="inline-block bg-indigo-700 text-white rounded-lg p-3" href="${activePdfUrl}" target="_blank" rel="noopener">Ouvrir / télécharger le PDF du bon</a><iframe title="PDF du bon" src="${activePdfUrl}" class="w-full h-[65vh] border rounded-xl mt-3"></iframe></div>`:'<p class="text-amber-800">Le PDF du bon est indisponible. Les articles restent consultables ci-dessous.</p>'}
         <section class="space-y-2"><h4 class="font-bold">Articles et suivi du service</h4>${serveRows||'<p>Aucun article sur ce bon.</p>'}</section>
         ${global.BonSignatures.html(bon)}
-        ${check.canIssue?`<form data-serve-form class="space-y-3"><p class="font-bold">Confirmez les quantités physiquement remises. Votre signature enregistre la remise et débite le stock si ce débit n’a pas déjà été fait.</p><label class="block">Nom et signature du magasinier<textarea data-signer name="signer" required maxlength="120" class="border rounded-xl p-3 w-full" placeholder="Nom complet"></textarea></label><button class="bg-green-700 text-white p-3 rounded-xl">Signer et valider le service</button></form>`:''}
+        ${check.canIssue?`<form data-serve-form class="space-y-3"><p class="font-bold">${managerDebited?'Le gestionnaire a déjà débité le matériel. Confirmez les quantités physiquement remises et signez uniquement la remise physique.':'Confirmez les quantités physiquement remises. Votre signature enregistre la remise et débite le stock si ce débit n’a pas déjà été fait.'}</p><label class="block">Nom et signature du magasinier<textarea data-signer name="signer" required maxlength="120" class="border rounded-xl p-3 w-full" placeholder="Nom complet"></textarea></label><button class="bg-green-700 text-white p-3 rounded-xl">Signer et valider le service</button></form>`:''}
         <p>Contrôle serveur : ${esc(date(check.checkedAt))}. La signature du magasinier enregistre toujours la remise.</p>
         <button data-recheck class="border p-3 rounded-xl">Actualiser le suivi du bon</button><p data-action-status role="status"></p></section>`;
       output.querySelector('[data-recheck]').onclick=()=>scan(value,container);

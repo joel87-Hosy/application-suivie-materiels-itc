@@ -1705,7 +1705,7 @@
     <script src="assets/supabase-store.js?v=20261009-manager-command-receipts"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
-    <script src="assets/bon-scanner.js?v=20261008-storekeeper-signature"></script>
+    <script src="assets/bon-scanner.js?v=20261008-manager-debit-scanner"></script>
     <script src="assets/storekeeper-backlog.js?v=20261008-storekeeper-handover"></script>
     <script src="assets/bon-signatures.js?v=20261001-storekeeper-signature"></script>
     <script src="assets/validator-workflow.js?v=20261008-manager-debit"></script>
@@ -10903,7 +10903,7 @@
         const companyId = secureStore.profile.company_id;
         mat.op = normalizeOperatorKey(mat.op);
         mat.company_id = companyId;
-        if (window.ManagerB01Substocks?.owned(mat.op)) {
+        if (typeof window !== 'undefined' && window.ManagerB01Substocks?.owned(mat.op)) {
           try {
             await window.ManagerB01Substocks.receive(mat);
             localStorage.removeItem('draft_reception');
@@ -11991,7 +11991,7 @@
           } catch (e) {
             if (generation !== authStateGeneration) return;
             console.error("Session non autorisée", e);
-            const authDenied = e?.status === 401 || e?.status === 403 || /compte non autorisé|compte.*suspendu|invalid.*refresh token/i.test(String(e?.message || ''));
+            const authDenied = e?.status === 401 || e?.status === 403 || /compte non autorisé|compte.*suspendu|invalid.*refresh token|Refused/i.test(String(e?.message || ''));
             if (authDenied) { logout(); return; }
             document.getElementById("main-app").classList.add("hidden");
             document.getElementById("login-screen").classList.remove("hidden");

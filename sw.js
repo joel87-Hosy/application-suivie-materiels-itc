@@ -1,8 +1,8 @@
-const CACHE_NAME = "itc-gestion-materiels-v77-manager-command-receipts";
+const CACHE_NAME = "itc-gestion-materiels-v78-manager-debit-scanner";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
-  "./assets/bon-scanner.js?v=20261008-storekeeper-signature",
+  "./assets/bon-scanner.js?v=20261008-manager-debit-scanner",
   "./assets/storekeeper-backlog.js?v=20261008-storekeeper-handover",
   "./assets/manager-locations.js",
   "./assets/manager-flux.js",
@@ -164,4 +164,3 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
-

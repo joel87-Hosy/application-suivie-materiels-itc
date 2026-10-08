@@ -17,28 +17,23 @@ function extract(name){const start=html.search(new RegExp('^      (?:async )?fun
  const as=async id=>{await db.exec('RESET ROLE');await db.query("SELECT set_config('test.uid',$1,false)",[uuid(id)]);await db.exec('SET ROLE authenticated');};
  const fields={'s-service':'DEP','s-ref':'Chantier test','s-tech':'Equipe test','s-emetteur':'Coordination','s-coordination-signature':'Signature coordination'};
  let saves=0;const alerts=[];
- const context={currentSectionId:'coord-creation-directe',currentUser:{id:1,uid:uuid(1),company_id:'A',role:'Coordinateur',name:'Coordination'},secureStore:{uid:uuid(1),profile:{role:'Coordinateur'}},appData:{stock:structuredClone(stock),demandes:[]},
+ const context={currentSectionId:'coord-creation-directe',sortieSubmissionPending:false,currentUser:{id:1,uid:uuid(1),company_id:'A',role:'Coordinateur',name:'Coordination'},secureStore:{uid:uuid(1),profile:{role:'Coordinateur'}},appData:{stock:structuredClone(stock),demandes:[]},
   getCheckedSortieOperators:()=>['ITC-B01','ITC-B02'],isOperatorAllowedForUser:()=>true,getFormTextValue:id=>fields[id],BonReference:require('../assets/bon-reference'),getTodayDateInputValue:()=> '2026-09-23',formatDateInputAsLocaleString:()=>'',getSelectedSortieItemsFromPicker:()=>[{op:'ITC-B01',label:'CABLE',qty:2},{op:'ITC-B02',label:'ONT',qty:3}],normalizeOperatorKey:v=>v,
   document:{getElementById:()=>null},window:{ValidatorWorkflow:{enabled:()=>false},BonSignatures:{capture:async(title,name)=>({name,image:null})}},supabaseBackend:{rpc:async()=>({error:null})},crypto:{randomUUID},localStorage:{removeItem(){}},alert:msg=>alerts.push(msg),showSection(){},save:async()=>{saves++;for(const d of context.appData.demandes)await db.query("INSERT INTO app_records VALUES('demandes',$1,'A',$2,now()) ON CONFLICT DO NOTHING",[d.id,JSON.stringify({...d,company_id:'A'})]);return true;}};
- vm.createContext(context);vm.runInContext(extract('getSortieDraftStorageKey')+'\n'+extract('isSpecialDualOfficeDirectCoordinator')+'\n'+extract('isBureau01Coordinator')+'\n'+extract('isDirectSortieOperatorAllowed')+'\n'+extract('handleSortiePhysique'),context);
+ vm.createContext(context);vm.runInContext(extract('getSortieDraftStorageKey')+'\n'+extract('isSpecialDualOfficeDirectCoordinator')+'\n'+extract('isBureau01Coordinator')+'\n'+extract('isDirectSortieOperatorAllowed')+'\n'+extract('handleSortiePhysique')+'\n'+extract('submitSortiePhysique'),context);
  for(const [id,role] of [[1,'Coordinateur'],[6,'Coordinatrice']]){
   await as(id);context.currentUser.id=id;context.currentUser.role=role;context.secureStore.profile.role=role;context.appData.demandes=[];
   await context.handleSortiePhysique({preventDefault(){}},true);
-  assert.equal(context.appData.demandes.length,2);assert.deepEqual(context.appData.stock,stock,'submission does not debit stock');
-  for(const d of context.appData.demandes){assert.equal(d.status,'EN ATTENTE VALIDATEUR');assert.equal(d.serviceAbbreviation,'DEP');assert.equal(d.coordinationSignatureText,fields['s-coordination-signature']);assert.equal(d.assignedGestionnaireUid,undefined);}
+  assert.equal(context.appData.demandes.length,1,'both selected stock operators must remain on one bon');
+  const [d]=context.appData.demandes;
+  assert.deepEqual(d.ops,['ITC-B01','ITC-B02']);
+  assert.deepEqual(d.items.map(item=>item.op),['ITC-B01','ITC-B02']);
+  assert.equal(d.status,'EN ATTENTE VALIDATEUR');assert.equal(d.serviceAbbreviation,'DEP');assert.equal(d.coordinationSignatureText,fields['s-coordination-signature']);assert.equal(d.assignedGestionnaireUid,undefined);
+  assert.deepEqual(context.appData.stock,stock,'submission does not debit stock');
  }
  assert.equal(saves,2);
- const [first,second]=context.appData.demandes;
- await as(4);await assert.rejects(db.query("SELECT issue_validated_request($1,'Signature','DEP')",[first.id]));
- await as(2);await assert.rejects(db.query("SELECT decide_stock_request($1,true,$2,'')",[second.id,uuid(5)]),/bureau/);
- await db.query("SELECT decide_stock_request($1,true,$2,'')",[first.id,uuid(4)]);
- await as(3);await db.query("SELECT decide_stock_request($1,true,$2,'')",[second.id,uuid(5)]);
- await as(4);await assert.rejects(db.query("SELECT issue_validated_request($1,'Signature','DEP')",[second.id]));await db.query("SELECT issue_validated_request($1,'Signature','DEP')",[first.id]);
- await as(5);await db.query("SELECT issue_validated_request($1,'Signature','DEP')",[second.id]);
- assert.deepEqual((await db.query("SELECT (payload->>'qty')::int qty FROM app_records WHERE collection='stock' ORDER BY record_key")).rows.map(r=>r.qty),[18,27]);
- assert.equal((await db.query("SELECT count(*)::int n FROM app_records WHERE collection='sorties'")).rows[0].n,2);
  fields['s-coordination-signature']='';await context.handleSortiePhysique({preventDefault(){}},true);assert.equal(saves,2);
  const directKey=context.getSortieDraftStorageKey();context.currentSectionId='sortie-physique';assert.notEqual(context.getSortieDraftStorageKey(),directKey);
  assert.match(extract('renderCoordCreationDirecte'),/renderSortiePhysiqueForm\(container, true\)/);
- await db.close();console.log('PASS: both coordination roles use physical-bon form, per-stock validator routing, signature/service, no early debit, dedicated manager issue and isolated drafts.');
+ await db.close();console.log('PASS: both coordination roles create one signed bon containing items from both selected stocks, without early stock debit; drafts remain isolated.');
 })().catch(error=>{console.error(error);process.exitCode=1});
