@@ -2,7 +2,7 @@ const CACHE_NAME = "itc-gestion-materiels-v77-manager-command-receipts";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
-  "./assets/bon-scanner.js?v=20261008-manager-debit",
+  "./assets/bon-scanner.js?v=20261008-storekeeper-signature",
   "./assets/storekeeper-backlog.js?v=20261008-office-auto-bons",
   "./assets/manager-locations.js",
   "./assets/manager-flux.js",

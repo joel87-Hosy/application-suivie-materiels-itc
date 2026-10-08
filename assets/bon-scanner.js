@@ -34,7 +34,7 @@
       doc.setFontSize(8);
       const lines=[`Enregistre le : ${date(bon.bonCreatedAt||bon.createdAt||bon.date)}`,
         bon.bonValidUntil?`Valable jusqu'au : ${date(bon.bonValidUntil)}`:'Validite a verifier en ligne au magasin.',
-        'Validite initiale : 24 heures. Apres validation du gestionnaire, le magasinier peut servir le bon.',
+        'Validite initiale : 24 heures. Apres validation du bon, le magasinier peut servir et signer la remise.',
         'Le statut serveur et le suivi des articles font foi au magasin.',
         'Un bon deja livre ne permet aucune nouvelle remise.'];
       doc.text(lines,47,y+4,{maxWidth:148});
@@ -62,7 +62,7 @@
       if(!valid())return;
       const bon=check.bon;
       const history=container.querySelector('[data-scan-history]');if(history)history.innerHTML=historyHtml(check.scansToday);
-      const labels={VALIDE:'BON PRET A SERVIR',EXPIRE:'BON EXPIRE',DEJA_LIVRE:'BON ENTIEREMENT SERVI',A_VALIDER:'EN ATTENTE DU DEBIT DU GESTIONNAIRE',REFUSE:'BON REFUSE OU ANNULE'};
+      const labels={VALIDE:'BON PRET A SERVIR',EXPIRE:'BON EXPIRE',DEJA_LIVRE:'BON ENTIEREMENT SERVI',A_VALIDER:'BON EN ATTENTE DE VALIDATION',REFUSE:'BON REFUSE OU ANNULE'};
       const material=bon.materialService||{},servedMap=material.servedByItem||{},events=material.events||[];
       const serveRows=(bon.items||[]).map((item,index)=>{
         const progress=servedMap[String(index)]||{},served=Number(progress.qty||0),remaining=Math.max(0,Number(item.qty||0)-served);
@@ -81,8 +81,8 @@
         ${activePdfUrl?`<div><a class="inline-block bg-indigo-700 text-white rounded-lg p-3" href="${activePdfUrl}" target="_blank" rel="noopener">Ouvrir / télécharger le PDF du bon</a><iframe title="PDF du bon" src="${activePdfUrl}" class="w-full h-[65vh] border rounded-xl mt-3"></iframe></div>`:'<p class="text-amber-800">Le PDF du bon est indisponible. Les articles restent consultables ci-dessous.</p>'}
         <section class="space-y-2"><h4 class="font-bold">Articles et suivi du service</h4>${serveRows||'<p>Aucun article sur ce bon.</p>'}</section>
         ${global.BonSignatures.html(bon)}
-        ${check.canIssue?`<form data-serve-form class="space-y-3"><p class="font-bold">Confirmez les quantites physiquement remises. Le stock a deja ete debite par le gestionnaire.</p><label class="block">Nom et signature du magasinier<textarea data-signer name="signer" required maxlength="120" class="border rounded-xl p-3 w-full" placeholder="Nom complet"></textarea></label><button class="bg-green-700 text-white p-3 rounded-xl">Signer et valider le service</button></form>`:''}
-        <p>Controle serveur : ${esc(date(check.checkedAt))}. Le stock a ete debite lors de la signature du gestionnaire; votre signature enregistre uniquement la remise.</p>
+        ${check.canIssue?`<form data-serve-form class="space-y-3"><p class="font-bold">Confirmez les quantités physiquement remises. Votre signature enregistre la remise et débite le stock si ce débit n’a pas déjà été fait.</p><label class="block">Nom et signature du magasinier<textarea data-signer name="signer" required maxlength="120" class="border rounded-xl p-3 w-full" placeholder="Nom complet"></textarea></label><button class="bg-green-700 text-white p-3 rounded-xl">Signer et valider le service</button></form>`:''}
+        <p>Contrôle serveur : ${esc(date(check.checkedAt))}. La signature du magasinier enregistre toujours la remise.</p>
         <button data-recheck class="border p-3 rounded-xl">Actualiser le suivi du bon</button><p data-action-status role="status"></p></section>`;
       output.querySelector('[data-recheck]').onclick=()=>scan(value,container);
       output.querySelectorAll('[data-serve-index]').forEach(input=>input.onchange=()=>{const qty=output.querySelector(`[data-serve-qty="${input.dataset.serveIndex}"]`);if(qty)qty.disabled=!input.checked;});
@@ -107,7 +107,7 @@
   async function enter(container){
     const pending=stop(),token=generation;await pending;if(token!==generation)return;
     if(env.profile()?.role!=='Magasinier'){container.textContent='Scanner réservé au magasinier.';return;}
-    container.innerHTML=`<div class="max-w-3xl mx-auto space-y-5 p-4"><h2 class="font-black text-xl">Service des bons au magasin</h2><p>Scannez le QR code du bon validé par le gestionnaire. Les articles déjà servis sont affichés et les articles restants peuvent être servis.</p><div id="bon-reader"></div><button data-camera class="bg-indigo-700 text-white p-3 rounded-xl">Activer la caméra</button><button data-camera-stop class="border p-3 rounded-xl">Arrêter la caméra</button><p data-camera-status role="status"></p><form data-manual class="flex gap-2"><input name="code" aria-label="Identifiant ou contenu du QR code" placeholder="Identifiant du bon ou contenu du QR code" required class="border rounded-xl p-3 flex-1 min-w-0"><button class="border p-3 rounded-xl">Vérifier</button></form><div data-scan-result aria-live="polite"></div><section data-scan-history class="bg-slate-50 p-4 rounded-xl">L’historique du jour sera actualisé lors du contrôle d’un bon.</section></div>`;
+    container.innerHTML=`<div class="max-w-3xl mx-auto space-y-5 p-4"><h2 class="font-black text-xl">Service des bons au magasin</h2><p>Scannez le QR code d’un bon validé. Le magasinier signe la remise ; cette signature débite le stock si le gestionnaire ne l’a pas déjà fait.</p><div id="bon-reader"></div><button data-camera class="bg-indigo-700 text-white p-3 rounded-xl">Activer la caméra</button><button data-camera-stop class="border p-3 rounded-xl">Arrêter la caméra</button><p data-camera-status role="status"></p><form data-manual class="flex gap-2"><input name="code" aria-label="Identifiant ou contenu du QR code" placeholder="Identifiant du bon ou contenu du QR code" required class="border rounded-xl p-3 flex-1 min-w-0"><button class="border p-3 rounded-xl">Vérifier</button></form><div data-scan-result aria-live="polite"></div><section data-scan-history class="bg-slate-50 p-4 rounded-xl">L’historique du jour sera actualisé lors du contrôle d’un bon.</section></div>`;
     container.querySelector('[data-manual]').onsubmit=e=>{e.preventDefault();scan(e.target.elements.code.value,container);};
     container.querySelector('[data-camera-stop]').onclick=async()=>{if(camera?.isScanning)await camera.stop();};
     container.querySelector('[data-camera]').onclick=async()=>{
