@@ -10143,6 +10143,24 @@
         } catch (error) { alert(error.message || 'Impossible de traiter le retour.'); }
       }
 
+      async function decideTechnicianMaterialReturn(requestKey, approve) {
+        const request = (appData.demandes || []).find(d => d._dbKey === requestKey);
+        if (!request || request.workflow !== 'COORD_MATERIAL_RETURN' || request.status !== 'EN ATTENTE COORDINATEUR' || request.assignedCoordinateurUid !== secureStore.uid) {
+          return alert('Ce retour ne vous est pas affecté ou a déjà été traité.');
+        }
+        const reason = approve ? '' : (prompt('Motif du refus du retour :') || '').trim();
+        if (!approve && !reason) return;
+        if (approve && !confirm(`Transmettre au gestionnaire le retour de ${request.items?.[0]?.qty} × ${request.items?.[0]?.label} ?`)) return;
+        try {
+          const {error} = await supabaseBackend.rpc('decide_technician_material_return', {request_key:requestKey, approve, reason});
+          if (error) throw error;
+          alert(approve ? 'Retour transmis au gestionnaire pour réception.' : 'Retour refusé.');
+          await loadCoordinatorMaterialReturns(document.getElementById('app-container'));
+        } catch (error) {
+          alert(error.message || 'Impossible de traiter le retour.');
+        }
+      }
+
       async function loadManagerMaterialReturns(container) {
         const generation = secureStore.generation;
         container.innerHTML = '<p class="p-8">Chargement des retours à réception...</p>';
