@@ -3,7 +3,7 @@ const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
   "./assets/bon-scanner.js?v=20261008-storekeeper-signature",
-  "./assets/storekeeper-backlog.js?v=20261008-office-auto-bons",
+  "./assets/storekeeper-backlog.js?v=20261008-storekeeper-handover",
   "./assets/manager-locations.js",
   "./assets/manager-flux.js",
   "./assets/stock-substocks.js",
