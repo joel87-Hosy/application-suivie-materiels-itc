@@ -1,9 +1,9 @@
-const CACHE_NAME = "itc-gestion-materiels-v78-manager-debit-scanner";
+const CACHE_NAME = "itc-gestion-materiels-v79-storekeeper-backlog-dates";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
   "./assets/bon-scanner.js?v=20261008-manager-debit-scanner",
-  "./assets/storekeeper-backlog.js?v=20261008-storekeeper-handover",
+  "./assets/storekeeper-backlog.js?v=20261009-storekeeper-backlog-date-filter",
   "./assets/manager-locations.js",
   "./assets/manager-flux.js",
   "./assets/stock-substocks.js",
