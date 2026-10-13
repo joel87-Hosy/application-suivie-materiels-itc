@@ -6,9 +6,10 @@ DO $$
 DECLARE definition text; old_text text; new_text text;
 BEGIN
  SELECT pg_get_functiondef('public.register_company_user(uuid,uuid,text,text,text,text,text[])'::regprocedure) INTO definition;
- old_text:='actor.role NOT IN (''Superviseur'',''SUPER_ADMIN'')';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'register_company_user actor guard changed'; END IF;
- definition:=replace(definition,old_text,'actor.role NOT IN (''Superviseur'',''DG'',''SUPER_ADMIN'')');
+ IF definition !~* $re$actor[[:space:]]*\.[[:space:]]*role[[:space:]]+NOT[[:space:]]+IN[[:space:]]*\([[:space:]]*'Superviseur'[[:space:]]*,[[:space:]]*('DG'[[:space:]]*,[[:space:]]*)?'SUPER_ADMIN'[[:space:]]*\)$re$ THEN
+  RAISE EXCEPTION 'register_company_user actor guard changed';
+ END IF;
+ definition:=regexp_replace(definition,$re$actor[[:space:]]*\.[[:space:]]*role[[:space:]]+NOT[[:space:]]+IN[[:space:]]*\([[:space:]]*'Superviseur'[[:space:]]*,[[:space:]]*('DG'[[:space:]]*,[[:space:]]*)?'SUPER_ADMIN'[[:space:]]*\)$re$,$replacement$actor.role NOT IN ('Superviseur','DG','SUPER_ADMIN')$replacement$,'i');
  old_text:='''Coordinateur'',''Coordinatrice'',''Superviseur Terrain''';
  IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'register_company_user role list changed'; END IF;
  definition:=replace(definition,old_text,'''Coordinateur'',''Coordinatrice'',''Coordinateur V1'',''Superviseur Terrain''');
