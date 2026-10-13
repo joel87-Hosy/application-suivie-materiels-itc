@@ -36,7 +36,7 @@
       const {data,error}=await config.client.auth.getSession();if(error||!data.session)throw Error('Reconnectez-vous pour créer ce compte.');
       const response=await fetch(config.projectUrl+'/functions/v1/company-users',{method:'POST',headers:{'Content-Type':'application/json',apikey:config.publishableKey,Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({companyId,role,managedOps,email,password,...affiliation,name:getFormTextValue('cu-user-name')})});
       const result=await response.json();
-      if(result.error==='Rôle non autorisé.'||result.error==='RÃ´le non autorisÃ©.')throw Error('La base accepte déjà le rôle Magasinier, mais la fonction Supabase company-users semble ancienne. Déployez sa version actuelle avec : supabase functions deploy company-users --project-ref ufstydudgffhbkkjtbbg');
+      if(['Rôle non autorisé.','RÃ´le non autorisÃ©.','Le rôle choisi pour le nouveau compte n’est pas autorisé.'].includes(result.error))throw Error('La fonction Supabase company-users déployée n’autorise pas encore ce rôle. Le code local prend déjà en charge Coordinateur V1. Déployez la fonction mise à jour avec : supabase functions deploy company-users --project-ref ufstydudgffhbkkjtbbg. Si la fonction est déjà à jour, appliquez aussi la migration 202610130001_coordinator_v1_dual_office.sql dans Supabase.');
       if(!response.ok||result.error)throw Error(result.error||'Création du compte impossible.');
       alert(`Compte créé.\nEmail : ${email}\nMot de passe temporaire : ${password}\nStocks : ${managedOps.join(', ')||'Selon le rôle'}`);
       await refreshAppDataFromServer();renderCompanyUsersAdmin(document.getElementById('app-container'));
