@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION public.set_account_affiliations(
   actor_id uuid,target_id uuid,office_codes text[],service_codes text[],
   coordinator_ids text[],validator_ids text[]
 ) RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; target public.app_profiles; changes jsonb; chosen text;
 BEGIN
  SELECT * INTO actor FROM public.app_profiles WHERE user_id=actor_id AND is_active;
@@ -51,7 +51,7 @@ CREATE OR REPLACE FUNCTION public.register_company_user_multi(
  user_email text,stock_ops text[],office_codes text[],service_codes text[],
  coordinator_ids text[],validator_ids text[]
 ) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE result jsonb;
 BEGIN
  result:=public.register_company_user(actor_id,new_user_id,company,user_role,user_name,user_email,stock_ops);
@@ -63,17 +63,17 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.storekeeper_office(details jsonb,scopes jsonb DEFAULT '{}') RETURNS text
-LANGUAGE sql IMMUTABLE SET search_path=public AS $$$
+LANGUAGE sql IMMUTABLE SET search_path=public AS $$
  SELECT CASE WHEN jsonb_array_length(public.account_offices(details,scopes)) BETWEEN 1 AND 3 THEN public.account_offices(details,scopes)->>0 ELSE NULL END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.storekeeper_has_office(details jsonb,scopes jsonb,office_code text) RETURNS boolean
-LANGUAGE sql IMMUTABLE SET search_path=public AS $$$
+LANGUAGE sql IMMUTABLE SET search_path=public AS $$
  SELECT public.storekeeper_office(details,scopes) IS NOT NULL AND public.account_offices(details,scopes) ? office_code;
 $$;
 
 CREATE OR REPLACE FUNCTION public.storekeeper_request_office(company text,request jsonb) RETURNS text
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
  SELECT coalesce(nullif(request->>'validationOffice',''),nullif(request->>'originOffice',''),public.request_origin_office(company,request));
 $$;
 
@@ -98,7 +98,7 @@ ALTER FUNCTION public.decide_stock_request_signed(text,boolean,uuid,text,text,te
  RENAME TO decide_stock_request_signed_unassigned;
 CREATE OR REPLACE FUNCTION public.decide_stock_request_signed(
  request_key text,approve boolean,manager_uid uuid,reason text,signer_name text,signature_image text
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$$
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; request public.app_records; storekeeper public.app_profiles; target_office text; result jsonb;
 BEGIN
  SELECT * INTO actor FROM public.current_app_profile();
@@ -123,7 +123,7 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.workflow_storekeepers() RETURNS jsonb
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; result jsonb;
 BEGIN
  SELECT * INTO actor FROM public.current_app_profile();
@@ -140,7 +140,7 @@ CREATE OR REPLACE FUNCTION public.decide_stock_request_signed_assigned(
  request_key text,approve boolean,manager_uid uuid,storekeeper_uid uuid,reason text,
  signer_name text,signature_image text
 ) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; request public.app_records; storekeeper public.app_profiles; target_office text; result jsonb;
 BEGIN
  SELECT * INTO actor FROM public.current_app_profile();
@@ -163,7 +163,7 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.assign_storekeeper_to_pending_bon(request_key text,storekeeper_uid uuid) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; request public.app_records; storekeeper public.app_profiles; office_code text; result jsonb;
 BEGIN
  SELECT * INTO actor FROM public.current_app_profile();
@@ -196,7 +196,7 @@ ALTER FUNCTION public.confirm_bon_renewal_signed(text,jsonb,boolean,text,text,te
 CREATE FUNCTION public.confirm_bon_renewal_signed(
  request_key text,expected_valid_until jsonb,approve boolean,reason text,signer_name text,signature_image text
 ) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; request public.app_records;
 BEGIN
  SELECT * INTO actor FROM public.current_app_profile();
@@ -214,7 +214,7 @@ REVOKE ALL ON FUNCTION public.confirm_bon_renewal_signed_unscoped(text,jsonb,boo
 -- Filter storekeeper reads/signatures at the server as well as in the UI.
 ALTER FUNCTION public.inspect_stock_bon(text) RENAME TO inspect_stock_bon_unscoped;
 CREATE FUNCTION public.inspect_stock_bon(bon_id text) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; result jsonb; request jsonb;
 BEGIN
  SELECT * INTO actor FROM public.current_app_profile();
@@ -227,7 +227,7 @@ END $$;
 
 ALTER FUNCTION public.dispense_stock_bon_signed(text,jsonb,text,text) RENAME TO dispense_stock_bon_signed_unscoped;
 CREATE FUNCTION public.dispense_stock_bon_signed(request_key text,items jsonb,signer_name text,signature_image text) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; request public.app_records;
 BEGIN
  SELECT * INTO actor FROM public.current_app_profile();
@@ -238,7 +238,7 @@ END $$;
 
 ALTER FUNCTION public.dispense_stock_bon_signed_v2(text,jsonb,jsonb,text,text) RENAME TO dispense_stock_bon_signed_v2_unscoped;
 CREATE FUNCTION public.dispense_stock_bon_signed_v2(request_key text,items jsonb,unavailable_items jsonb,signer_name text,signature_image text) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles; request public.app_records;
 BEGIN
  SELECT * INTO actor FROM public.current_app_profile();
@@ -252,7 +252,7 @@ GRANT EXECUTE ON FUNCTION public.inspect_stock_bon(text),public.dispense_stock_b
 REVOKE ALL ON FUNCTION public.inspect_stock_bon_unscoped(text),public.dispense_stock_bon_signed_unscoped(text,jsonb,text,text),public.dispense_stock_bon_signed_v2_unscoped(text,jsonb,jsonb,text,text) FROM PUBLIC,anon,authenticated;
 
 CREATE OR REPLACE FUNCTION public.can_read_company_app_record(collection_name text,record_company text,record_payload jsonb) RETURNS boolean
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public AS $$$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public AS $$
 DECLARE actor public.app_profiles;
 BEGIN
  SELECT * INTO actor FROM public.current_app_profile();
@@ -278,7 +278,7 @@ REVOKE ALL ON FUNCTION public.decide_stock_request(text,boolean,uuid,text) FROM 
 REVOKE ALL ON FUNCTION public.storekeeper_office(jsonb,jsonb),public.storekeeper_has_office(jsonb,jsonb,text),public.storekeeper_request_office(text,jsonb),public.storekeeper_covers_request(jsonb,jsonb,text,jsonb),public.storekeeper_can_read_request(jsonb,jsonb,text,jsonb) FROM PUBLIC,anon,authenticated;
 
 CREATE OR REPLACE FUNCTION public.guard_storekeeper_assignment() RETURNS trigger
-LANGUAGE plpgsql SET search_path=public AS $$$
+LANGUAGE plpgsql SET search_path=public AS $$
 DECLARE previous jsonb;
 BEGIN
  IF NEW.collection<>'demandes' OR current_user NOT IN ('authenticated','anon') THEN RETURN NEW; END IF;

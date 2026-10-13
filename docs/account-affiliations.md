@@ -4,6 +4,8 @@ Les comptes technicien, coordinateur/coordinatrice, gestionnaire et validateur/v
 
 - **Nouveau compte** : le responsable choisit le bureau et le service dans Administration entreprise. Les stocks dédiés restent des droits distincts. L'enregistrement Auth + profil conserve la gestion des échecs existante ; le profil et son rattachement sont enregistrés dans une même transaction SQL.
 - **Compte existant** : le responsable utilise « Bureau et service » dans la liste des comptes. La modification est enregistrée dans `app_profiles`, la fiche `app_records/users` et le journal d'audit.
+- **Coordinateur V1** : rôle distinct, créé ou attribué par le superviseur/DG. Il est affecté aux bureaux B01 et B02 et aux six stocks dédiés `ITC-B01`, `OCI`, `CIC`, `MTN`, `ITC-B02` et `MOOV`. Pour chaque bon direct, il choisit un bureau, un service compatible, un validateur de ce bureau et un gestionnaire couvrant tous les stocks du bon. La base vérifie ces choix et limite le bon aux stocks du bureau sélectionné. Les autres rôles de coordination conservent leurs droits existants.
+- **Modification du rôle** : « Modifier le rôle » dans Administration entreprise permet au superviseur/DG de changer le rôle d'un compte standard. L'opération valide les affectations requises, synchronise les stocks et les rattachements, refuse l'auto-modification et les rôles de direction, et inscrit l'action dans le journal d'audit.
 - **Coordinateurs existants sans service** : « Mon bureau et service » ouvre leur profil et permet de choisir B2B, Maintenance ou Déploiement une fois. Le responsable pourra corriger cette affectation ensuite. Ce choix personnel n'est pas proposé aux futurs comptes, dont le service est défini à la création. Il ne permet pas de changer soi-même de bureau.
 - **Technicien** : le champ Émetteur contient exclusivement les coordinateurs actifs de son entreprise, de son bureau et de son service. Aucun coordinateur par défaut n'est inventé. Le service émetteur est celui du compte. L'absence de coordinateur compatible bloque l'envoi.
 - **Validateur** : il traite tous les bons de sortie provenant de son bureau, indépendamment de son propre service et des stocks demandés. Les notifications et confirmations après expiration suivent ce même bureau. Le renouvellement reste réservé au validateur ayant approuvé le bon initialement.
@@ -18,11 +20,11 @@ Le bureau des autres comptes concernés est repris uniquement s'il est explicite
 
 ## Mise en ligne
 
-1. Appliquer les migrations précédentes, puis `supabase/migrations/202609260002_account_affiliations.sql`.
+1. Appliquer les migrations dans l'ordre, jusqu'à `supabase/migrations/202610130001_coordinator_v1_dual_office.sql`.
 2. Déployer la fonction Supabase `company-users` actualisée.
 3. Publier le frontend et son service worker, puis actualiser les sessions.
-4. Vérifier les bureaux des coordinateurs existants, puis leur faire choisir leur service. Compléter les autres comptes concernés via l'administration.
+4. Créer ou attribuer « Coordinateur V1 » via Administration entreprise ; confirmer que l'entreprise possède les six stocks de bureaux et que les validateurs et gestionnaires sont affectés aux bons périmètres.
 
 La préparation des fichiers n'applique pas automatiquement ces changements à la base distante.
 
-Vérification locale : `node tools/test_account_affiliations.cjs`, `node tools/test_account_affiliations_browser.cjs` (Chrome installé), et la suite `npm test` avec Node configuré pour les tests TypeScript existants.
+Vérification locale : `node tools/test_account_affiliations.cjs`, `node tools/test_account_affiliations_browser.cjs` (Chrome installé), `node tools/test_coordinator_v1.cjs` et la suite `npm test` avec Node configuré pour les tests TypeScript existants.

@@ -9,7 +9,7 @@
     if(['SUPERVISEUR','SUPER_ADMIN','DG'].includes(role))return 'trafic-audit';
     if(['VALIDATEUR','VALIDATRICE'].includes(role))return 'validation-bons';
     if(role==='TECHNICIEN')return 'tech-mes-demandes';
-    if(['COORDINATEUR','COORDINATRICE','SUPERVISEUR TERRAIN'].includes(role))return /RETOUR/.test(message)?'coord-retour-materiel':(/VOTRE COMMANDE|SIGNE|LIVREE/.test(message)?'bons-signes':'coord-demandes-tech');
+    if(['COORDINATEUR','COORDINATRICE','COORDINATEUR V1','SUPERVISEUR TERRAIN'].includes(role))return /RETOUR/.test(message)?'coord-retour-materiel':(/VOTRE COMMANDE|SIGNE|LIVREE/.test(message)?'bons-signes':'coord-demandes-tech');
     if(role==='GESTIONNAIRE'){
       if(/TRANSFERT|STOCK_TRANSFER/.test(message))return 'transferts-stocks';
       if(/RETOUR/.test(message))return 'gestion-retours-materiel';

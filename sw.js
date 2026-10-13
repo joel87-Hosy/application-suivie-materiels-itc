@@ -1,8 +1,8 @@
-const CACHE_NAME = "itc-gestion-materiels-v79-storekeeper-backlog-dates";
+const CACHE_NAME = "itc-gestion-materiels-v82-storekeeper-handover-no-debit";
 const APP_SHELL = [
   "./assets/request-routing.js",
   "./assets/bon-signatures.js",
-  "./assets/bon-scanner.js?v=20261008-manager-debit-scanner",
+  "./assets/bon-scanner.js?v=20261014-storekeeper-handover-no-debit",
   "./assets/storekeeper-backlog.js?v=20261009-storekeeper-backlog-date-filter",
   "./assets/manager-locations.js",
   "./assets/manager-flux.js",
@@ -13,10 +13,10 @@ const APP_SHELL = [
   "./",
   "./index.html",
   "./assets/profile.js",
-  "./assets/notification-tabs.js?v=20261009-material-return-workflow",
+  "./assets/notification-tabs.js?v=20261013-coordinator-v1",
   "./assets/manager-stock.js?v=20260923-tabs",
-  "./assets/account-affiliation.js",
-  "./assets/company-users.js?v=20260926-affiliations",
+  "./assets/account-affiliation.js?v=20261013-coordinator-v1",
+  "./assets/company-users.js?v=20261013-role-management",
   "./assets/control-core.js",
   "./assets/control-core.js?v=20260923-regional",
   "./assets/stock-control-store.js?v=20261006-supabase",

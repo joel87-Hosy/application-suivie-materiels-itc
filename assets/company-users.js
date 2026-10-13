@@ -2,10 +2,25 @@
   'use strict';
   const stocks=['ITC-B01','ITC-B02','OCI','CIC','MOOV','MTN','ITC-BOUAKE','ITC-SAN-PEDRO','ITC-YAMOUSSOUKRO'];
   const names={'ITC-BOUAKE':'ITC Bouaké','ITC-SAN-PEDRO':'ITC San-Pédro','ITC-YAMOUSSOUKRO':'ITC Yamoussoukro'};
+  const roles=['Contrôleur','Superviseur Terrain','Coordinateur','Coordinatrice','Coordinateur V1','Gestionnaire','Magasinier','Validateur','Validatrice','Technicien'];
+  const stockRoles=['Gestionnaire','Validateur','Validatrice'];
   function validateManagerStocks(role,ops) {
     if(role==='Gestionnaire' && ops.includes('ITC-B02') && ops.some(op=>Object.hasOwn(names,op)))throw Error('Le bureau 02 peut déjà consulter et alimenter les trois villes. Affectez la modification de ces stocks à leurs gestionnaires locaux, sans les cocher pour le bureau 02.');
   }
   const selector=(selected=[])=>`<fieldset id="cu-stock-selection" class="border rounded-xl p-3 space-y-2"><legend class="text-xs font-bold">Stocks dédiés</legend>${stocks.map(op=>`<label class="flex items-center gap-2 text-xs"><input type="checkbox" name="managedOps" value="${op}" ${selected.includes(op)?'checked':''}>${names[op]||op}</label>`).join('')}<p class="text-xs text-slate-500">Gestionnaire ou validateur : choisissez au moins un stock. Contrôleur : accès à tous les stocks de l’entreprise.</p></fieldset>`;
+  function updateCreateForm(form){
+    const role=form.querySelector('#cu-user-role')?.value,group=form.querySelector('[data-affiliation]');
+    if(!role||!group)return;
+    const isV1=role==='Coordinateur V1',hasV1Fields=group.dataset.coordinatorV1==='true';
+    if(isV1!==hasV1Fields){
+      const companyId=form.querySelector('#cu-company-id')?.value||group.dataset.company;
+      const profile=isV1?{role,company_id:companyId,office:'B01',offices:['B01','B02'],serviceAbbreviation:'PROD',services:Object.keys(global.AccountAffiliation.v1Services)}:{role:'Contrôleur',company_id:companyId};
+      group.outerHTML=global.AccountAffiliation.fields(profile,appData.users||[]);
+    }
+    global.AccountAffiliation.update(form);
+    const stockSelection=form.querySelector('#cu-stock-selection');
+    if(stockSelection)stockSelection.classList.toggle('hidden',['Magasinier','Coordinateur V1'].includes(role));
+  }
   async function create(event){
     event.preventDefault();if(!isCurrentCompanySupervisor())return;
     const button=event.submitter||event.target.querySelector('button[type=submit]');if(button)button.disabled=true;
@@ -13,9 +28,9 @@
       const companyId=isCurrentSuperAdmin()?getFormTextValue('cu-company-id'):secureStore.profile.company_id;
       const role=document.getElementById('cu-user-role').value;
       const affiliation=global.AccountAffiliation.values(event.target,role);
-      const managedOps=['Contrôleur','Magasinier'].includes(role)?[]:Array.from(event.target.querySelectorAll('[name=managedOps]:checked'),el=>el.value);
+      const managedOps=role==='Coordinateur V1'?global.AccountAffiliation.v1Stocks.slice():['Contrôleur','Magasinier'].includes(role)?[]:Array.from(event.target.querySelectorAll('[name=managedOps]:checked'),el=>el.value);
       validateManagerStocks(role,managedOps);
-      if(['Gestionnaire','Validateur','Validatrice'].includes(role)&&!managedOps.length)throw Error('Sélectionnez au moins un stock dédié.');
+      if(stockRoles.includes(role)&&!managedOps.length)throw Error('Sélectionnez au moins un stock dédié.');
       const email=getFormTextValue('cu-user-email').toLowerCase(),password=getFormTextValue('cu-temp-password');
       const config=global.ITCSupabaseConfig;
       const {data,error}=await config.client.auth.getSession();if(error||!data.session)throw Error('Reconnectez-vous pour créer ce compte.');
@@ -39,6 +54,47 @@
       const {error}=await global.ITCSupabaseConfig.client.rpc('assign_manager_stocks',{target_uid:user.uid,stock_ops:ops});if(error)throw error;
       await refreshAppDataFromServer();modal.close();renderCompanyUsersAdmin(document.getElementById('app-container'));
     }catch(error){modal.querySelector('[role=status]').textContent=error.message;}finally{button.disabled=false;}};
+    modal.showModal();
+  }
+  async function changeRole(userId){
+    if(!isCurrentCompanySupervisor())return;
+    const user=(appData.users||[]).find(u=>String(u.id)===String(userId));
+    if(!user||!roles.includes(user.role)||String(user.id)===String(currentUser.id))return;
+    const modal=document.createElement('dialog');modal.className='rounded-2xl p-6 max-w-xl w-full';
+    const initialRole=user.role;
+    const affiliationUser=role=>role==='Coordinateur V1'
+      ? {...user,role,crossOfficeDirectOrder:false,office:'B01',offices:['B01','B02'],serviceAbbreviation:'PROD',services:Object.keys(global.AccountAffiliation.v1Services),allowedCoordinatorIds:[],allowedValidatorIds:[]}
+      : {...user,role};
+    modal.innerHTML=`<form class="space-y-4"><h3 class="font-bold">Modifier le rôle du compte</h3><p>${String(user.name||user.email||'Compte')}</p><label class="block text-sm">Nouveau rôle<select id="cu-user-role" class="w-full border rounded-xl p-3">${roles.map(role=>`<option value="${role}" ${role===initialRole?'selected':''}>${role}</option>`).join('')}</select></label><div data-role-affiliation></div><div data-role-stocks></div><p role="status" class="text-sm text-red-700"></p><div class="flex gap-2"><button type="submit" class="bg-indigo-700 text-white p-3 rounded-xl">Enregistrer le rôle</button><button type="button" data-close class="p-3">Annuler</button></div></form>`;
+    document.body.append(modal);modal.onclose=()=>modal.remove();modal.querySelector('[data-close]').onclick=()=>modal.close();
+    const form=modal.querySelector('form'),roleSelect=form.querySelector('#cu-user-role'),affiliationHolder=form.querySelector('[data-role-affiliation]'),stockHolder=form.querySelector('[data-role-stocks]');
+    const renderRoleFields=async()=>{
+      const role=roleSelect.value,profile=affiliationUser(role);
+      affiliationHolder.innerHTML=global.AccountAffiliation.fields(profile,appData.users||[]);
+      stockHolder.innerHTML=selector(role==='Coordinateur V1'?global.AccountAffiliation.v1Stocks:ControlCore.scopes(user.controlScopes||user.managedOps));
+      stockHolder.hidden=!stockRoles.includes(role);
+      if(role==='Coordinateur V1')stockHolder.hidden=true;
+      global.AccountAffiliation.update(form);
+      if(global.AccountAffiliation.concerned(role))await global.AccountAffiliation.loadContacts(form);
+    };
+    roleSelect.onchange=renderRoleFields;
+    await renderRoleFields();
+    form.onsubmit=async event=>{
+      event.preventDefault();const button=form.querySelector('[type=submit]');button.disabled=true;
+      try{
+        const role=roleSelect.value,affiliation=global.AccountAffiliation.values(form,role);
+        const managedOps=role==='Coordinateur V1'?global.AccountAffiliation.v1Stocks.slice():['Contrôleur','Magasinier'].includes(role)?[]:Array.from(form.querySelectorAll('[name=managedOps]:checked'),el=>el.value);
+        validateManagerStocks(role,managedOps);
+        if(stockRoles.includes(role)&&!managedOps.length)throw Error('Sélectionnez au moins un stock dédié.');
+        const config=global.ITCSupabaseConfig,{data,error}=await config.client.auth.getSession();
+        if(error||!data.session)throw Error('Reconnectez-vous pour modifier ce rôle.');
+        const response=await fetch(config.projectUrl+'/functions/v1/company-users',{method:'POST',headers:{'Content-Type':'application/json',apikey:config.publishableKey,Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({action:'change-role',targetUid:user.uid,companyId:user.company_id,role,managedOps,...affiliation})});
+        const result=await response.json();
+        if(!response.ok||result.error)throw Error(result.error||'Modification du rôle impossible.');
+        if(result.updated!==true||result.action!=='change-role')throw Error('Le serveur n’a pas confirmé la modification du rôle. Mettez à jour la fonction Supabase company-users puis réessayez.');
+        await refreshAppDataFromServer();modal.close();renderCompanyUsersAdmin(document.getElementById('app-container'));
+      }catch(error){form.querySelector('[role=status]').textContent=error.message;}finally{button.disabled=false;}
+    };
     modal.showModal();
   }
   let managing=false;
@@ -70,5 +126,5 @@
       alert('Compte mis à jour dans Supabase.');
     }catch(error){alert(error.message);}finally{managing=false;buttons.forEach(b=>b.disabled=false);}
   }
-  global.CompanyUsers={stocks,names,selector,create,edit,manage};
+  global.CompanyUsers={stocks,names,selector,create,edit,changeRole,manage,updateCreateForm};
 })(window);

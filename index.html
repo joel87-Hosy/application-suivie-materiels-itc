@@ -1698,14 +1698,14 @@
     <script src="assets/supabase-public-config.js?v=20260918-shared1"></script>
     <script src="assets/supabase-config.js?v=20260918-shared1"></script>
     <script src="assets/control-core.js?v=20260923-regional"></script>
-    <script src="assets/account-affiliation.js?v=20261008-storekeeper-one-to-three"></script>
+    <script src="assets/account-affiliation.js?v=20261013-coordinator-v1"></script>
     <script src="assets/request-routing.js"></script>
-    <script src="assets/company-users.js?v=20261006-company-users-deploy"></script>
-    <script src="assets/notification-tabs.js?v=20261004-notification-badges"></script>
+    <script src="assets/company-users.js?v=20261013-role-management"></script>
+    <script src="assets/notification-tabs.js?v=20261013-coordinator-v1"></script>
     <script src="assets/supabase-store.js?v=20261009-manager-command-receipts"></script>
     <script src="assets/manager-stock.js?v=20260923-tabs"></script>
     <script src="assets/manager-locations.js"></script>
-    <script src="assets/bon-scanner.js?v=20261008-manager-debit-scanner"></script>
+    <script src="assets/bon-scanner.js?v=20261014-storekeeper-handover-no-debit"></script>
     <script src="assets/storekeeper-backlog.js?v=20261009-storekeeper-backlog-date-filter"></script>
     <script src="assets/bon-signatures.js?v=20261001-storekeeper-signature"></script>
     <script src="assets/validator-workflow.js?v=20261008-manager-debit"></script>
@@ -2188,7 +2188,7 @@
 
       function getCoordinatorUsers() {
         if (currentUser?.role === "Technicien") return AccountAffiliation.coordinators(AccountAffiliation.requestUser(currentUser,'t'), appData.users || []);
-        return (appData.users || []).filter(u => ["Coordinateur", "Coordinatrice", "Superviseur Terrain"].includes(u.role));
+        return (appData.users || []).filter(u => ["Coordinateur", "Coordinatrice", "Coordinateur V1", "Superviseur Terrain"].includes(u.role));
       }
 
       function getGestionnaireUsers() {
@@ -2217,7 +2217,7 @@
         return BonReference.format(bon,{data:appData});
       }
       function bonServiceField(id, selected='') {
-        if (id === 's-service' && (['Coordinateur','Coordinatrice'].includes(currentUser?.role) || (currentUser?.role === 'Superviseur Terrain' && currentSectionId === 'coord-creation-directe')) && window.AccountAffiliation) return AccountAffiliation.serviceField(currentUser,id);
+        if (id === 's-service' && (['Coordinateur','Coordinatrice','Coordinateur V1'].includes(currentUser?.role) || (currentUser?.role === 'Superviseur Terrain' && currentSectionId === 'coord-creation-directe')) && window.AccountAffiliation) return AccountAffiliation.serviceField(currentUser,id);
         const services = id === 's-service' ? BonReference.physicalServices(currentUser) : BonReference.services;
         return `<label class="block text-xs font-bold">Service émetteur<select id="${id}" required class="w-full border-2 p-3 rounded-xl text-xs bg-white"><option value="">Choisir le service</option>${Object.entries(services).map(([code,name])=>`<option value="${code}" ${code===selected?'selected':''}>${escapeHtml(name)} (${code})</option>`).join('')}</select></label>`;
       }
@@ -2718,6 +2718,7 @@
               isSuperAdmin ||
               r === "COORDINATRICE" ||
               r === "COORDINATEUR" ||
+              r === "COORDINATEUR V1" ||
               r === "SUPERVISEUR TERRAIN"
             ),
           );
@@ -2934,6 +2935,7 @@
           hasManagedOps &&
           (role === "COORDINATEUR" ||
             role === "COORDINATRICE" ||
+            role === "COORDINATEUR V1" ||
             role === "SUPERVISEUR TERRAIN")
         );
       }
@@ -4471,7 +4473,7 @@
       }
 
       function isSpecialDualOfficeDirectCoordinator(user) {
-        return user?.crossOfficeDirectOrder===true && ['Coordinateur','Coordinatrice'].includes(user?.role) && ['B01','B02'].every(code=>(window.AccountAffiliation?.officeList(user)||[]).includes(code));
+        return user?.role==='Coordinateur V1' || (user?.crossOfficeDirectOrder===true && ['Coordinateur','Coordinatrice'].includes(user?.role) && ['B01','B02'].every(code=>(window.AccountAffiliation?.officeList(user)||[]).includes(code)));
       }
 
       function getBureau02ManagerStockOps() {
@@ -4505,12 +4507,17 @@
       }
 
       function isDirectSortieOperatorAllowed(user, opValue) {
+        if (user?.role === 'Coordinateur V1') return isOperatorAllowedForUser(user,opValue);
         if (isSpecialDualOfficeDirectCoordinator(user)) return [...getBureau01ManagerStockOps(),...getBureau02ManagerStockOps()].includes(normalizeOperatorKey(opValue));
         if (isBureau01Coordinator(user)) return getBureau01ManagerStockOps().includes(normalizeOperatorKey(opValue));
         return isOperatorAllowedForUser(user,opValue);
       }
 
       function getAllowedSortieOperators(direct=false) {
+        if (direct && currentUser?.role === 'Coordinateur V1') {
+          const stockOps = new Set(((appData && appData.stock) || []).map(item => normalizeOperatorKey(item.op)).filter(Boolean));
+          return getManagedOpsNormalized(currentUser).filter(op => stockOps.has(op) && ['ITC-B01','OCI','CIC','MTN','ITC-B02','MOOV'].includes(op));
+        }
         if (direct && isSpecialDualOfficeDirectCoordinator(currentUser)) return [...new Set([...getBureau01ManagerStockOps(),...getBureau02ManagerStockOps()])];
         if (direct && isBureau01Coordinator(currentUser)) return getBureau01ManagerStockOps();
         const knownOps = ["ITC-B01", "ITC-B02", "OCI", "CIC", "MOOV", "MTN", "ITC-BOUAKE", "ITC-SAN-PEDRO", "ITC-YAMOUSSOUKRO"];
@@ -4721,7 +4728,7 @@
                   </div>
                   ${direct ? '<p class="mb-4 text-sm text-indigo-800">Votre demande sera transmise au validateur affecté à votre bureau. Après validation, elle sera envoyée au gestionnaire dédié. Un bon sera créé pour chaque stock sélectionné ; le stock sera débité à la signature du gestionnaire; le magasinier signera ensuite la remise.</p>' : ''}
                   <form onsubmit="${direct ? 'handleDirectSubmit(event)' : 'handleSortiePhysique(event)'}" class="space-y-6">
-                      ${direct && (['Coordinateur','Coordinatrice'].includes(currentUser?.role) || (currentUser?.role === 'Superviseur Terrain' && currentSectionId === 'coord-creation-directe')) && window.AccountAffiliation ? AccountAffiliation.requestFields(currentUser,'s') : ''}
+                      ${direct && (['Coordinateur','Coordinatrice','Coordinateur V1'].includes(currentUser?.role) || (currentUser?.role === 'Superviseur Terrain' && currentSectionId === 'coord-creation-directe')) && window.AccountAffiliation ? AccountAffiliation.requestFields(currentUser,'s') : ''}
                       ${direct?'<div data-request-routing></div>':''}
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border-2">
                           <div class="md:col-span-2">
@@ -4868,7 +4875,7 @@
 
       async function submitSortiePhysique(e, direct = false) {
         e.preventDefault();
-        if (direct && !['Coordinateur','Coordinatrice','Superviseur Terrain'].includes(secureStore.profile?.role)) return alert('Commande réservée à la coordination.');
+        if (direct && !['Coordinateur','Coordinatrice','Coordinateur V1','Superviseur Terrain'].includes(secureStore.profile?.role)) return alert('Commande réservée à la coordination.');
 
         if (!appData.stock) appData.stock = [];
 
@@ -4964,7 +4971,7 @@
           let routing={};
           try {if(direct)routing=window.RequestRouting?.values(e.target,selectedItems)||{};} catch(error){return alert(error.message);}
           const signingSession = secureStore.generation;
-          const signerRole = currentUser?.role === 'Superviseur Terrain' ? 'Superviseur Terrain' : 'Coordinateur';
+          const signerRole = currentUser?.role === 'Superviseur Terrain' ? 'Superviseur Terrain' : currentUser?.role === 'Coordinateur V1' ? 'Coordinateur V1' : 'Coordinateur';
           const coordinationInk = direct ? await window.BonSignatures.capture(`Signature du ${signerRole}`, coordinationSignatureText) : null;
           if (direct && (!coordinationInk || signingSession !== secureStore.generation)) return;
           appData.demandes ||= [];
@@ -8404,7 +8411,7 @@
           : [];
         const companySelector = isSuperAdmin
           ? `
-                <select id="cu-company-id" onchange="AccountAffiliation.update(this.form)" class="w-full border rounded-xl p-3 text-xs" required>
+                <select id="cu-company-id" onchange="CompanyUsers.updateCreateForm(this.form)" class="w-full border rounded-xl p-3 text-xs" required>
                   <option value="">Choisir l'entreprise</option>
                   ${selectableCompanies
                     .map(
@@ -8431,7 +8438,8 @@
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                   : role === "COORDINATRICE" ||
                       role === "COORDINATEUR" ||
-                      role === "SUPERVISEUR TERRAIN"
+                    role === "COORDINATEUR V1" ||
+                    role === "SUPERVISEUR TERRAIN"
                     ? "bg-amber-50 text-amber-700 border-amber-200"
                     : "bg-cyan-50 text-cyan-700 border-cyan-200";
             return `
@@ -8463,6 +8471,7 @@
                   <div class="flex flex-wrap gap-1">
                     ${AccountAffiliation.concerned(user.role) ? `<button type="button" data-user-id="${escapeHtml(user.id)}" onclick="AccountAffiliation.edit(this.dataset.userId)" class="bg-indigo-100 text-indigo-800 rounded-lg px-2 py-1 text-[8px] font-black">Bureaux et services</button><span class="text-[9px]">${escapeHtml(AccountAffiliation.summary(user))}</span>` : ""}
                     ${['suspend','disable','activate','delete'].includes(user.account_action_pending) ? `<button type="button" onclick="manageCompanyUser('${escapeHtml(user.id)}', '${user.account_action_pending}')" class="bg-orange-100 text-orange-900 rounded-lg px-2 py-1 text-[8px] font-black">Terminer la synchronisation Supabase</button>` : ''}
+                    <button type="button" data-user-id="${escapeHtml(user.id)}" onclick="CompanyUsers.changeRole(this.dataset.userId)" class="bg-indigo-100 text-indigo-800 rounded-lg px-2 py-1 text-[8px] font-black uppercase">Modifier le rôle</button>
                     ${user.role === "Gestionnaire" ? `<button type="button" data-user-id="${escapeHtml(user.id)}" onclick="editCompanyUserStockAccess(this.dataset.userId)" class="bg-teal-100 text-teal-800 rounded-lg px-2 py-1 text-[8px] font-black uppercase">Accès stock</button>` : ""}
                     ${
                       getCompanyUserStatus(user) === "active"
@@ -8485,7 +8494,7 @@
                 <div>
                   <p class="text-[9px] uppercase tracking-[0.18em] text-slate-400">Administration entreprise</p>
                   <h2 class="text-xl font-black uppercase text-slate-900">${escapeHtml(company?.name || "Entreprise")}</h2>
-                  <p class="text-[10px] text-slate-500">Création des comptes : Contrôleur, Superviseur Terrain, Coordinateur, Gestionnaire, Technicien. Le rôle Superviseur reste réservé au directeur.</p>
+                  <p class="text-[10px] text-slate-500">Création des comptes : Contrôleur, Superviseur Terrain, Coordinateur, Coordinateur V1, Gestionnaire, Technicien. Le rôle Superviseur reste réservé au directeur.</p>
                 </div>
               </div>
             </div>
@@ -8496,12 +8505,13 @@
                 ${companySelector}
                 <input id="cu-user-name" class="w-full border rounded-xl p-3 text-xs" placeholder="Nom complet" required />
                 <input id="cu-user-email" class="w-full border rounded-xl p-3 text-xs" type="email" placeholder="Email" required />
-                <select id="cu-user-role" onchange="AccountAffiliation.update(this.form);document.getElementById('cu-stock-selection')?.classList.toggle('hidden',this.value==='Magasinier')" class="w-full border rounded-xl p-3 text-xs">
+                <select id="cu-user-role" onchange="CompanyUsers.updateCreateForm(this.form)" class="w-full border rounded-xl p-3 text-xs">
                   <option value="Contrôleur">Contrôleur</option>
                   <option value="Superviseur Terrain">Superviseur Terrain</option>
                   <option value="Coordinateur">Coordinateur</option>
                   <option value="Gestionnaire">Gestionnaire</option><option value="Magasinier">Magasinier</option><option value="Validateur">Validateur / Validatrice</option>
                   <option value="Coordinatrice">Coordinatrice</option>
+                  <option value="Coordinateur V1">Coordinateur V1 (bureaux 01 et 02)</option>
                   <option value="Technicien">Technicien</option>
                 </select>
                 ${AccountAffiliation.fields({role:"Contrôleur",company_id:companyId},companyUsers)}
@@ -10175,7 +10185,7 @@
       }
 
       function renderCoordCreationDirecte(container) {
-        if (!['Coordinateur','Coordinatrice','Superviseur Terrain'].includes(secureStore.profile?.role)) {
+        if (!['Coordinateur','Coordinatrice','Coordinateur V1','Superviseur Terrain'].includes(secureStore.profile?.role)) {
           container.textContent = 'Accès réservé à la coordination.';
           return;
         }
@@ -10462,6 +10472,10 @@
         const d = (appData.demandes || []).find((x) => x.id === id);
         if (!d) return alert("Demande introuvable.");
         const container = document.getElementById("app-container");
+        const servedByItem = d.materialService?.servedByItem || {};
+        const handoverEvents = Array.isArray(d.materialService?.events) ? d.materialService.events : [];
+        const servedTotal = Object.values(servedByItem).reduce((total, progress) => total + (parseFloat(progress?.qty) || 0), 0);
+        const preManagerHandover = !d.managerSignedAt && servedTotal > 0;
         container.innerHTML = `
           <div class="max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl italic font-bold">
             <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-amber-700 via-orange-600 to-amber-500 text-white">
@@ -10476,12 +10490,20 @@
               <p class="text-[9px] uppercase md:col-span-2"><b>Motif :</b> ${escapeHtml(d.motif || "")}</p>
             </div>
             ${coordinationAdjustmentNotice(d)}
+            ${preManagerHandover ? `<div role="status" class="mt-4 rounded-2xl border border-amber-400 bg-amber-50 p-4 text-amber-950">
+              <p class="font-black"><i class="fas fa-box-open mr-2"></i>Remise déjà effectuée par le magasinier — le stock n’a pas encore été débité.</p>
+              <p class="mt-1 text-sm">Quantité physiquement remise : ${escapeHtml(servedTotal)}. Votre signature reste nécessaire pour débiter le stock.</p>
+              <ul class="mt-2 space-y-1 text-sm">${(d.items || []).map((item, index) => {
+                const served = parseFloat(servedByItem[String(index)]?.qty) || 0;
+                return served > 0 ? `<li>${escapeHtml(item.label)} : ${escapeHtml(served)} / ${escapeHtml(item.qty)} remis${handoverEvents.filter(event => (event.items || []).some(line => Number(line.index) === index)).map(event => ` — ${escapeHtml(event.name || "Magasinier")}`).join("")}</li>` : "";
+              }).join("")}</ul>
+            </div>` : ""}
             <p class="mt-3 text-sm">${escapeHtml(window.ValidatorWorkflow.trace(d))}</p>
             <div class="mt-5 border rounded-2xl overflow-hidden">
               <table class="w-full text-[9px] uppercase">
-                <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Operateur</th><th class="p-2 text-left">Designation</th><th class="p-2 text-right">Qte</th></tr></thead>
+                <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Operateur</th><th class="p-2 text-left">Designation</th><th class="p-2 text-right">Qte demandee</th><th class="p-2 text-right">Deja remis</th></tr></thead>
                 <tbody>
-                  ${(d.items || []).map((item) => `<tr class="border-t"><td class="p-2">${escapeHtml(getOperatorMeta(getDemandItemOperator(item, d)).label)}</td><td class="p-2">${escapeHtml(item.label)}</td><td class="p-2 text-right font-black">${parseInt(item.qty) || 0}</td></tr>`).join("")}
+                  ${(d.items || []).map((item, index) => `<tr class="border-t"><td class="p-2">${escapeHtml(getOperatorMeta(getDemandItemOperator(item, d)).label)}</td><td class="p-2">${escapeHtml(item.label)}</td><td class="p-2 text-right font-black">${parseInt(item.qty) || 0}</td><td class="p-2 text-right ${parseFloat(servedByItem[String(index)]?.qty) > 0 ? "font-black text-amber-800" : ""}">${escapeHtml(parseFloat(servedByItem[String(index)]?.qty) || 0)}</td></tr>`).join("")}
                 </tbody>
               </table>
             </div>

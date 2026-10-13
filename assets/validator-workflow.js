@@ -95,7 +95,11 @@
     try {
       const signature=await global.BonSignatures.capture('Signature du gestionnaire pour autoriser le bon',request.managerSignatureText||env.profile()?.name||'');
       if(!signature||token!==generation)return;
-      if(!global.confirm('Confirmer la validation et la signature ? Le stock sera debite immediatement.'))return;
+      const alreadyHandedOver=Object.values(request.materialService?.servedByItem||{}).reduce((total,progress)=>total+(Number(progress?.qty)||0),0);
+      const confirmation=alreadyHandedOver>0
+        ? `Le magasinier a déjà remis ${alreadyHandedOver} article(s) et signé la remise. Confirmer votre signature et le débit du stock ?`
+        : 'Confirmer la validation et la signature ? Le stock sera débité à votre signature.';
+      if(!global.confirm(confirmation))return;
       if(token!==generation)return;
 await rpc('issue_stock_request_signed',{request_key:request._dbKey,signer_name:signature.name,signature_image:signature.image,service:request.serviceAbbreviation,selections:null});await env.refresh();global.alert('Bon valide et signe. Le stock a ete debite. Le magasinier signera la remise sans nouveau debit.');busy=false;env.navigate('demandes-coordonnatrice');}
     catch(error){global.alert(error.message);}finally{busy=false;}

@@ -15,12 +15,6 @@
     }
     if(!text||text.length>250)throw Error('Identifiant invalide.');return text;
   }
-  function stockFor(item,bon){
-    const stock=env?.data?.()?.stock||[],op=String(item?.op||bon?.op||'').trim().toUpperCase();
-    const label=String(item?.label||'').trim().replace(/\s+/g,' ').toUpperCase();
-    const key=String(item?.stockKey||item?._dbKey||'');
-    return stock.find(row=>(!key||String(row._dbKey||row.id||'')===key)&&String(row.op||row.operator||'').trim().toUpperCase()===op&&String(row.label||row.name||row.designation||'').trim().replace(/\s+/g,' ').toUpperCase()===label);
-  }
   async function pdf(doc,record,data,y){
     const bon=global.BonReference.resolve(record,data);
     if(!(bon.sourceDemandeId||bon.id||bon._dbKey)||!bon.company_id)throw Error('Identité du bon incomplète : QR code impossible. Actualisez les données.');
@@ -65,14 +59,18 @@
       const labels={VALIDE:'BON PRET A SERVIR',EXPIRE:'BON EXPIRE',DEJA_LIVRE:'BON ENTIEREMENT SERVI',A_VALIDER:'BON EN ATTENTE DE VALIDATION',REFUSE:'BON REFUSE OU ANNULE'};
       const material=bon.materialService||{},servedMap=material.servedByItem||{},events=material.events||[];
       const managerDebited=Boolean(bon.managerDebitAt);
+      const managerSignaturePending=!bon.managerSignedAt&&(
+        bon.storekeeperHandoverPendingManager===true
+        || (bon.status==='EN ATTENTE GESTIONNAIRE'&&events.length>0)
+      );
       const serveRows=(bon.items||[]).map((item,index)=>{
         const progress=servedMap[String(index)]||{},served=Number(progress.qty||0),remaining=Math.max(0,Number(item.qty||0)-served);
         if(remaining<=0||material.unavailableByItem?.[String(index)])return '';
         const servedBy=events.filter(event=>(event.items||[]).some(line=>Number(line.index)===index)).map(event=>event.name).filter(Boolean).join(', ');
-        const stock=managerDebited?null:stockFor(item,bon),available=Math.max(0,Number(stock?.qty||0)),cap=managerDebited?remaining:Math.min(remaining,available);
+        const cap=remaining;
         const stockStatus=managerDebited
           ? 'Déjà débité par le gestionnaire : signez uniquement la remise physique'
-          : `stock ${stock?esc(available):'absent'}`;
+          : 'non débité : le débit est réservé au gestionnaire';
         return `<div class="space-y-2 border rounded-xl p-3"><div class="grid grid-cols-[auto_1fr_100px] gap-3 items-center"><input type="checkbox" data-serve-index="${index}"><span><b>${esc(item.label)}</b><small class="block">${esc(item.op||bon.op)} | demande ${esc(item.qty)} | deja servi ${esc(served)} | reste ${esc(remaining)} | ${stockStatus}${servedBy?` | par ${esc(servedBy)}`:''}</small></span><input type="number" data-serve-qty="${index}" min="0" max="${cap}" step="any" value="${cap}" disabled class="border rounded p-2 w-full" aria-label="Quantite a servir"></div>${cap<remaining&&!managerDebited?`<label class="block"><input type="checkbox" data-unavailable-index="${index}"> Materiel indisponible pour le reliquat (${esc(remaining-cap)} restant)</label>`:''}</div>`;
       }).join('');
       if(activePdfUrl)URL.revokeObjectURL(activePdfUrl);activePdfUrl=null;
@@ -81,11 +79,12 @@
       output.innerHTML=`<section class="border-2 ${color} p-5 rounded-2xl space-y-3"><h3 class="font-black">${labels[check.state]||'BON NON AUTORISE'}</h3>
         <p><b>Reference :</b> ${esc(global.BonReference.format(bon))}</p><p><b>Destinataire / equipe :</b> ${esc(bon.equipe||bon.demandeurName||bon.tech)}</p><p><b>Motif :</b> ${esc(bon.motif||bon.ref)}</p>
         <p><b>Statut :</b> ${esc(bon.status||bon.statut)}</p><p><b>Validateur :</b> ${esc(bon.validatorDecision?.name||'En attente')} · <b>Gestionnaire :</b> ${esc(bon.assignedGestionnaireName||'Non renseigne')}</p>
+        ${managerSignaturePending?'<p role="status" class="rounded-xl border border-amber-400 bg-amber-50 p-3 text-amber-950"><b>Remise déjà signée.</b> Le gestionnaire doit encore signer le bon et débiter le stock.</p>':''}
         ${check.state==='DEJA_LIVRE'?`<p><b>Termine le :</b> ${esc(date(check.deliveredAt))} · <b>Par :</b> ${esc(check.deliveredBy||'')}</p>`:''}
         ${activePdfUrl?`<div><a class="inline-block bg-indigo-700 text-white rounded-lg p-3" href="${activePdfUrl}" target="_blank" rel="noopener">Ouvrir / télécharger le PDF du bon</a><iframe title="PDF du bon" src="${activePdfUrl}" class="w-full h-[65vh] border rounded-xl mt-3"></iframe></div>`:'<p class="text-amber-800">Le PDF du bon est indisponible. Les articles restent consultables ci-dessous.</p>'}
         <section class="space-y-2"><h4 class="font-bold">Articles et suivi du service</h4>${serveRows||'<p>Aucun article sur ce bon.</p>'}</section>
         ${global.BonSignatures.html(bon)}
-        ${check.canIssue?`<form data-serve-form class="space-y-3"><p class="font-bold">${managerDebited?'Le gestionnaire a déjà débité le matériel. Confirmez les quantités physiquement remises et signez uniquement la remise physique.':'Confirmez les quantités physiquement remises. Votre signature enregistre la remise et débite le stock si ce débit n’a pas déjà été fait.'}</p><label class="block">Nom et signature du magasinier<textarea data-signer name="signer" required maxlength="120" class="border rounded-xl p-3 w-full" placeholder="Nom complet"></textarea></label><button class="bg-green-700 text-white p-3 rounded-xl">Signer et valider le service</button></form>`:''}
+        ${check.canIssue&&serveRows?`<form data-serve-form class="space-y-3"><p class="font-bold">${managerDebited?'Le gestionnaire a déjà débité le matériel. Confirmez les quantités physiquement remises et signez uniquement la remise physique.':'Confirmez les quantités physiquement remises. Votre signature enregistre la remise ; le stock ne sera débité qu’à la signature du gestionnaire.'}</p><p class="text-sm text-slate-600">L’approbation du validateur suffit : vous pouvez servir et signer sans attendre la signature du gestionnaire. Cette signature du magasinier ne débite jamais le stock.</p><label class="block">Nom et signature du magasinier<textarea data-signer name="signer" required maxlength="120" class="border rounded-xl p-3 w-full" placeholder="Nom complet"></textarea></label><button class="bg-green-700 text-white p-3 rounded-xl">Signer la remise physique</button></form>`:check.canIssue?'<p role="status" class="rounded-xl border border-amber-400 bg-amber-50 p-3 text-amber-950">Tous les articles ont déjà été remis et signés. Le gestionnaire doit encore signer le bon et débiter le stock.</p>':''}
         <p>Contrôle serveur : ${esc(date(check.checkedAt))}. La signature du magasinier enregistre toujours la remise.</p>
         <button data-recheck class="border p-3 rounded-xl">Actualiser le suivi du bon</button><p data-action-status role="status"></p></section>`;
       output.querySelector('[data-recheck]').onclick=()=>scan(value,container);
@@ -111,7 +110,7 @@
   async function enter(container){
     const pending=stop(),token=generation;await pending;if(token!==generation)return;
     if(env.profile()?.role!=='Magasinier'){container.textContent='Scanner réservé au magasinier.';return;}
-    container.innerHTML=`<div class="max-w-3xl mx-auto space-y-5 p-4"><h2 class="font-black text-xl">Service des bons au magasin</h2><p>Scannez le QR code d’un bon validé. Le magasinier signe la remise ; cette signature débite le stock si le gestionnaire ne l’a pas déjà fait.</p><div id="bon-reader"></div><button data-camera class="bg-indigo-700 text-white p-3 rounded-xl">Activer la caméra</button><button data-camera-stop class="border p-3 rounded-xl">Arrêter la caméra</button><p data-camera-status role="status"></p><form data-manual class="flex gap-2"><input name="code" aria-label="Identifiant ou contenu du QR code" placeholder="Identifiant du bon ou contenu du QR code" required class="border rounded-xl p-3 flex-1 min-w-0"><button class="border p-3 rounded-xl">Vérifier</button></form><div data-scan-result aria-live="polite"></div><section data-scan-history class="bg-slate-50 p-4 rounded-xl">L’historique du jour sera actualisé lors du contrôle d’un bon.</section></div>`;
+    container.innerHTML=`<div class="max-w-3xl mx-auto space-y-5 p-4"><h2 class="font-black text-xl">Service des bons au magasin</h2><p>Scannez le QR code d’un bon validé. Le magasinier sert les articles et signe la remise ; seul le gestionnaire débite le stock en signant le bon.</p><div id="bon-reader"></div><button data-camera class="bg-indigo-700 text-white p-3 rounded-xl">Activer la caméra</button><button data-camera-stop class="border p-3 rounded-xl">Arrêter la caméra</button><p data-camera-status role="status"></p><form data-manual class="flex gap-2"><input name="code" aria-label="Identifiant ou contenu du QR code" placeholder="Identifiant du bon ou contenu du QR code" required class="border rounded-xl p-3 flex-1 min-w-0"><button class="border p-3 rounded-xl">Vérifier</button></form><div data-scan-result aria-live="polite"></div><section data-scan-history class="bg-slate-50 p-4 rounded-xl">L’historique du jour sera actualisé lors du contrôle d’un bon.</section></div>`;
     container.querySelector('[data-manual]').onsubmit=e=>{e.preventDefault();scan(e.target.elements.code.value,container);};
     container.querySelector('[data-camera-stop]').onclick=async()=>{if(camera?.isScanning)await camera.stop();};
     container.querySelector('[data-camera]').onclick=async()=>{
