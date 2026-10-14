@@ -10186,7 +10186,7 @@
       }
 
       function renderCoordinatorMaterialReturns(container) {
-        if (!['Coordinateur','Coordinatrice'].includes(currentUser?.role)) {
+        if (!['Coordinateur','Coordinatrice','Coordinateur V1'].includes(secureStore.profile?.role || currentUser?.role)) {
           container.innerHTML = '<p class="p-8">Accès réservé aux coordinateurs et coordinatrices.</p>'; return;
         }
         const allowed = new Set(getAllowedSortieOperators(true));
