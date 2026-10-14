@@ -1303,6 +1303,7 @@
                 >
               </div>
               <button type="button" onclick="showSection('coord-retour-materiel'); toggleSidebarMobile();" class="w-full text-left py-2 px-8 hover:text-white italic"><i class="fas fa-rotate-left w-5 text-cyan-400"></i> Retour de matériel <span id="notif-coord-retour" class="notification-badge hidden">0</span></button>
+              <button type="button" onclick="showSection('coord-mes-bons'); toggleSidebarMobile();" class="w-full text-left py-2 px-8 hover:text-white italic text-pink-300"><i class="fas fa-file-circle-check w-5 text-pink-400"></i> Mes bons</button>
               <div
                 onclick="
                   showSection('coord-creation-directe');
@@ -2012,7 +2013,7 @@
 
           // These views have just rendered the refreshed snapshot. Record its
           // notifications as read even when the user did not reopen the tab.
-          if (container && ['trafic-audit', 'coord-demandes-tech', 'demandes-coordonnatrice', 'tech-mes-demandes', 'bons-signes', 'gestion-retours'].includes(currentSectionId)) {
+          if (container && ['trafic-audit', 'coord-demandes-tech', 'demandes-coordonnatrice', 'tech-mes-demandes', 'coord-mes-bons', 'bons-signes', 'gestion-retours'].includes(currentSectionId)) {
             markNotificationsAsRead(currentSectionId);
           }
 
@@ -4981,7 +4982,8 @@
             submissionBatchId,
             originOffice: document.getElementById('s-office')?.value || window.AccountAffiliation?.office(currentUser),
             ...routing,
-            demandeurName:tech,demandeurOriginalId:currentUser.id,createdBy:currentUser.name,createdByUid:secureStore.uid,
+            createdById:currentUser.id,
+            demandeurName:tech,demandeurOriginalId:currentUser.id,createdBy:currentUser.name,createdByUid:secureStore.uid,createdById:currentUser.id,
             ...(direct ? {workflow:'COORD_DIRECT_BON',createdByRole:currentUser.role,emitterRole:currentUser.role,coordinationSignerRole:signerRole,coordinationSignatureText:coordinationInk.name,bonSignatures:{coordination:coordinationInk},coordinationSignedAt:new Date().toISOString(),coordinateurId:currentUser.id} : {}),
             date:new Date().toISOString(),dateBon:dateBonValue,motif:ref,
             status:'EN ATTENTE VALIDATEUR',statut:'EN ATTENTE VALIDATEUR'});
@@ -6912,6 +6914,8 @@
           renderTechDemandeForm(container);
         } else if (id === "tech-mes-demandes") {
           loadTechMesDemandes(container);
+        } else if (id === "coord-mes-bons") {
+          loadCoordinatorIssuedBons(container);
         } else if (id === "tech-materiels-livres") {
           loadTechDeliveredMaterials(container);
         } else if (id === "tech-retour-materiel") {
@@ -9045,6 +9049,81 @@
               </div>`;
       }
 
+      function coordinatorBonIdentityMatches(bon) {
+        const profile = secureStore.profile || currentUser;
+        if (!profile || !bon || (bon.company_id && bon.company_id !== profile.company_id)) return false;
+        const matches = (a, b) => a != null && b != null && String(a).trim() !== '' && String(a) === String(b);
+        const uid = secureStore.uid || profile.uid;
+        if (bon.createdByUid) return matches(bon.createdByUid, uid);
+        if (bon.workflow === 'COORD_DIRECT_BON' || ['Coordinateur','Coordinatrice','Coordinateur V1','Superviseur Terrain'].includes(bon.createdByRole || bon.emitterRole)) return matches(bon.coordinateurId, profile.id ?? currentUser?.id);
+        return false;
+      }
+
+      function coordinatorBonDate(bon) {
+        const value = bon.createdAt || bon.bonCreatedAt || bon.date || bon.dateBon || bon.dateCreation;
+        const date = value ? new Date(value) : null;
+        return date && Number.isFinite(date.getTime()) ? date : null;
+      }
+
+      function coordinatorBonStatus(bon) {
+        return String(bon.status || bon.statut || 'INCONNU').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[_-]+/g, ' ').trim() || 'INCONNU';
+      }
+
+      async function loadCoordinatorIssuedBons(container) {
+        const uid = secureStore.uid, generation = secureStore.generation;
+        container.innerHTML = '<p class="p-8 text-center">Chargement de vos bons...</p>';
+        try {
+          if (pendingSave) await pendingSave;
+          if (generation !== secureStore.generation) return;
+          if (typeof secureStore.readCollections === 'function') await secureStore.readCollections(['demandes','sorties'], generation);
+          else await secureStore.read(generation, {notify:false});
+          if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'coord-mes-bons') return;
+          appData = normalizeAppData(secureStore.value());
+          renderCoordinatorIssuedBons(container);
+        } catch (error) {
+          if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'coord-mes-bons') return;
+          container.innerHTML = '<p class="p-8 text-red-700">Historique indisponible. Rouvrez Mes bons pour reessayer.</p>';
+          console.error(error);
+        }
+      }
+
+      function renderCoordinatorIssuedBons(container) {
+        const demandes = appData.demandes || [], sorties = appData.sorties || [], linked = new Set(), bons = [];
+        for (const sortie of sorties) {
+          const demande = demandes.find(d => (sortie.sourceDemandeId != null && (String(d.id) === String(sortie.sourceDemandeId) || d._dbKey === sortie.sourceDemandeId)) || (d.sortieId != null && String(d.sortieId) === String(sortie.id)) || (sortie.submissionBatchId && d.submissionBatchId === sortie.submissionBatchId));
+          const bon = {...demande, ...sortie, historySource:'SORTIE'};
+          if (coordinatorBonIdentityMatches(demande || bon)) { bons.push(bon); if (demande) linked.add(demande); }
+        }
+        for (const demande of demandes) if (!linked.has(demande) && coordinatorBonIdentityMatches(demande)) bons.push({...demande, historySource:'DEMANDE'});
+        bons.sort((a,b)=>(coordinatorBonDate(b)?.getTime()||0)-(coordinatorBonDate(a)?.getTime()||0));
+        const statuses = [...new Set(bons.map(coordinatorBonStatus))].sort();
+        const options = statuses.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+        window._coordinatorIssuedBons = bons;
+        container.innerHTML = `<div class="bg-white rounded-3xl p-6 md:p-8 shadow-xl italic font-bold">
+          <div class="mb-6 rounded-2xl p-5 bg-gradient-to-r from-fuchsia-700 via-pink-600 to-rose-500 text-white flex items-center justify-between gap-4 flex-wrap"><div><p class="text-[8px] tracking-[0.2em] opacity-80">ESPACE COORDINATION</p><h3 class="text-xl font-black mt-1"><i class="fas fa-file-circle-check mr-2"></i>Mes bons emis</h3><button type="button" onclick="loadCoordinatorIssuedBons(document.getElementById('app-container'))" class="border rounded-lg p-2 mt-3">Actualiser mes bons</button></div><div class="bg-white/20 px-4 py-2 rounded-xl text-center"><p class="text-[8px] uppercase">Total</p><p class="text-2xl font-black">${bons.length}</p></div></div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5"><label class="text-xs">Du<input id="coord-bons-from" type="date" class="block w-full border rounded-lg p-2 mt-1" onchange="filterCoordinatorIssuedBons()"></label><label class="text-xs">Au<input id="coord-bons-to" type="date" class="block w-full border rounded-lg p-2 mt-1" onchange="filterCoordinatorIssuedBons()"></label><label class="text-xs">Statut<select id="coord-bons-status" class="block w-full border rounded-lg p-2 mt-1"><option value="">Tous les statuts</option>${options}</select></label><button type="button" onclick="filterCoordinatorIssuedBons()" class="border rounded-lg p-2">Filtrer</button></div>
+          <div id="coord-bons-list" class="grid grid-cols-1 gap-3">${bons.map((bon,i)=>{ const date=coordinatorBonDate(bon); const dateText=date?date.toISOString().slice(0,10):''; return `<article data-coord-bon data-date="${dateText}" data-status="${escapeHtml(coordinatorBonStatus(bon))}" data-index="${i}" class="bg-slate-50 p-5 rounded-2xl border flex justify-between items-center gap-3 flex-wrap"><div><p class="text-indigo-900 font-black text-sm">${escapeHtml(getBonReference(bon))}</p><p class="text-[10px] text-slate-600 mt-1">${date?escapeHtml(date.toLocaleDateString('fr-FR')):'Date inconnue'} | ${escapeHtml(coordinatorBonStatus(bon))}</p><p class="text-[10px] text-slate-500 mt-1">${escapeHtml(bon.motif || bon.ref || '')}</p></div><div class="flex gap-2"><button type="button" onclick="previewCoordinatorBon(${i})" class="bg-white text-indigo-700 border px-4 py-2 rounded-xl text-xs"><i class="fas fa-eye mr-1"></i>Voir</button><button type="button" onclick="downloadCoordinatorBon(${i})" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs"><i class="fas fa-file-pdf mr-1"></i>PDF</button></div></article>`;}).join('') || '<p class="text-center text-slate-400 py-10">Aucun bon emis par votre compte.</p>'}</div></div>`;
+        filterCoordinatorIssuedBons();
+      }
+
+      function filterCoordinatorIssuedBons() {
+        const from=document.getElementById('coord-bons-from')?.value||'', to=document.getElementById('coord-bons-to')?.value||'', status=document.getElementById('coord-bons-status')?.value||'';
+        document.querySelectorAll('#coord-bons-list [data-coord-bon]').forEach(row=>{const date=row.dataset.date||'';row.hidden=!!((from&&(!date||date<from))||(to&&(!date||date>to))||(status&&row.dataset.status!==status));});
+      }
+
+      async function downloadCoordinatorBon(index) {
+        const bon=window._coordinatorIssuedBons?.[index]; if(!bon||!coordinatorBonIdentityMatches(bon)) return alert('Bon introuvable ou inaccessible.');
+        const doc=new window.jspdf.jsPDF(); await drawSortieBonBesoinPdf(doc,bon); doc.save(`Bon_Sortie_${getBonReference(bon)}.pdf`);
+      }
+
+      async function previewCoordinatorBon(index) {
+        const bon=window._coordinatorIssuedBons?.[index]; if(!bon||!coordinatorBonIdentityMatches(bon)) return alert('Bon introuvable ou inaccessible.');
+        const preview=window.open('about:blank','_blank'); if(!preview) return alert('Autorisez les fenetres pour afficher le bon.');
+        preview.document.title='Apercu du bon'; preview.document.body.innerHTML='<p style="font:16px sans-serif;padding:24px">Preparation de l apercu...</p>';
+        try { const doc=new window.jspdf.jsPDF(); await drawSortieBonBesoinPdf(doc,bon); const url=URL.createObjectURL(doc.output('blob')); preview.location.replace(url); preview.addEventListener('beforeunload',()=>URL.revokeObjectURL(url),{once:true}); }
+        catch(error){preview.close();alert('Generation de l apercu impossible : '+error.message);}
+      }
+
       function getBonSignatureChain(bon) {
         const chain = [];
         if (bon.technicianSignatureText) chain.push('Technicien : ' + bon.technicianSignatureText);
@@ -9081,7 +9160,7 @@
         const linked = new Set();
         const result = [];
         for (const sortie of sorties) {
-          const demande = demandes.find(d => (sortie.sourceDemandeId != null && (String(d.id) === String(sortie.sourceDemandeId) || d._dbKey === sortie.sourceDemandeId)) || (d.sortieId != null && String(d.sortieId) === String(sortie.id)));
+          const demande = demandes.find(d => (sortie.sourceDemandeId != null && (String(d.id) === String(sortie.sourceDemandeId) || d._dbKey === sortie.sourceDemandeId)) || (d.sortieId != null && String(d.sortieId) === String(sortie.id)) || (sortie.submissionBatchId && d.submissionBatchId === sortie.submissionBatchId));
           const bon = {...demande, ...sortie, historySource:'SORTIE'};
           // Older exports sometimes omit signatures which remain on the request.
           for (const field of ['technicianSignatureText','coordinationSignatureText','validatorDecision','managerSignatureText','validatedAt']) {
