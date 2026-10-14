@@ -37,6 +37,8 @@ BEGIN
  old_text:='CASE WHEN target.profile->>''crossOfficeDirectOrder''=''true'' THEN 11 ELSE 3 END';
  IF position(old_text IN definition)>0 THEN
   definition:=replace(definition,old_text,'CASE WHEN target.role=''Coordinateur V1'' OR target.profile->>''crossOfficeDirectOrder''=''true'' THEN 11 ELSE 3 END');
+ ELSIF position('target.role=''Coordinateur V1'' OR target.profile->>''crossOfficeDirectOrder''=''true''' IN definition)>0 THEN
+  NULL;
  ELSIF position('CASE WHEN target.profile ->> ''crossOfficeDirectOrder'' = ''true'' THEN 11 ELSE 3 END' IN definition)>0 THEN
   definition:=replace(definition,'CASE WHEN target.profile ->> ''crossOfficeDirectOrder'' = ''true'' THEN 11 ELSE 3 END','CASE WHEN target.role=''Coordinateur V1'' OR target.profile->>''crossOfficeDirectOrder''=''true'' THEN 11 ELSE 3 END');
  ELSIF definition ~* $re$cardinality[[:space:]]*\([[:space:]]*service_codes[[:space:]]*\)[[:space:]]*>[[:space:]]*3([^[:digit:]]|$)$re$ THEN
@@ -45,9 +47,14 @@ BEGIN
   RAISE EXCEPTION 'set_account_affiliations service limit changed';
  END IF;
  old_text:='IF target.profile->>''crossOfficeDirectOrder''=''true'' AND (';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'set_account_affiliations cross-office guard changed'; END IF;
- new_text:='IF target.role=''Coordinateur V1'' AND (NOT (office_codes @> ARRAY[''B01'',''B02'']::text[] AND cardinality(office_codes)=2) OR EXISTS(SELECT 1 FROM unnest(service_codes) s WHERE (s IN (''PROD'',''MBM'',''MFTTH'',''DR'',''MNM'',''DESS'',''LS'',''CIDATA'') AND ''B01''<>ALL(office_codes)) OR (s IN (''B2B'',''DEP'',''MAIN'') AND ''B02''<>ALL(office_codes)))) THEN RAISE EXCEPTION ''Coordinateur V1 : bureaux et services incompatibles.''; END IF;'||E'\n  '||old_text;
- definition:=replace(definition,old_text,new_text);
+ IF position('IF target.role=''Coordinateur V1'' AND (' IN definition)>0 THEN
+  NULL;
+ ELSIF position(old_text IN definition)>0 THEN
+  new_text:='IF target.role=''Coordinateur V1'' AND (NOT (office_codes @> ARRAY[''B01'',''B02'']::text[] AND cardinality(office_codes)=2) OR EXISTS(SELECT 1 FROM unnest(service_codes) s WHERE (s IN (''PROD'',''MBM'',''MFTTH'',''DR'',''MNM'',''DESS'',''LS'',''CIDATA'') AND ''B01''<>ALL(office_codes)) OR (s IN (''B2B'',''DEP'',''MAIN'') AND ''B02''<>ALL(office_codes)))) THEN RAISE EXCEPTION ''Coordinateur V1 : bureaux et services incompatibles.''; END IF;'||E'\n  '||old_text;
+  definition:=replace(definition,old_text,new_text);
+ ELSIF position('IF target.role=''Coordinateur V1'' AND (' IN definition)=0 THEN
+  RAISE EXCEPTION 'set_account_affiliations cross-office guard changed';
+ END IF;
  IF definition !~* $re$role[[:space:]]+IN[[:space:]]*\([^)]*'Coordinateur'[^)]*\)[[:space:]]+AND[[:space:]]+profile[[:space:]]*->[[:space:]]*>'id'[[:space:]]*=[[:space:]]*chosen$re$ THEN
   RAISE EXCEPTION 'set_account_affiliations coordinator eligibility changed';
  END IF;
@@ -58,48 +65,89 @@ BEGIN
 
  SELECT pg_get_functiondef('public.eligible_request_coordinator(text)'::regprocedure) INTO definition;
  old_text:='p.role IN (''Coordinateur'',''Coordinatrice'')';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'eligible_request_coordinator role list changed'; END IF;
- EXECUTE replace(definition,old_text,'p.role IN (''Coordinateur'',''Coordinatrice'',''Coordinateur V1'')');
+ IF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,old_text,'p.role IN (''Coordinateur'',''Coordinatrice'',''Coordinateur V1'')');
+ ELSIF definition !~* $re$p[.]role[[:space:]]+IN[[:space:]]*\([^)]*'Coordinateur V1'[^)]*\)$re$ THEN
+  RAISE EXCEPTION 'eligible_request_coordinator role list changed';
+ END IF;
+ EXECUTE definition;
 
  SELECT pg_get_functiondef('public.account_affiliation_contacts(text)'::regprocedure) INTO definition;
- old_text:='''Coordinateur'',''Coordinatrice'',''Validateur''';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'account_affiliation_contacts role list changed'; END IF;
- EXECUTE replace(definition,old_text,'''Coordinateur'',''Coordinatrice'',''Coordinateur V1'',''Validateur''');
+ old_text:='''Coordinateur'',''Coordinatrice''';
+ IF definition ~* $re$role[[:space:]]+IN[[:space:]]*\([^)]*'Coordinateur V1'[^)]*\)$re$ THEN
+  NULL;
+ ELSIF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,old_text,'''Coordinateur'',''Coordinatrice'',''Coordinateur V1''');
+ ELSIF definition !~* $re$role[[:space:]]+IN[[:space:]]*\([^)]*'Coordinateur V1'[^)]*\)$re$ THEN
+  RAISE EXCEPTION 'account_affiliation_contacts role list changed';
+ END IF;
+ EXECUTE definition;
 
  SELECT pg_get_functiondef('public.check_affiliation_contact(text,text,text,text[],text[])'::regprocedure) INTO definition;
  old_text:='role IN (''Coordinateur'',''Coordinatrice'')';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'check_affiliation_contact role list changed'; END IF;
- EXECUTE replace(definition,old_text,'role IN (''Coordinateur'',''Coordinatrice'',''Coordinateur V1'')');
+ IF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,old_text,'role IN (''Coordinateur'',''Coordinatrice'',''Coordinateur V1'')');
+ ELSIF definition !~* $re$role[[:space:]]+IN[[:space:]]*\([^)]*'Coordinateur V1'[^)]*\)$re$ THEN
+  RAISE EXCEPTION 'check_affiliation_contact role list changed';
+ END IF;
+ EXECUTE definition;
 
  SELECT pg_get_functiondef('public.guard_account_affiliation()'::regprocedure) INTO definition;
  old_text:='actor.role IN (''Technicien'',''Coordinateur'',''Coordinatrice'',''Superviseur Terrain'')';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'guard_account_affiliation coordinator branch changed'; END IF;
- definition:=replace(definition,old_text,'actor.role IN (''Technicien'',''Coordinateur'',''Coordinatrice'',''Superviseur Terrain'',''Coordinateur V1'')');
+ IF definition ~* $re$actor[[:space:]]*[.]role[[:space:]]+IN[[:space:]]*\([^)]*'Coordinateur V1'[^)]*\)$re$ THEN
+  NULL;
+ ELSIF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,old_text,'actor.role IN (''Technicien'',''Coordinateur'',''Coordinatrice'',''Superviseur Terrain'',''Coordinateur V1'')');
+ ELSIF definition !~* $re$actor[[:space:]]*[.]role[[:space:]]+IN[[:space:]]*\([^)]*'Coordinateur V1'[^)]*\)$re$ THEN
+  RAISE EXCEPTION 'guard_account_affiliation coordinator branch changed';
+ END IF;
  old_text:='IF actor.role=''Technicien'' THEN';
  new_text:='IF actor.role=''Coordinateur V1'' AND ((office_code=''B01'' AND service_code NOT IN (''PROD'',''MBM'',''MFTTH'',''DR'',''MNM'',''DESS'',''LS'',''CIDATA'')) OR (office_code=''B02'' AND service_code NOT IN (''B2B'',''DEP'',''MAIN''))) THEN RAISE EXCEPTION ''Choisissez un service compatible avec le bureau.''; END IF;'||E'\n  '||old_text;
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'guard_account_affiliation technician branch changed'; END IF;
- definition:=replace(definition,old_text,new_text);
+ IF position('IF actor.role=''Coordinateur V1'' AND ((office_code=' IN definition)>0 THEN
+  NULL;
+ ELSIF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,old_text,new_text);
+ ELSIF position('IF actor.role=''Coordinateur V1'' AND ((office_code=' IN definition)=0 THEN
+  RAISE EXCEPTION 'guard_account_affiliation technician branch changed';
+ END IF;
  EXECUTE definition;
 
  SELECT pg_get_functiondef('public.workflow_request_choices()'::regprocedure) INTO definition;
  old_text:='IF NOT public.special_coordinator(actor.user_id) THEN';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'workflow_request_choices authorization changed'; END IF;
- definition:=replace(definition,old_text,'IF NOT public.special_coordinator(actor.user_id) AND actor.role<>''Coordinateur V1'' THEN');
+ IF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,old_text,'IF NOT public.special_coordinator(actor.user_id) AND actor.role<>''Coordinateur V1'' THEN');
+ ELSIF position('actor.role<>''Coordinateur V1''' IN definition)=0 THEN
+  RAISE EXCEPTION 'workflow_request_choices authorization changed';
+ END IF;
  EXECUTE definition;
 
  SELECT pg_get_functiondef('public.guard_request_validation_office()'::regprocedure) INTO definition;
  old_text:='IF changed OR (special_coordinator(actor.user_id) AND (TG_OP=''INSERT'' OR';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'guard_request_validation_office routing branch changed'; END IF;
- definition:=replace(definition,old_text,'IF changed OR ((special_coordinator(actor.user_id) OR actor.role=''Coordinateur V1'') AND (TG_OP=''INSERT'' OR');
+ IF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,old_text,'IF changed OR ((special_coordinator(actor.user_id) OR actor.role=''Coordinateur V1'') AND (TG_OP=''INSERT'' OR');
+ ELSIF position('special_coordinator(actor.user_id) OR actor.role=''Coordinateur V1''' IN definition)=0 THEN
+  RAISE EXCEPTION 'guard_request_validation_office routing branch changed';
+ END IF;
  old_text:='IF NOT special_coordinator(actor.user_id) OR actor.company_id IS DISTINCT FROM NEW.company_id';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'guard_request_validation_office actor guard changed'; END IF;
- definition:=replace(definition,old_text,'IF NOT (special_coordinator(actor.user_id) OR actor.role=''Coordinateur V1'') OR actor.company_id IS DISTINCT FROM NEW.company_id');
+ IF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,old_text,'IF NOT (special_coordinator(actor.user_id) OR actor.role=''Coordinateur V1'') OR actor.company_id IS DISTINCT FROM NEW.company_id');
+ ELSIF position('NOT (special_coordinator(actor.user_id) OR actor.role=''Coordinateur V1'')' IN definition)=0 THEN
+  RAISE EXCEPTION 'guard_request_validation_office actor guard changed';
+ END IF;
  old_text:='actor.profile->>''crossOfficeDirectOrder''=''true'' AND';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'guard_request_validation_office stock checks changed'; END IF;
- definition:=replace(definition,old_text,'(actor.profile->>''crossOfficeDirectOrder''=''true'' OR actor.role=''Coordinateur V1'') AND');
+ IF position('(actor.profile->>''crossOfficeDirectOrder''=''true'' OR actor.role=''Coordinateur V1'') AND' IN definition)>0 THEN
+  NULL;
+ ELSIF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,old_text,'(actor.profile->>''crossOfficeDirectOrder''=''true'' OR actor.role=''Coordinateur V1'') AND');
+ ELSIF position('actor.role=''Coordinateur V1'') AND' IN definition)=0 THEN
+  RAISE EXCEPTION 'guard_request_validation_office stock checks changed';
+ END IF;
  old_text:='role IN (''Coordinateur'',''Coordinatrice'') AND profile->>''id''=NEW.payload->>''coordinateurId''';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'guard_request_validation_office coordinator lookup changed'; END IF;
- definition:=replace(definition,'role IN (''Coordinateur'',''Coordinatrice'')','role IN (''Coordinateur'',''Coordinatrice'',''Coordinateur V1'')');
+ IF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,'role IN (''Coordinateur'',''Coordinatrice'')','role IN (''Coordinateur'',''Coordinatrice'',''Coordinateur V1'')');
+ ELSIF definition !~* $re$role[[:space:]]+IN[[:space:]]*\([^)]*'Coordinateur V1'[^)]*\)[[:space:]]+AND[[:space:]]+profile[[:space:]]*->[[:space:]]*>'id'[[:space:]]*=$re$ THEN
+  RAISE EXCEPTION 'guard_request_validation_office coordinator lookup changed';
+ END IF;
  EXECUTE definition;
 END $$;
 
