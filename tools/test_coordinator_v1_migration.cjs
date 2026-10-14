@@ -44,6 +44,21 @@ const migration=name=>fs.readFileSync('supabase/migrations/'+name,'utf8').replac
    IF position('Magasinier' IN definition)=0 THEN RAISE EXCEPTION 'test setup did not add the variant multi-role list'; END IF;
    EXECUTE definition;
   END $$;`);
+ await db.exec(`DO $$
+ DECLARE definition text;
+ BEGIN
+  SELECT pg_get_functiondef('public.set_account_affiliations(uuid,uuid,text[],text[],text[],text[])'::regprocedure) INTO definition;
+  definition:=replace(definition,
+   'target.role NOT IN (''Technicien'',''Coordinateur'',''Coordinatrice'',''Gestionnaire'',''Validateur'',''Validatrice'',''Superviseur Terrain'')',
+   'target.role NOT IN (''Magasinier'',''Technicien'',''Coordinatrice'',''Coordinateur'',''Gestionnaire'',''Validateur'',''Validatrice'',''Superviseur Terrain'')');
+  definition:=replace(definition,
+   'role IN (''Coordinateur'',''Coordinatrice'') AND profile->>''id''=chosen',
+   'role IN (''Coordinatrice'', ''Coordinateur'', ''Superviseur Terrain'') AND profile->>''id''=chosen');
+  IF position('Magasinier' IN definition)=0 OR position('Superviseur Terrain' IN definition)=0 THEN
+   RAISE EXCEPTION 'test setup did not add the affiliation role list variants';
+  END IF;
+  EXECUTE definition;
+ END $$;`);
  await db.exec(migration('202610130001_coordinator_v1_dual_office.sql'));
  const definitions=(await db.query(`SELECT p.proname,pg_get_functiondef(p.oid) definition FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('register_company_user','register_company_user_multi','set_account_affiliations','eligible_request_coordinator','account_affiliation_contacts','check_affiliation_contact','guard_account_affiliation','workflow_request_choices','guard_request_validation_office','change_company_user_role')`)).rows;
  assert.equal(definitions.length,10);
@@ -51,6 +66,8 @@ const migration=name=>fs.readFileSync('supabase/migrations/'+name,'utf8').replac
   assert.match(definitions.find(row=>row.proname===name).definition,/Coordinateur V1/,`${name} registers Coordinateur V1`);
  }
  assert.match(definitions.find(row=>row.proname==='change_company_user_role').definition,/CHANGE_COMPANY_USER_ROLE/);
+ assert.match(definitions.find(row=>row.proname==='set_account_affiliations').definition,/target\.role NOT IN \('Magasinier','Technicien','Coordinatrice','Coordinateur','Gestionnaire','Validateur','Validatrice','Superviseur Terrain', 'Coordinateur V1'\)/);
+ assert.match(definitions.find(row=>row.proname==='set_account_affiliations').definition,/role IN \('Coordinatrice', 'Coordinateur', 'Superviseur Terrain', 'Coordinateur V1'\) AND profile->>'id'=chosen/);
  const addUser=async(id,role,firebaseUid)=>{
   const userId='00000000-0000-0000-0000-'+String(id).padStart(12,'0'),profile={id,uid:firebaseUid,role,name:'User '+id,company_id:'COMP-ITC-LEGACY'};
   await db.query('INSERT INTO auth.users VALUES($1,$2)',[userId,id+'@example.test']);
