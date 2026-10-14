@@ -10,15 +10,21 @@ BEGIN
   RAISE EXCEPTION 'register_company_user actor guard changed';
  END IF;
  definition:=regexp_replace(definition,$re$actor[[:space:]]*\.[[:space:]]*role[[:space:]]+NOT[[:space:]]+IN[[:space:]]*\([[:space:]]*'Superviseur'[[:space:]]*,[[:space:]]*('DG'[[:space:]]*,[[:space:]]*)?'SUPER_ADMIN'[[:space:]]*\)$re$,$replacement$actor.role NOT IN ('Superviseur','DG','SUPER_ADMIN')$replacement$,'i');
- old_text:='''Coordinateur'',''Coordinatrice'',''Superviseur Terrain''';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'register_company_user role list changed'; END IF;
- definition:=replace(definition,old_text,'''Coordinateur'',''Coordinatrice'',''Coordinateur V1'',''Superviseur Terrain''');
+ IF definition !~* $re$user_role[[:space:]]+NOT[[:space:]]+IN[[:space:]]*\($re$ THEN
+  RAISE EXCEPTION 'register_company_user role list changed';
+ END IF;
+ IF definition !~* $re$user_role[[:space:]]+NOT[[:space:]]+IN[[:space:]]*\([^)]*'Coordinateur V1'[^)]*\)$re$ THEN
+  definition:=regexp_replace(definition,$re$(user_role[[:space:]]+NOT[[:space:]]+IN[[:space:]]*\()([^)]*)(\))$re$,$replacement$\1\2, 'Coordinateur V1'\3$replacement$,'i');
+ END IF;
  EXECUTE definition;
 
  SELECT pg_get_functiondef('public.register_company_user_multi(uuid,uuid,text,text,text,text,text[],text[],text[],text[],text[])'::regprocedure) INTO definition;
- old_text:='''Coordinateur'',''Coordinatrice'',''Gestionnaire''';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'register_company_user_multi role list changed'; END IF;
- definition:=replace(definition,old_text,'''Coordinateur'',''Coordinatrice'',''Coordinateur V1'',''Gestionnaire''');
+ IF definition !~* $re$IF[[:space:]]+user_role[[:space:]]+IN[[:space:]]*\($re$ THEN
+  RAISE EXCEPTION 'register_company_user_multi role list changed';
+ END IF;
+ IF definition !~* $re$IF[[:space:]]+user_role[[:space:]]+IN[[:space:]]*\([^)]*'Coordinateur V1'[^)]*\)[[:space:]]+THEN$re$ THEN
+  definition:=regexp_replace(definition,$re$(IF[[:space:]]+user_role[[:space:]]+IN[[:space:]]*\()([^)]*)(\)[[:space:]]+THEN)$re$,$replacement$\1\2, 'Coordinateur V1'\3$replacement$,'i');
+ END IF;
  EXECUTE definition;
 
  SELECT pg_get_functiondef('public.set_account_affiliations(uuid,uuid,text[],text[],text[],text[])'::regprocedure) INTO definition;

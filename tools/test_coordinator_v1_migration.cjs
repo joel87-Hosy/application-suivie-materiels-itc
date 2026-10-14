@@ -32,9 +32,18 @@ const migration=name=>fs.readFileSync('supabase/migrations/'+name,'utf8').replac
  BEGIN
   SELECT pg_get_functiondef('public.register_company_user(uuid,uuid,text,text,text,text,text[])'::regprocedure) INTO definition;
   definition:=replace(definition,'actor.role NOT IN (''Superviseur'',''SUPER_ADMIN'')','actor.role NOT IN (''Superviseur'', ''DG'', ''SUPER_ADMIN'')');
-  IF position('DG' IN definition)=0 THEN RAISE EXCEPTION 'test setup did not add the DG guard'; END IF;
-  EXECUTE definition;
- END $$;`);
+   definition:=replace(definition,'''Coordinateur'',''Coordinatrice'',''Superviseur Terrain''','''Coordinateur'',''Magasinier'',''Coordinatrice'',''Superviseur Terrain''');
+   IF position('DG' IN definition)=0 OR position('Magasinier' IN definition)=0 THEN RAISE EXCEPTION 'test setup did not add the DG guard and variant role list'; END IF;
+   EXECUTE definition;
+  END $$;`);
+  await db.exec(`DO $$
+  DECLARE definition text;
+  BEGIN
+   SELECT pg_get_functiondef('public.register_company_user_multi(uuid,uuid,text,text,text,text,text[],text[],text[],text[],text[])'::regprocedure) INTO definition;
+   definition:=replace(definition,'''Coordinateur'',''Coordinatrice'',''Gestionnaire''','''Coordinateur'',''Magasinier'',''Coordinatrice'',''Gestionnaire''');
+   IF position('Magasinier' IN definition)=0 THEN RAISE EXCEPTION 'test setup did not add the variant multi-role list'; END IF;
+   EXECUTE definition;
+  END $$;`);
  await db.exec(migration('202610130001_coordinator_v1_dual_office.sql'));
  const definitions=(await db.query(`SELECT p.proname,pg_get_functiondef(p.oid) definition FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('register_company_user','register_company_user_multi','set_account_affiliations','eligible_request_coordinator','account_affiliation_contacts','check_affiliation_contact','guard_account_affiliation','workflow_request_choices','guard_request_validation_office','change_company_user_role')`)).rows;
  assert.equal(definitions.length,10);
