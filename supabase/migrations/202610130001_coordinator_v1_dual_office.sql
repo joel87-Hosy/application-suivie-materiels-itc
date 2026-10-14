@@ -35,8 +35,15 @@ BEGIN
   definition:=regexp_replace(definition,$re$(target[[:space:]]*\.[[:space:]]*role[[:space:]]+NOT[[:space:]]+IN[[:space:]]*\()([^)]*)(\))$re$,$replacement$\1\2, 'Coordinateur V1'\3$replacement$,'i');
  END IF;
  old_text:='CASE WHEN target.profile->>''crossOfficeDirectOrder''=''true'' THEN 11 ELSE 3 END';
- IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'set_account_affiliations service limit changed'; END IF;
- definition:=replace(definition,old_text,'CASE WHEN target.role=''Coordinateur V1'' OR target.profile->>''crossOfficeDirectOrder''=''true'' THEN 11 ELSE 3 END');
+ IF position(old_text IN definition)>0 THEN
+  definition:=replace(definition,old_text,'CASE WHEN target.role=''Coordinateur V1'' OR target.profile->>''crossOfficeDirectOrder''=''true'' THEN 11 ELSE 3 END');
+ ELSIF position('CASE WHEN target.profile ->> ''crossOfficeDirectOrder'' = ''true'' THEN 11 ELSE 3 END' IN definition)>0 THEN
+  definition:=replace(definition,'CASE WHEN target.profile ->> ''crossOfficeDirectOrder'' = ''true'' THEN 11 ELSE 3 END','CASE WHEN target.role=''Coordinateur V1'' OR target.profile->>''crossOfficeDirectOrder''=''true'' THEN 11 ELSE 3 END');
+ ELSIF definition ~* $re$cardinality[[:space:]]*\([[:space:]]*service_codes[[:space:]]*\)[[:space:]]*>[[:space:]]*3([^[:digit:]]|$)$re$ THEN
+  definition:=regexp_replace(definition,$re$cardinality[[:space:]]*\([[:space:]]*service_codes[[:space:]]*\)[[:space:]]*>[[:space:]]*3([^[:digit:]]|$)$re$,$replacement$cardinality(service_codes)>(CASE WHEN target.role='Coordinateur V1' THEN 11 ELSE 3 END)\1$replacement$,'i');
+ ELSE
+  RAISE EXCEPTION 'set_account_affiliations service limit changed';
+ END IF;
  old_text:='IF target.profile->>''crossOfficeDirectOrder''=''true'' AND (';
  IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'set_account_affiliations cross-office guard changed'; END IF;
  new_text:='IF target.role=''Coordinateur V1'' AND (NOT (office_codes @> ARRAY[''B01'',''B02'']::text[] AND cardinality(office_codes)=2) OR EXISTS(SELECT 1 FROM unnest(service_codes) s WHERE (s IN (''PROD'',''MBM'',''MFTTH'',''DR'',''MNM'',''DESS'',''LS'',''CIDATA'') AND ''B01''<>ALL(office_codes)) OR (s IN (''B2B'',''DEP'',''MAIN'') AND ''B02''<>ALL(office_codes)))) THEN RAISE EXCEPTION ''Coordinateur V1 : bureaux et services incompatibles.''; END IF;'||E'\n  '||old_text;

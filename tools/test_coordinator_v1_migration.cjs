@@ -52,9 +52,13 @@ const migration=name=>fs.readFileSync('supabase/migrations/'+name,'utf8').replac
    'target.role NOT IN (''Technicien'',''Coordinateur'',''Coordinatrice'',''Gestionnaire'',''Validateur'',''Validatrice'',''Superviseur Terrain'')',
    'target.role NOT IN (''Magasinier'',''Technicien'',''Coordinatrice'',''Coordinateur'',''Gestionnaire'',''Validateur'',''Validatrice'',''Superviseur Terrain'')');
   definition:=replace(definition,
+   'CASE WHEN target.profile->>''crossOfficeDirectOrder''=''true'' THEN 11 ELSE 3 END',
+   'CASE WHEN target.profile ->> ''crossOfficeDirectOrder'' = ''true'' THEN 11 ELSE 3 END');
+  definition:=replace(definition,
    'role IN (''Coordinateur'',''Coordinatrice'') AND profile->>''id''=chosen',
    'role IN (''Coordinatrice'', ''Coordinateur'', ''Superviseur Terrain'') AND profile->>''id''=chosen');
-  IF position('Magasinier' IN definition)=0 OR position('Superviseur Terrain' IN definition)=0 THEN
+  IF position('Magasinier' IN definition)=0 OR position('Superviseur Terrain' IN definition)=0
+     OR position('target.profile ->> ''crossOfficeDirectOrder'' = ''true''' IN definition)=0 THEN
    RAISE EXCEPTION 'test setup did not add the affiliation role list variants';
   END IF;
   EXECUTE definition;
@@ -68,6 +72,7 @@ const migration=name=>fs.readFileSync('supabase/migrations/'+name,'utf8').replac
  assert.match(definitions.find(row=>row.proname==='change_company_user_role').definition,/CHANGE_COMPANY_USER_ROLE/);
  assert.match(definitions.find(row=>row.proname==='set_account_affiliations').definition,/target\.role NOT IN \('Magasinier','Technicien','Coordinatrice','Coordinateur','Gestionnaire','Validateur','Validatrice','Superviseur Terrain', 'Coordinateur V1'\)/);
  assert.match(definitions.find(row=>row.proname==='set_account_affiliations').definition,/role IN \('Coordinatrice', 'Coordinateur', 'Superviseur Terrain', 'Coordinateur V1'\) AND profile->>'id'=chosen/);
+ assert.match(definitions.find(row=>row.proname==='set_account_affiliations').definition,/target\.role='Coordinateur V1' OR target\.profile->>'crossOfficeDirectOrder'='true'/);
  const addUser=async(id,role,firebaseUid)=>{
   const userId='00000000-0000-0000-0000-'+String(id).padStart(12,'0'),profile={id,uid:firebaseUid,role,name:'User '+id,company_id:'COMP-ITC-LEGACY'};
   await db.query('INSERT INTO auth.users VALUES($1,$2)',[userId,id+'@example.test']);
