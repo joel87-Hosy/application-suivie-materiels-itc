@@ -1,6 +1,9 @@
 (function (global) {
   const collections = ['stock', 'stockMovements', 'sorties', 'demandes', 'techDemandes', 'retours', 'notifications', 'consumptionArchives', 'platformAuditLogs', 'companies', 'users'];
-  const initialCollections = collections.filter(name => !['stockMovements', 'consumptionArchives', 'platformAuditLogs'].includes(name));
+  // Only account lookup and the initial workspace block sign-in. Histories,
+  // requests and notifications are hydrated immediately after the first view.
+  const initialCollections = ['stock', 'users'];
+  const deferredCollections = collections.filter(name => !initialCollections.includes(name));
   const settings = ['materialTypes', 'scansDuJour', 'derniereDateScan', 'lastConsumptionArchiveKey'];
   const clone = value => JSON.parse(JSON.stringify(value));
   const clean = value => {
@@ -21,6 +24,7 @@
       this.timer = null;
       this.refreshTimer = null;
       this.pendingRefreshNames = new Set();
+      this.hydrationPromise = null;
       this.channel = null;
       this.generation = 0;
       this.stop();
@@ -32,6 +36,7 @@
       if (this.refreshTimer) clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
       this.pendingRefreshNames.clear();
+      this.hydrationPromise = null;
       if (this.channel) this.client.removeChannel(this.channel);
       this.channel = null;
       this.profile = null;
@@ -81,6 +86,9 @@
       if (generation !== this.generation) throw new Error('Session remplacée.');
       this.ready = true;
       this.watchRecords(generation);
+      this.hydrationPromise = new Promise(resolve => setTimeout(resolve, 0))
+        .then(() => this.readCollections(deferredCollections, generation, {notify:true}))
+        .catch(error => { if (generation === this.generation) console.warn('Chargement différé des historiques indisponible:', error); });
       // Refresh only after an explicit action; background polling destroys drafts.
       return this.value();
     }
@@ -111,10 +119,11 @@
       });
     }
     async read(generation, {notify = true, names = collections} = {}) {
-      const [records, { data: settingRows, error: settingsError }] = await Promise.all([
+      const [records, settingsResult] = await Promise.all([
         this.readAllRecords(generation, names),
-        this.client.from('app_settings').select('*').eq('company_id', this.profile.company_id),
+        names.includes('stock') ? this.client.from('app_settings').select('*').eq('company_id', this.profile.company_id) : Promise.resolve({data:null,error:null}),
       ]);
+      const {data:settingRows,error:settingsError}=settingsResult;
       if (settingsError) throw settingsError;
       if (generation !== this.generation) return;
       this.raw = {};
@@ -131,20 +140,7 @@
     async readCollections(names, generation, {notify = false} = {}) {
       if (!this.ready || !this.profile) throw new Error('Données non chargées. Reconnectez-vous.');
       const company = this.profile.company_id;
-      const results = await Promise.all([...new Set(names)].map(async name => {
-        const records = [];
-        for (;;) {
-          if (generation !== this.generation) throw new Error('Session remplacée.');
-          let query = this.client.from('app_records').select('*').eq('collection', name)
-            .order('record_key', {ascending:true}).range(records.length, records.length + 499);
-          if (this.profile.role !== 'SUPER_ADMIN') query = query.eq('company_id', company);
-          const {data, error} = await query;
-          if (error) throw error;
-          if (!data?.length) break;
-          records.push(...data);
-        }
-        return [name, records];
-      }));
+      const results = await this.readRecordGroups(names, generation, company, this.profile.role==='SUPER_ADMIN');
       if (generation !== this.generation) return;
       for (const [name, records] of results) {
         this.raw[name] = Object.fromEntries(records.map(row => [row.record_key, row.payload]));
@@ -155,32 +151,46 @@
       }
       if (notify) this.onChange(this.value());
     }
+    async readRecordGroups(names,generation,company,isAdmin){
+      return Promise.all([...new Set(names)].map(async name=>[name,await this.readCollectionRecords(generation,name,company,isAdmin)]));
+    }
     async readAllRecords(generation, names = collections) {
       const company = this.profile.company_id, isAdmin = this.profile.role === 'SUPER_ADMIN';
       // Fetch collections concurrently so a large history cannot delay the
       // stock, users, and requests needed to enter the application.
-      const groups = await Promise.all(names.map(async collection => {
-        const records = [];
-        for (;;) {
-          if (generation !== this.generation) throw new Error('Session remplacée.');
-          let query = this.client.from('app_records').select('*').eq('collection', collection)
-            .order('record_key', {ascending:true}).range(records.length, records.length + 499);
-          if (!isAdmin) query = query.eq('company_id', company);
-          const {data, error} = await query;
-          if (error) throw error;
-          if (!data?.length) break;
-          records.push(...data);
-        }
-        return records;
-      }));
+      const groups = names.includes('stock') && this.profile.role !== 'SUPER_ADMIN'
+        ? [...(await this.readRecordGroups(names.filter(name=>name!=='stock'),generation,company,isAdmin)).map(([,records])=>records),await this.readStockRecords(generation,company)]
+        : (await this.readRecordGroups(names,generation,company,isAdmin)).map(([,records])=>records);
       if (generation !== this.generation) throw new Error('Session remplacée.');
-      const records = groups.flat(), seen = new Set();
+      const records = groups.flat();
+      const seen = new Set();
       for (const row of records) {
         const identity = JSON.stringify([row.collection, row.record_key]);
         if (seen.has(identity)) throw new Error('Les données ont changé pendant le chargement. Actualisez la page.');
         seen.add(identity);
       }
       return records;
+    }
+    async readCollectionRecords(generation, collection, company, isAdmin) {
+      const records=[];
+      for (;;) {
+        if (generation !== this.generation) throw new Error('Session remplacée.');
+        let query=this.client.from('app_records').select('*').eq('collection',collection)
+          .order('record_key',{ascending:true}).range(records.length,records.length+499);
+        if (!isAdmin) query=query.eq('company_id',company);
+        const {data,error}=await query;
+        if(error)throw error;
+        if(!data?.length)break;
+        records.push(...data);
+      }
+      return records;
+    }
+    async readStockRecords(generation, company) {
+      const {data,error}=await this.client.from('app_records').select('record_key,payload,company_id,collection').eq('collection','stock')
+        .eq('company_id',company).order('record_key',{ascending:true});
+      if(error)throw error;
+      if(generation!==this.generation)throw new Error('Session remplacée.');
+      return data||[];
     }
     deny(error, generation) {
       if (generation !== this.generation) return;
