@@ -17,6 +17,11 @@
   }
   async function pdf(doc,record,data,y){
     const bon=global.BonReference.resolve(record,data);
+    if(bon.stockKind==='CHUTE'){
+      if(!bon.company_id||!(bon.sourceDemandeId||bon.id||bon._dbKey))throw Error('Identité du bon de chute incomplète : QR code impossible. Actualisez les données.');
+      const holder=document.createElement('div');holder.style.cssText='position:fixed;left:-10000px;top:0;';document.body.append(holder);
+      try{new global.QRCode(holder,{text:code(record,data),width:256,height:256,correctLevel:global.QRCode.CorrectLevel.M});const canvas=holder.querySelector('canvas');if(!canvas)throw Error('Impossible de générer le QR code du bon.');doc.addImage(canvas.toDataURL('image/png'),'PNG',14,y,28,28);doc.setFontSize(8);doc.text([`Demande créée le : ${date(bon.bonCreatedAt||bon.createdAt||bon.date)}`,`Validée par le coordinateur le : ${date(bon.coordinationSignedAt)}`,`Validée par le validateur le : ${date(bon.validatorDecision?.at)}`,'Le statut et les validations du bon sont enregistrés côté serveur.'],47,y+4,{maxWidth:148});return y+34;}finally{holder.remove();}
+    }
     if(!(bon.sourceDemandeId||bon.id||bon._dbKey)||!bon.company_id)throw Error('Identité du bon incomplète : QR code impossible. Actualisez les données.');
     const holder=document.createElement('div');
     holder.style.cssText='position:fixed;left:-10000px;top:0;';document.body.append(holder);

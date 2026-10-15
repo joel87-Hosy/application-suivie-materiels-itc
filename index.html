@@ -6572,10 +6572,32 @@
       }
 
       window.generateSignedBonPdf = async function(bon) {
+        if (bon?.stockKind === "CHUTE") return generateCableOffcutBonPdf(bon);
         const doc = new window.jspdf.jsPDF();
         await drawSortieBonBesoinPdf(doc, bon);
         return doc.output('blob');
       };
+
+      async function generateCableOffcutBonPdf(bon) {
+        const doc = new window.jspdf.jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+        const createdAt = bon.bonCreatedAt || bon.createdAt || bon.date;
+        const asDate = value => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString('fr-FR') : 'Non renseignée';
+        doc.autoTable({startY:10,margin:{left:margin,right:margin},theme:'grid',styles:{font:'helvetica',fontSize:8,cellPadding:2,lineColor:[20,20,20],lineWidth:0.25,valign:'middle'},columnStyles:{0:{cellWidth:42,minCellHeight:20},1:{cellWidth:82,halign:'center',fontStyle:'bold'},2:{cellWidth:58,fontSize:7}},body:[[{content:'',styles:{minCellHeight:20}},{content:'SERVICE LOGISTIQUE',styles:{fontSize:10}},`Créé le ${asDate(createdAt)}\nValidé le ${asDate(bon.validatorDecision?.at)}`],[{content:'',styles:{minCellHeight:12}},{content:'FICHE DE DEMANDE DE CHUTE DE CÂBLE',styles:{fontSize:11,fontStyle:'bold',halign:'center'}},'']]});
+        await addLogoToPdf(doc,margin+3,15,34,13);
+        let y=doc.lastAutoTable.finalY+6;
+        doc.setFontSize(8);doc.text(`Code : ${bon.reference || BonReference.format(bon)}`,margin,y);y+=5;
+        y=await window.BonScanner.pdf(doc,bon,appData,y);
+        doc.text(`Stock : ${bon.op || 'CHUTES'}    Lot : ${bon.lotId || '—'}`,margin,y,{maxWidth:pageWidth-margin*2});y+=8;
+        doc.text(`Technicien : ${bon.technicienName || bon.demandeurName || '—'}    Coordinateur : ${bon.coordinationSignatureText || 'En attente'}`,margin,y,{maxWidth:pageWidth-margin*2});y+=8;
+        doc.autoTable({startY:y,margin:{left:margin,right:margin},theme:'grid',head:[['Désignation','Type','Longueur demandée','Origine du lot']],body:(bon.items||[]).map(item=>[item.label,item.type,`${item.qty} m`,bon.sourceReference||'—']),styles:{font:'helvetica',fontSize:8,cellPadding:3,lineColor:[20,20,20],lineWidth:0.25},headStyles:{fillColor:[255,255,255],textColor:[20,20,20],fontStyle:'bold'}});
+        y=doc.lastAutoTable.finalY+6;doc.setFontSize(9);doc.text(`Motif / chantier : ${bon.motif || '—'}`,margin,y,{maxWidth:pageWidth-margin*2});y+=8;
+        doc.text(`Date de demande : ${asDate(createdAt)}    Échéance : ${asDate(bon.bonValidUntil)}`,margin,y,{maxWidth:pageWidth-margin*2});y+=7;
+        doc.text(`Validateur : ${bon.validatorDecision?.name || 'En attente'}    Gestionnaire : ${bon.assignedGestionnaireName || 'En attente'}`,margin,y,{maxWidth:pageWidth-margin*2});
+        window.BonSignatures.pdf(doc,bon,appData,y+7);
+        return doc.output('blob');
+      }
 
       async function exportSortieRefPDF(refKeyEncoded) {
         const refKey = decodeURIComponent(String(refKeyEncoded || ""));

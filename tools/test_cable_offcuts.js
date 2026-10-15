@@ -24,11 +24,12 @@ await assert.rejects(execute({action:'return',qty:60,motif:'Trop long'}),/dépas
 await assert.rejects(execute({action:'manualEntry',label:'Câble',qty:1,motif:'Stock initial'},tech),/gestionnaire/);
 const manual=await execute({action:'manualEntry',label:'Câble 1FO',qty:10.5,motif:'Inventaire entrepôt'},manager);
 assert.equal(state.lots[manual].qty,10.5);assert.equal(state.lots[lot].qty,40.25,'Lots are not merged');
-const req=await execute({action:'request',lotId:lot,qty:30,motif:'Chantier B'});
+const req=await execute({action:'request',lotId:lot,qty:30,motif:'Chantier B',signature:{name:'Technicien'}});
 await assert.rejects(execute({action:'issue',target:req},manager),/non disponible/);
-await execute({action:'approveRequest',target:req},coord);
-const competing=await execute({action:'request',lotId:lot,qty:20,motif:'Chantier C'});
-await execute({action:'approveRequest',target:competing},coord);
+await assert.rejects(execute({action:'approveRequest',target:req},coord),/Signature du coordinateur/);
+await execute({action:'approveRequest',target:req,signature:{name:'Coordinateur'}},coord);
+const competing=await execute({action:'request',lotId:lot,qty:20,motif:'Chantier C',signature:{name:'Technicien'}});
+await execute({action:'approveRequest',target:competing,signature:{name:'Coordinateur'}},coord);
 await execute({action:'issue',target:req},manager,'issue');
 assert.equal(state.lots[lot].qty,10.25);
 await assert.rejects(execute({action:'issue',target:competing},manager),/insuffisante/);

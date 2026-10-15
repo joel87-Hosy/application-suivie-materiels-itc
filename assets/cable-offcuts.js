@@ -45,7 +45,7 @@
       if(coord&&r.status==='COORD_PENDING')return btn(kind==='returns'?'approveReturn':'approveRequest',r.id,'Valider')+' '+btn(kind==='returns'?'rejectReturn':'rejectRequest',r.id,'Refuser');
       if(manager&&r.status==='RECEPTION_PENDING'&&kind==='returns')return btn('receiveReturn',r.id,'Confirmer la réception physique')+' '+btn('rejectReturn',r.id,'Refuser');
       if(manager&&r.status==='ISSUE_PENDING'&&kind==='requests'&&(!data.workflowEnabled||r.assignedManagerUid===data.userId))return btn('issue',r.id,'Confirmer la sortie physique')+' '+btn('rejectRequest',r.id,'Refuser');
-      return kind==='requests'&&r.status==='ISSUED'?btn('bon',r.id,'Bon de sortie PDF'):'';
+      return kind==='requests'&&['COORD_PENDING','VALIDATOR_PENDING','ISSUE_PENDING','ISSUED'].includes(r.status)?btn('bon',r.id,'Afficher le bon PDF'):'';
     };
     const history=rows(s.events).sort((a,b)=>b.at.localeCompare(a.at));
     container.innerHTML=`<div class="space-y-6 p-4">
@@ -63,11 +63,14 @@
       <section class="bg-white rounded-2xl p-5 border"><h3 class="font-bold mb-3">Historique des flux — Chutes ${esc(op)}</h3>${table(['Date','Action / auteur','Câble / longueur','Variation du stock','Lot / référence / origine'],history.map(e=>[esc(date(e.at)),esc(actions[e.action])+'<br>'+esc(e.actorName),esc(e.label)+'<br>'+quantity(e.qty),quantity(e.delta),esc(e.lotId||'—')+'<br>'+esc(e.reference)+'<br>'+esc(e.sourceReference||'')]))}</section>`}</div>`;
     bind();
   }
-  function stamps(r){return ['coordination','validation','reception','delivery','rejection'].filter(k=>r[k]).map(k=>esc(r[k].name)+' — '+esc(date(r[k].at))+(r[k].reason?' : '+esc(r[k].reason):'')).join('<br>');}
+  function stamps(r){const entries=[...(r.technicianSigned?[['technicianSigned','Technicien']]:[]),...['coordination','validation','reception','delivery','rejection'].map(k=>r[k]?[k,k==='coordination'?'Coordinateur':k==='validation'?'Validateur':k==='delivery'?'Gestionnaire':k==='reception'?'Réception':'Décision']:null).filter(Boolean)];return entries.map(([key,label])=>{const entry=r[key];return `<b>${label} :</b> ${esc(entry.signature?.name||entry.name)} — ${esc(date(entry.at))}${entry.reason?' : '+esc(entry.reason):''}${entry.signature?.image?`<br><img src="${esc(entry.signature.image)}" alt="Signature ${label}" style="max-width:220px;width:100%;height:55px;object-fit:contain">`:''}`;}).join('<br>');}
   function bind(){
     container.onchange=e=>{if(e.target.id==='chute-op'&&!busy){op=e.target.value;render();}};
     container.onsubmit=async e=>{const form=e.target.closest('[data-command]');if(!form)return;e.preventDefault();if(!form.reportValidity())return;
       const payload=Object.fromEntries(new FormData(form));payload.action=form.dataset.command;if(payload.qty)payload.qty=Number(payload.qty);
+      if(payload.action==='request'&&role()==='Technicien'){
+        const signature=await captureSignature('Signature du technicien',env.profile()?.name||'');if(!signature)return;payload.signature=signature;
+      }
       if(payload.action==='return'){
         const source=sourceOptions().find(s=>s.choice===payload.source);if(!source)return;
         Object.assign(payload,source.issueId?{issueId:source.issueId}:{sortieKey:source.sortieKey,itemIndex:source.itemIndex});delete payload.source;
@@ -76,11 +79,16 @@
     };
     container.onclick=async e=>{const button=e.target.closest('[data-action]');if(!button||busy)return;
       const action=button.dataset.action,id=button.dataset.id;
-      if(action==='refresh')return refresh();if(action==='excel')return exportExcel();if(action==='pdf')return exportPdf();if(action==='bon')return exportPdf(id);
+      if(action==='refresh')return refresh();if(action==='excel')return exportExcel();if(action==='pdf')return exportPdf();if(action==='bon')return exportBon(id);
       let reason,managerUid;
       if(action==='validateRequest'){managerUid=Array.from(container.querySelectorAll('[data-manager]')).find(el=>el.dataset.manager===id)?.value;if(!managerUid)return global.alert('Choisissez le gestionnaire dédié.');}
       if(action.startsWith('reject')){reason=global.prompt('Motif du refus');if(!reason?.trim())return;}
       if(['receiveReturn','issue'].includes(action)&&!global.confirm(action==='receiveReturn'?'Confirmer que la longueur déclarée a été reçue physiquement, contrôlée et est en bon état ?':'Confirmer la remise physique de cette longueur au technicien ?'))return;
+      if(action==='approveRequest'){
+        const signature=await captureSignature('Signature du coordinateur',env.profile()?.name||'');
+        if(!signature)return;
+        await mutate({action,target:id,signature},button);return;
+      }
       await mutate({action,target:id,...(reason?{reason}:{}),...(managerUid?{managerUid}:{})},button);
     };
   }
@@ -93,6 +101,20 @@
     try{await call({...payload,op,commandId:element.dataset.commandId});if(token===generation){await refresh();const message=container?.querySelector('#chute-message');if(message)message.textContent='Opération enregistrée et tracée.';}}
     catch(e){if(token===generation){const message=container.querySelector('#chute-message');if(message)message.textContent=e.message;}}
     finally{busy=false;container?.querySelectorAll('button,input,select,textarea').forEach(el=>el.disabled=false);}
+  }
+  async function captureSignature(title,name){
+    if(global.BonSignatures?.capture)return global.BonSignatures.capture(title,name);
+    const signer=global.prompt(title,name||'');return signer?.trim()?{name:signer.trim(),image:null}:null;
+  }
+  function bonRecord(request,withCompany=true){
+    const createdAt=request.createdAt||new Date().toISOString();
+    const signature=(key,label,stamp)=>stamp?{name:stamp.signature?.name||stamp.name,at:stamp.at,image:stamp.signature?.image||null,label}:null;
+    const bonSignatures={technician:signature('technician','Technicien',request.technicianSigned),coordination:signature('coordination','Coordinateur',request.coordination),validator:signature('validator','Validateur',request.validation),manager:signature('manager','Gestionnaire',request.delivery)};
+    return {id:'CHUTE-'+request.id,sourceDemandeId:'CHUTE-'+request.id,_dbKey:request.id,...(withCompany?{company_id:env.profile()?.company_id}:{}),stockKind:'CHUTE',date:createdAt,createdAt,bonCreatedAt:createdAt,bonValidUntil:null,status:request.status==='ISSUED'?'LIVRÉE':request.status,equipe:request.technicienName,demandeurName:request.technicienName,demandeurRole:'TECHNICIEN',technicienName:request.technicienName,technicienUid:request.technicienUid,technicianSignatureText:request.technicianSigned?.name||request.technicienName,technicianSignedAt:request.technicianSigned?.at||createdAt,technicienSignature:request.technicianSigned?.signature,emetteur:request.technicienName,ref:request.motif,motif:request.motif,op:'CHUTES '+op,serviceAbbreviation:'CHUTES',items:[{label:request.label,op:'CHUTES '+op,qty:request.qty,unit:'m',type:request.materialType}],bonSignatures,coordinationSignatureText:request.coordination?.name,coordinationSignedAt:request.coordination?.at,validatorDecision:request.validation?{approved:true,name:request.validation.name,at:request.validation.at}:null,assignedGestionnaireName:request.assignedManagerName,managerSignatureText:request.delivery?.name,managerSignedAt:request.delivery?.at,lotId:request.lotId,sourceReference:request.sourceReference,reference:request.reference||('BS-CHUTE-'+request.id),workflow:'CABLE_OFFCUT'};
+  }
+  async function exportBon(id){
+    const request=state().requests?.[id];if(!request||!global.generateSignedBonPdf){global.alert('Le bon de chute est indisponible. Actualisez puis réessayez.');return;}
+    try{const blob=await global.generateSignedBonPdf(bonRecord(request,false));const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=(request.reference||'Bon_CHUTE_'+request.id)+'.pdf';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){global.alert('Impossible de générer le bon de chute : '+error.message);}
   }
   function reportRows(){return rows(state().events).sort((a,b)=>a.at.localeCompare(b.at)).map(e=>({'Date':date(e.at),'Stock de provenance':'CHUTES '+op,'Action':actions[e.action],'Câble':e.label,'Longueur (m)':e.qty,'Variation (m)':e.delta,'Lot':e.lotId||'','Référence':e.reference,'Origine':e.sourceReference||'','Auteur':e.actorName}));}
   function exportExcel(){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(reportRows()),'Flux chutes');XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows(state().lots).map(l=>({'Stock':'CHUTES '+op,'Lot':l.id,'Câble':l.label,'Type':l.materialType,'Disponible (m)':l.qty,'Longueur initiale (m)':l.initialQty,'Origine':l.origin,'Bon source':l.sourceReference,'Lot précédent':l.parentLotId||'','Réception':date(l.createdAt)}))),'Stock actuel');XLSX.writeFile(wb,'Chutes_'+op+'.xlsx');}
