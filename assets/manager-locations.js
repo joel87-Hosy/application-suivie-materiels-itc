@@ -11,17 +11,19 @@
     const token=++generation;
     if(env.profile()?.role!=='Gestionnaire'){container.textContent='Accès réservé aux gestionnaires.';return;}
     const company=env.profile().company_id;
-    container.innerHTML='<p class="p-6" role="status">Chargement de vos stocks…</p>';
+    let cached=(env.data().stock_locations||[]).filter(l=>l.company_id===company);
+    if(!container.dataset.managerLocationsReady)container.innerHTML='<p class="p-6" role="status">Ouverture de vos stocks…</p>';
     try{
-      await env.refresh();
-      const locations=[];
-      for(;;){
-        const {data,error}=await env.client().from('stock_locations').select('*').eq('company_id',company).order('op').range(locations.length,locations.length+499);
-        if(error)throw error;
-        if(token!==generation)return;
-        if(!data?.length)break;
-        locations.push(...data);
-      }
+      if(cached.length)render(container,cached,selected,token);
+      const locations=await (async()=>{const list=[];for(;;){const {data,error}=await env.client().from('stock_locations').select('*').eq('company_id',company).order('op').range(list.length,list.length+499);if(error)throw error;if(token!==generation)return [];if(!data?.length)break;list.push(...data);}return list;})();
+      if(token!==generation)return;
+      env.data().stock_locations=locations;
+      if(locations.length||!cached.length)render(container,locations,selected,token);
+      env.refresh().then(()=>{if(token===generation)render(container,locations,selected,token);}).catch(error=>console.warn('Actualisation des stocks assignés indisponible',error));
+    }catch(error){if(token===generation&&!container.dataset.managerLocationsReady)container.textContent=error.message;}
+  }
+  function render(container,locations,selected,token){
+      const company=env.profile().company_id;
       const assigned=new Set(global.ControlCore.managerStocks(env.profile()));
       const owned=locations.filter(l=>assigned.has(l.op));
       const names=new Map(locations.map(l=>[l.op,l.name]));
@@ -50,9 +52,10 @@
           <p class="text-sm">Pour un article existant de même type, la quantité sera ajoutée à celle en stock.</p>
           <button type="submit" class="bg-emerald-700 text-white rounded-xl p-3">Enregistrer l’entrée</button><p role="status"></p></form>`:active?'<button type="button" data-reception class="bg-emerald-700 text-white rounded-xl p-3">Ajouter des articles via Réception matériel</button>':''}
         <button type="button" data-refresh class="border rounded-xl p-3">Actualiser mes stocks</button></div>`;
+      container.dataset.managerLocationsReady='true';
       container.querySelector('[data-create]').elements.parent.value='';
       container.querySelector('[data-location]').onchange=e=>enter(container,e.target.value);
-      container.querySelector('[data-refresh]').onclick=()=>enter(container,active?.op);
+      container.querySelector('[data-refresh]').onclick=()=>{container.dataset.managerLocationsReady='';enter(container,active?.op);};
       container.querySelector('[data-reception]')?.addEventListener('click',()=>env.navigate('reception'));
       container.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>global.ManagerStock.edit(items[Number(b.dataset.edit)]));
       container.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>global.ManagerStock.remove(items[Number(b.dataset.remove)]));
@@ -76,7 +79,6 @@
       };
       bind(container.querySelector('[data-create]'),'create_manager_stock_location',f=>({location_name:f.locationName.value.trim(),parent_stock:f.parent.value||null}),r=>r.op);
       bind(container.querySelector('[data-receive]'),'receive_manager_location_item',f=>({stock_op:active.op,material_label:f.label.value.trim(),material_type:f.materialType.value.trim(),quantity:Number(f.quantity.value)}),()=>active.op);
-    }catch(error){if(token===generation)container.textContent=error.message;}
   }
   global.ManagerLocations={setup:config=>{env=config;},enter,isBusy:()=>busy,stop:()=>{generation++;}};
 })(window);

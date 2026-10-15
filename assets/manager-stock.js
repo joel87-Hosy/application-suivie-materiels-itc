@@ -51,12 +51,13 @@
     }
     doc.save(`${bon.ref}.pdf`);
   }
-  async function enter(container) {
+  async function enter(container,options={}) {
     const token=++generation;
     if(!allowed()){container.textContent='Accès réservé au gestionnaire.';return;}
-    container.innerHTML='<p class="p-6">Chargement des stocks…</p>';
+    const cached=(env.data().stock||[]).length>0||container.dataset.transferReady==='true';
+    if(!cached&&!options.background)container.innerHTML='<p class="p-6">Ouverture des transferts…</p>';
     try {
-      await env.refresh();if(token!==generation)return;
+      if(!cached&&!options.background)await env.refresh();if(token!==generation)return;
       const ops=stocks(),targets=destinations(),items=(env.data().stock||[]).filter(i=>ops.includes(op(i.op)));
       const canTransfer=ops.some(source=>targets.some(target=>target!==source));
       const history=(env.data().sorties||[]).filter(b=>b.type==='TRANSFERT'&&(ops.includes(op(b.op))||ops.includes(op(b.destination)))).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
@@ -77,13 +78,14 @@
         <p role="status" id="transfer-status"></p><button type="submit" class="bg-indigo-700 text-white rounded-xl p-3" ${!canTransfer?'disabled':''}>Confirmer le transfert et créer le bon</button>
         ${!canTransfer?'<p>Aucune destination de transfert disponible.</p>':''}</form>
         <section class="bg-white p-5 rounded-2xl"><h3 class="font-bold">Historique et bons de sortie</h3>${history.map((b,i)=>`<div class="border-b py-4"><b>${esc(b.ref)}</b><p>${esc(b.op)} → ${esc(b.destination)} · ${esc(b.before.label)} · ${esc(b.quantity)} unités</p><p>${esc(new Date(b.date).toLocaleString('fr-FR'))} · ${esc(b.byName)} · ${esc(b.reason)}</p><p>Source : ${esc(b.before.qty)} → ${esc(b.after.qty)} ; destination : ${esc(b.destinationBeforeQty)} → ${esc(b.destinationAfterQty)}</p><button data-bon="${i}" class="border p-2 rounded-lg">Télécharger le bon PDF</button></div>`).join('')||'<p>Aucun transfert.</p>'}</section></div>`;
+      container.dataset.transferReady='true';
       const form=container.querySelector('form'),fields=form.elements;
       const fill=()=>{
         fields.destination.innerHTML=targets.filter(o=>o!==fields.source.value).map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
         fields.article.innerHTML=items.filter(i=>op(i.op)===fields.source.value&&Number(i.qty)>0).map(i=>`<option value="${esc(i._dbKey)}">${esc(i.label)} — ${esc(i.qty)} disponibles</option>`).join('');
       };
       fields.source.onchange=fill;fill();
-      container.querySelector('#transfer-refresh').onclick=()=>{if(!busy)enter(container);};
+      container.querySelector('#transfer-refresh').onclick=()=>{if(!busy){delete container.dataset.transferReady;enter(container);}};
       container.querySelectorAll('[data-bon]').forEach(b=>b.onclick=()=>pdf(history[Number(b.dataset.bon)]));
       let operationId=global.crypto.randomUUID(),attempt=null;
       form.onsubmit=async event=>{
@@ -100,6 +102,7 @@
         finally{busy=false;form.querySelectorAll('button,input,select,textarea').forEach(e=>e.disabled=false);}
       };
       env.readNotifications?.('transferts-stocks');
+      if(cached&&!options.background){const refreshToken=token;setTimeout(async()=>{if(refreshToken!==generation||!container.isConnected)return;try{await env.refresh();if(refreshToken===generation&&container.isConnected)enter(container,{background:true});}catch(error){console.warn('Actualisation des transferts indisponible',error);}},0);}
     }catch(error){if(token===generation)container.textContent=error.message;}
   }
   global.ManagerStock={setup:config=>{env=config;},edit,remove,enter,pdf,isBusy:()=>busy,stop:()=>{generation++;}};

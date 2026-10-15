@@ -17,11 +17,11 @@
   const table=(headers,body)=>`<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="bg-slate-100"><tr>${headers.map(h=>`<th class="p-3">${h}</th>`).join('')}</tr></thead><tbody>${body.length?body.map(r=>`<tr class="border-b">${r.map(v=>`<td class="p-3 align-top">${v}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}" class="p-4 text-slate-500">Aucun élément.</td></tr>`}</tbody></table></div>`;
   function setup(config){env=config;}
   function stop(){generation++;container=null;data={stores:{},sources:[]};op='';}
-  async function enter(target){container=target;await refresh();}
+  async function enter(target){container=target;render();const token=generation;refresh().then(()=>{if(token===generation&&container===target)render();});}
   async function refresh(){
     if(!container)return;
     const token=++generation,target=container;
-    target.innerHTML='<p class="p-6">Chargement des stocks de chutes…</p>';
+    if(!target.querySelector('[data-offcut-view]'))target.innerHTML='<p class="p-6">Chargement des stocks de chutes…</p>';
     try{
       const result=await call({action:'overview'});
       if(token!==generation)return;
@@ -48,7 +48,7 @@
       return kind==='requests'&&['COORD_PENDING','VALIDATOR_PENDING','ISSUE_PENDING','ISSUED'].includes(r.status)?btn('bon',r.id,'Afficher le bon PDF'):'';
     };
     const history=rows(s.events).sort((a,b)=>b.at.localeCompare(a.at));
-    container.innerHTML=`<div class="space-y-6 p-4">
+    container.innerHTML=`<div data-offcut-view class="space-y-6 p-4">
       <header class="bg-teal-800 text-white rounded-2xl p-6"><h2 class="text-xl font-black">Stocks de chutes de câbles</h2><p class="mt-2">Chaque lot représente une longueur de câble réutilisable en bon état. Les longueurs sont exprimées en mètres.</p><p class="mt-2">Retour : technicien → coordinateur → réception physique du gestionnaire. Réutilisation : demande → coordination → validation du bon → sortie physique du gestionnaire dédié.</p></header>
       <div class="flex gap-3 items-center flex-wrap"><label>Stock dédié <select id="chute-op" class="border rounded-lg p-3">${Object.keys(data.stores).sort().map(key=>`<option ${op===key?'selected':''} value="${esc(key)}">Chutes ${esc(key)}</option>`).join('')}</select></label>${btn('refresh','','Actualiser')}${btn('excel','','Rapport Excel')}${btn('pdf','','Rapport PDF')}</div>
       <p id="chute-message" role="status" class="text-sm text-teal-800"></p>

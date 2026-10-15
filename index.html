@@ -3487,9 +3487,10 @@
           return;
         }
         const generation = secureStore.generation, uid = secureStore.uid;
-        container.innerHTML = '<p class="p-8 text-center">Chargement des archives...</p>';
+        renderArchivesConsommations(container);
+        if (secureStore.hydratedCollections?.has('consumptionArchives')) return;
         try {
-          await secureStore.readCollections(['consumptionArchives'], generation);
+          if (!secureStore.hydratedCollections?.has('consumptionArchives')) await secureStore.readCollections(['consumptionArchives'], generation,{notify:false});
           if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'archives-consommations') return;
           appData = normalizeAppData(secureStore.value());
           renderArchivesConsommations(container);
@@ -8863,11 +8864,12 @@
       }
       async function loadTechMesDemandes(container) {
         const generation = secureStore.generation;
-        container.innerHTML = '<p class="p-8">Chargement de vos bons...</p>';
+        renderTechMesDemandes(container);
+        if (secureStore.hydratedCollections?.has('demandes') && secureStore.hydratedCollections?.has('techDemandes')) {markNotificationsAsRead('tech-mes-demandes');return;}
         try {
           if (pendingSave) await pendingSave;
           if (secureStore.generation !== generation) return;
-          await (secureStore.readCollections ? secureStore.readCollections(['demandes','techDemandes'], generation) : secureStore.read(generation, {notify:false}));
+          if (secureStore.readCollections && (!secureStore.hydratedCollections?.has('demandes') || !secureStore.hydratedCollections?.has('techDemandes'))) await secureStore.readCollections(['demandes','techDemandes'], generation,{notify:false});
           if (secureStore.generation !== generation || currentSectionId !== 'tech-mes-demandes') return;
           appData = normalizeAppData(secureStore.value());
           renderTechMesDemandes(container);
@@ -8925,9 +8927,10 @@
 
       async function loadTechDeliveredMaterials(container) {
         const generation = secureStore.generation;
-        container.innerHTML = '<p class="p-8">Chargement des matériels livrés...</p>';
+        renderTechDeliveredMaterials(container);
+        if (secureStore.hydratedCollections?.has('demandes')) return;
         try {
-          await (secureStore.readCollections ? secureStore.readCollections(['demandes'], generation) : secureStore.read(generation, {notify:false}));
+          if (secureStore.readCollections) await secureStore.readCollections(['demandes'], generation,{notify:false});
           if (generation !== secureStore.generation || currentSectionId !== 'tech-materiels-livres') return;
           appData = normalizeAppData(secureStore.value());
           renderTechDeliveredMaterials(container);
@@ -9103,12 +9106,12 @@
 
       async function loadCoordinatorIssuedBons(container) {
         const uid = secureStore.uid, generation = secureStore.generation;
-        container.innerHTML = '<p class="p-8 text-center">Chargement de vos bons...</p>';
+        renderCoordinatorIssuedBons(container);
+        if (secureStore.hydratedCollections?.has('demandes') && secureStore.hydratedCollections?.has('sorties')) return;
         try {
           if (pendingSave) await pendingSave;
           if (generation !== secureStore.generation) return;
-          if (typeof secureStore.readCollections === 'function') await secureStore.readCollections(['demandes','sorties'], generation);
-          else await secureStore.read(generation, {notify:false});
+          if (typeof secureStore.readCollections === 'function' && (!secureStore.hydratedCollections?.has('demandes') || !secureStore.hydratedCollections?.has('sorties'))) await secureStore.readCollections(['demandes','sorties'], generation,{notify:false});
           if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'coord-mes-bons') return;
           appData = normalizeAppData(secureStore.value());
           renderCoordinatorIssuedBons(container);
@@ -9213,12 +9216,12 @@
       async function loadSignedBonsHistory(container) {
         const sessionUid = secureStore.uid;
         const generation = secureStore.generation;
-        container.innerHTML = '<p class="p-8 text-center">Chargement des bons sign\u00e9s...</p>';
+        renderSignedBonsHistory(container);
+        if (secureStore.hydratedCollections?.has('demandes') && secureStore.hydratedCollections?.has('sorties')) {markNotificationsAsRead('bons-signes');return;}
         try {
           if (pendingSave) await pendingSave;
           if (secureStore.generation !== generation) return;
-          if (typeof secureStore.readCollections === 'function') await secureStore.readCollections(['demandes','sorties'], generation);
-          else if (typeof secureStore.read === 'function') await secureStore.read(generation, {notify:false});
+          if (typeof secureStore.readCollections === 'function' && (!secureStore.hydratedCollections?.has('demandes') || !secureStore.hydratedCollections?.has('sorties'))) await secureStore.readCollections(['demandes','sorties'], generation,{notify:false});
           if (secureStore.generation !== generation || secureStore.uid !== sessionUid || currentSectionId !== 'bons-signes' || !currentUser) return;
           appData = normalizeAppData(secureStore.value());
           renderSignedBonsHistory(container);
@@ -10206,7 +10209,7 @@
         const generation = secureStore.generation;
         container.innerHTML = '<p class="p-8">Chargement des stocks et des retours...</p>';
         try {
-          await (secureStore.readCollections ? secureStore.readCollections(['stock','demandes'], generation) : secureStore.read(generation, {notify:false}));
+          if (secureStore.readCollections && (!secureStore.hydratedCollections?.has('demandes') || !secureStore.hydratedCollections?.has('stock'))) await secureStore.readCollections(['stock','demandes'], generation);
           if (generation !== secureStore.generation || currentSectionId !== 'coord-retour-materiel') return;
           appData = normalizeAppData(secureStore.value());
           renderCoordinatorMaterialReturns(container);
@@ -10286,7 +10289,7 @@
         const generation = secureStore.generation;
         container.innerHTML = '<p class="p-8">Chargement des retours à réception...</p>';
         try {
-          await (secureStore.readCollections ? secureStore.readCollections(['demandes'], generation) : secureStore.read(generation, {notify:false}));
+          if (secureStore.readCollections && !secureStore.hydratedCollections?.has('demandes')) await secureStore.readCollections(['demandes'], generation);
           if (generation !== secureStore.generation || currentSectionId !== 'gestion-retours-materiel') return;
           appData = normalizeAppData(secureStore.value());
           const rows = (appData.demandes || []).filter(d => d.workflow === 'COORD_MATERIAL_RETURN' && d.status === 'EN ATTENTE GESTIONNAIRE' && d.assignedGestionnaireUid === secureStore.uid).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
@@ -10424,7 +10427,7 @@
         try {
           if (pendingSave) await pendingSave;
           if (secureStore.generation !== generation) return;
-          await (secureStore.readCollections ? secureStore.readCollections(['demandes'], generation) : secureStore.read(generation, {notify:false}));
+          if (secureStore.readCollections && !secureStore.hydratedCollections?.has('demandes')) await secureStore.readCollections(['demandes'], generation);
           if (secureStore.generation !== generation || currentSectionId !== 'demandes-coordonnatrice') return;
           appData = normalizeAppData(secureStore.value());
           renderDemandesGestionnaire(container);
@@ -11619,7 +11622,7 @@
         const generation = secureStore.generation, uid = secureStore.uid;
         container.innerHTML = '<p class="p-8 text-center">Chargement de vos bons servis...</p>';
         try {
-          if (typeof secureStore.readCollections === 'function') await secureStore.readCollections(['demandes'], generation);
+          if (typeof secureStore.readCollections === 'function' && !secureStore.hydratedCollections?.has('demandes')) await secureStore.readCollections(['demandes'], generation);
           else await secureStore.read(generation, {notify:false});
           if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'magasinier-historique') return;
           appData = normalizeAppData(secureStore.value());
@@ -11656,7 +11659,7 @@
         const generation = secureStore.generation, uid = secureStore.uid;
         container.innerHTML = '<p class="p-8 text-center">Chargement de la traçabilité des magasiniers...</p>';
         try {
-          if (typeof secureStore.readCollections === 'function') await secureStore.readCollections(['demandes','users','platformAuditLogs'], generation);
+          if (typeof secureStore.readCollections === 'function' && (!secureStore.hydratedCollections?.has('demandes') || !secureStore.hydratedCollections?.has('platformAuditLogs'))) await secureStore.readCollections(['demandes','users','platformAuditLogs'], generation);
           else await secureStore.read(generation, {notify:false});
           if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'dg-magasinier-suivi') return;
           appData = normalizeAppData(secureStore.value());
@@ -11952,10 +11955,8 @@
         // Reconcile the visible notifications with the authoritative server
         // state before deciding whether the tab and installed-app badge remain
         // unread. Keep the captured keys so arrivals during this request stay unread.
-        if (visibleKeys.size && typeof secureStore.readCollections === 'function') {
-          await secureStore.readCollections(['notifications'],secureStore.generation,{notify:false});
-          if (currentUser?.id !== userId || secureStore.uid !== sessionUid) return;
-          appData = normalizeAppData(secureStore.value());
+        if (visibleKeys.size && typeof secureStore.readCollections === 'function' && !secureStore.hydratedCollections?.has('notifications')) {
+          secureStore.readCollections(['notifications'],secureStore.generation,{notify:false}).catch(error=>console.warn('Actualisation des notifications indisponible',error));
         }
         const unread = visibleKeys.size
           ? appData.notifications.filter(n => visibleKeys.has(n._dbKey) && !n.lu)
@@ -13889,9 +13890,10 @@
           return;
         }
         const generation = secureStore.generation, uid = secureStore.uid;
-        container.innerHTML = '<p class="p-8 text-center">Chargement des flux matériels...</p>';
+        renderFluxMateriels(container);
+        if (secureStore.hydratedCollections?.has('stockMovements') && secureStore.hydratedCollections?.has('consumptionArchives')) return;
         try {
-          await secureStore.readCollections(['stockMovements','consumptionArchives'], generation);
+          if (!secureStore.hydratedCollections?.has('stockMovements') || !secureStore.hydratedCollections?.has('consumptionArchives')) await secureStore.readCollections(['stockMovements','consumptionArchives'], generation,{notify:false});
           if (generation !== secureStore.generation || uid !== secureStore.uid || currentSectionId !== 'flux-materiels') return;
           appData = normalizeAppData(secureStore.value());
           renderFluxMateriels(container);
