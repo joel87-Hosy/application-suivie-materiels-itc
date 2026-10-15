@@ -1970,21 +1970,21 @@
             renderCockpit(container);
           } else if (currentSectionId === "stats-consommation") {
             renderStatsConsommation(container); // <--- AJOUTÉ : Pour que les stats s'actualisent
-          } else if (currentSectionId === "archives-consommations") {
+          } else if (currentSectionId === "archives-consommations" && secureStore.hydratedCollections?.has('consumptionArchives')) {
             loadConsumptionArchives(container);
           } else if (currentSectionId === "trafic-audit") {
             renderTraficAudit(container);
-          } else if (currentSectionId === "coord-demandes-tech") {
+          } else if (currentSectionId === "coord-demandes-tech" && secureStore.hydratedCollections?.has('techDemandes')) {
             renderCoordFluxTech(container); // <--- AJOUTÉ : Pour la coordinatrice
-          } else if (currentSectionId === "demandes-coordonnatrice") {
+          } else if (currentSectionId === "demandes-coordonnatrice" && secureStore.hydratedCollections?.has('demandes')) {
             renderDemandesGestionnaire(container); // <--- AJOUTÉ : Pour le magasinier
           } else if (currentSectionId === "magasinier-regularisation") {
             window.StorekeeperBacklog?.render(container);
-          } else if (currentSectionId === "tech-mes-demandes") {
+          } else if (currentSectionId === "tech-mes-demandes" && secureStore.hydratedCollections?.has('demandes') && secureStore.hydratedCollections?.has('techDemandes')) {
             renderTechMesDemandes(container); // <--- AJOUTÉ : Pour le technicien
-          } else if (currentSectionId === "tech-materiels-livres") {
+          } else if (currentSectionId === "tech-materiels-livres" && secureStore.hydratedCollections?.has('demandes')) {
             renderTechDeliveredMaterials(container);
-          } else if (currentSectionId === "bons-signes") {
+          } else if (currentSectionId === "bons-signes" && secureStore.hydratedCollections?.has('demandes') && secureStore.hydratedCollections?.has('sorties')) {
             renderSignedBonsHistory(container);
           } else if (currentSectionId === "livraison") {
             renderLivraisonForm(container);
@@ -1994,7 +1994,7 @@
             renderSortiePhysiqueForm(container);
           } else if (currentSectionId === "rapports-sorties") {
             renderRapportsSorties(container);
-          } else if (currentSectionId === "flux-materiels") {
+          } else if (currentSectionId === "flux-materiels" && secureStore.hydratedCollections?.has('stockMovements')) {
             loadFluxMateriels(container);
           } else if (currentSectionId === "super-admin") {
             renderSuperAdminDashboard(container);
@@ -2004,11 +2004,6 @@
             renderRapportsSorties(container, { readOnly: true });
           } else if (currentSectionId.startsWith("stock-")) {
             renderStock(currentSectionId.replace("stock-", ""), container);
-          }
-
-          // Actualiser aussi les vues de notification alimentées par leurs modules.
-          if (['reception', 'transferts-stocks', 'validation-bons'].includes(currentSectionId)) {
-            showSection(currentSectionId);
           }
 
           // These views have just rendered the refreshed snapshot. Record its
@@ -2090,17 +2085,17 @@
                 if (currentSectionId === "cockpit") renderCockpit(container);
                 else if (currentSectionId === "stats-consommation")
                   renderStatsConsommation(container);
-                else if (currentSectionId === "archives-consommations")
+                else if (currentSectionId === "archives-consommations" && secureStore.hydratedCollections?.has('consumptionArchives'))
                   loadConsumptionArchives(container);
                 else if (currentSectionId === "trafic-audit")
                   renderTraficAudit(container);
-                else if (currentSectionId === "coord-demandes-tech")
+                else if (currentSectionId === "coord-demandes-tech" && secureStore.hydratedCollections?.has('techDemandes'))
                   renderCoordFluxTech(container);
-                else if (currentSectionId === "demandes-coordonnatrice")
+                else if (currentSectionId === "demandes-coordonnatrice" && secureStore.hydratedCollections?.has('demandes'))
                   renderDemandesGestionnaire(container);
-                else if (currentSectionId === "tech-mes-demandes")
+                else if (currentSectionId === "tech-mes-demandes" && secureStore.hydratedCollections?.has('demandes') && secureStore.hydratedCollections?.has('techDemandes'))
                   renderTechMesDemandes(container);
-                else if (currentSectionId === "bons-signes")
+                else if (currentSectionId === "bons-signes" && secureStore.hydratedCollections?.has('demandes') && secureStore.hydratedCollections?.has('sorties'))
                   renderSignedBonsHistory(container);
                 else if (currentSectionId.startsWith("stock-"))
                   renderStock(
@@ -6897,17 +6892,22 @@
         }
         if (id === "mes-stocks") {
           viewTitle.innerText = "MES STOCKS ET SOUS-STOCKS";
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture de vos stocks…</p>';
           window.ManagerLocations.enter(container);
         } else if (id === "transferts-stocks") {
           viewTitle.innerText = "TRANSFERTS DE MATÉRIEL";
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture des transferts…</p>';
           window.ManagerStock.enter(container);
         } else if (id === "validation-bons") {
           viewTitle.innerText = "VALIDATION DES BONS";
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture des validations…</p>';
           window.ValidatorWorkflow.enter(container);
         } else if (id === "stocks-chutes") {
           viewTitle.innerText = "STOCKS DE CHUTES DE CÂBLES";
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture des stocks de chutes…</p>';
           window.CableOffcuts.enter(container);
         } else if (id.startsWith("control-")) {
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture du contrôle…</p>';
           window.StockControl.enter(id);
         } else if (id === "mon-profil") {
           renderMonProfil(container);
@@ -6923,11 +6923,14 @@
           renderStatsConsommation(container);
         } else if (id === "archives-consommations") {
           viewTitle.innerText = "ARCHIVES CONSOMMATIONS";
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture des archives…</p>';
           loadConsumptionArchives(container);
         } else if (id === "trafic-audit") {
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture du trafic…</p>';
           renderTraficAudit(container);
         } else if (id === "magasinier-historique") {
           viewTitle.innerText = "HISTORIQUE DES BONS SERVIS";
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture de l’historique…</p>';
           loadMagasinierHistory(container);
         } else if (id === "dg-magasinier-suivi") {
           viewTitle.innerText = "SUIVI DES MAGASINIERS";
@@ -6935,10 +6938,13 @@
         } else if (id === "tech-nouvelle-demande") {
           renderTechDemandeForm(container);
         } else if (id === "tech-mes-demandes") {
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture de vos bons…</p>';
           loadTechMesDemandes(container);
         } else if (id === "coord-mes-bons") {
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture de vos bons…</p>';
           loadCoordinatorIssuedBons(container);
         } else if (id === "tech-materiels-livres") {
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture de vos matériels livrés…</p>';
           loadTechDeliveredMaterials(container);
         } else if (id === "tech-retour-materiel") {
           renderRetourForm(container);
@@ -6947,14 +6953,18 @@
         } else if (id === "coord-creation-directe") {
           renderCoordCreationDirecte(container);
         } else if (id === "coord-retour-materiel") {
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture des retours…</p>';
           loadCoordinatorMaterialReturns(container);
         } else if (id === "gestion-retours-materiel") {
           viewTitle.innerText = "RETOURS MATÉRIEL À RÉCEPTIONNER";
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture des retours…</p>';
           loadManagerMaterialReturns(container);
         } else if (id === "bons-signes") {
           viewTitle.innerText = "HISTORIQUE DES BONS SIGNES";
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture des bons signés…</p>';
           loadSignedBonsHistory(container);
         } else if (id === "demandes-coordonnatrice") {
+          container.innerHTML = '<p class="p-6 text-slate-600">Ouverture des commandes…</p>';
           loadManagerCommands(container);
         } else if (id === "reception") {
           renderReceptionForm(container);

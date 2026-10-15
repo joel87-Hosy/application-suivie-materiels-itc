@@ -25,6 +25,7 @@
       this.refreshTimer = null;
       this.pendingRefreshNames = new Set();
       this.hydrationPromise = null;
+      this.hydratedCollections = new Set();
       this.channel = null;
       this.generation = 0;
       this.stop();
@@ -37,6 +38,7 @@
       this.refreshTimer = null;
       this.pendingRefreshNames.clear();
       this.hydrationPromise = null;
+      this.hydratedCollections.clear();
       if (this.channel) this.client.removeChannel(this.channel);
       this.channel = null;
       this.profile = null;
@@ -87,7 +89,8 @@
       this.ready = true;
       this.watchRecords(generation);
       this.hydrationPromise = new Promise(resolve => setTimeout(resolve, 0))
-        .then(() => this.readCollections(deferredCollections, generation, {notify:true}))
+        .then(() => this.readCollections(deferredCollections, generation, {notify:false,replace:true}))
+        .then(() => {if(generation===this.generation&&this.ready)this.onChange(this.value());})
         .catch(error => { if (generation === this.generation) console.warn('Chargement différé des historiques indisponible:', error); });
       // Refresh only after an explicit action; background polling destroys drafts.
       return this.value();
@@ -137,13 +140,15 @@
       this.raw.settings = Object.fromEntries((settingRows || []).map(row => [row.setting_key, row.value]));
       if (this.ready && notify) this.onChange(this.value());
     }
-    async readCollections(names, generation, {notify = false} = {}) {
+    async readCollections(names, generation, {notify = false,replace = false} = {}) {
       if (!this.ready || !this.profile) throw new Error('Données non chargées. Reconnectez-vous.');
       const company = this.profile.company_id;
       const results = await this.readRecordGroups(names, generation, company, this.profile.role==='SUPER_ADMIN');
       if (generation !== this.generation) return;
       for (const [name, records] of results) {
-        this.raw[name] = Object.fromEntries(records.map(row => [row.record_key, row.payload]));
+        const next=Object.fromEntries(records.map(row => [row.record_key, row.payload]));
+        this.raw[name] = replace ? next : {...this.raw[name],...next};
+        this.hydratedCollections.add(name);
         if (name === 'notifications') {
           this.notificationCompanies = Object.fromEntries(records.map(row => [row.record_key, row.company_id]));
           for (const key of this.readNotificationKeys) if (this.raw[name][key]) this.raw[name][key] = {...this.raw[name][key], lu:true};
@@ -152,7 +157,9 @@
       if (notify) this.onChange(this.value());
     }
     async readRecordGroups(names,generation,company,isAdmin){
-      return Promise.all([...new Set(names)].map(async name=>[name,await this.readCollectionRecords(generation,name,company,isAdmin)]));
+      const selected=[...new Set(names)];
+      const groups=await Promise.all(selected.map(name=>this.readCollectionRecords(generation,name,company,isAdmin)));
+      return selected.map((name,index)=>[name,groups[index]]);
     }
     async readAllRecords(generation, names = collections) {
       const company = this.profile.company_id, isAdmin = this.profile.role === 'SUPER_ADMIN';
