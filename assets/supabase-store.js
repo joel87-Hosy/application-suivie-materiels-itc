@@ -131,6 +131,11 @@
       if (generation !== this.generation) return;
       this.raw = {};
       this.notificationCompanies = {};
+      const serverNotificationKeys = new Set((records || []).filter(row => row.collection === 'notifications').map(row => row.record_key));
+      for (const key of this.readNotificationKeys) {
+        const row = (records || []).find(record => record.collection === 'notifications' && record.record_key === key);
+        if (serverNotificationKeys.has(key) && row?.payload?.lu !== true) this.readNotificationKeys.delete(key);
+      }
       for (const row of records || []) {
         this.raw[row.collection] ||= {};
         this.raw[row.collection][row.record_key] = row.payload;
@@ -151,6 +156,13 @@
         this.hydratedCollections.add(name);
         if (name === 'notifications') {
           this.notificationCompanies = Object.fromEntries(records.map(row => [row.record_key, row.company_id]));
+          // Receipts returned by the server are authoritative. Forget local
+          // optimistic receipts for records the server still reports unread.
+          const currentKeys = new Set(records.map(row => row.record_key));
+          for (const key of this.readNotificationKeys) {
+            const record = this.raw[name][key];
+            if (currentKeys.has(key) && record?.lu !== true) this.readNotificationKeys.delete(key);
+          }
           for (const key of this.readNotificationKeys) if (this.raw[name][key]) this.raw[name][key] = {...this.raw[name][key], lu:true};
         }
       }

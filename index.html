@@ -11941,6 +11941,14 @@
         let finishMark;
         markingNotifications = new Promise(resolve => { finishMark = resolve; });
         try {
+        // A tab can be opened before the deferred notification collection has
+        // arrived. Wait for its authoritative contents before taking the read
+        // snapshot, otherwise those notifications keep their old badge count.
+        if (typeof secureStore.readCollections === 'function' && !secureStore.hydratedCollections?.has('notifications')) {
+          await secureStore.readCollections(['notifications'],secureStore.generation,{notify:false});
+          if (currentUser?.id !== userId || secureStore.uid !== sessionUid) return;
+          appData = normalizeAppData(secureStore.value());
+        }
         const displayedSnapshot = window.NotificationTabs.unread(appData.notifications,currentUser,section);
         const displayedKeys = new Set(displayedSnapshot.map(n => n._dbKey).filter(Boolean));
         // Wait for newly created notifications to receive their database keys.
@@ -11955,9 +11963,6 @@
         // Reconcile the visible notifications with the authoritative server
         // state before deciding whether the tab and installed-app badge remain
         // unread. Keep the captured keys so arrivals during this request stay unread.
-        if (visibleKeys.size && typeof secureStore.readCollections === 'function' && !secureStore.hydratedCollections?.has('notifications')) {
-          secureStore.readCollections(['notifications'],secureStore.generation,{notify:false}).catch(error=>console.warn('Actualisation des notifications indisponible',error));
-        }
         const unread = visibleKeys.size
           ? appData.notifications.filter(n => visibleKeys.has(n._dbKey) && !n.lu)
           : (displayedSnapshot.length ? displayed : visible).filter(n => !n.lu);
