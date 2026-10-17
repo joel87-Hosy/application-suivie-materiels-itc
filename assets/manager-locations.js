@@ -85,5 +85,26 @@
       bind(container.querySelector('[data-create]'),'create_manager_stock_location',f=>({location_name:f.locationName.value.trim(),parent_stock:f.parent.value||null}),r=>r.op);
       bind(container.querySelector('[data-receive]'),'receive_manager_location_item',f=>({stock_op:active.op,material_label:f.label.value.trim(),material_type:f.materialType.value.trim(),quantity:Number(f.quantity.value)}),()=>active.op);
   }
-  global.ManagerLocations={setup:config=>{env=config;},enter,isBusy:()=>busy,stop:()=>{generation++;}};
+  async function openCustomStock(op){
+    const company=env.profile()?.company_id;
+    let locations=(env.data().stock_locations||[]).filter(row=>String(row.company_id)===String(company));
+    if(!locations.length){const {data,error}=await env.client().from('stock_locations').select('*').eq('company_id',company).order('op');if(error)throw error;locations=data||[];env.data().stock_locations=locations;}
+    const selected=locations.find(row=>row.op===op&&row.created_by);if(!selected)return;
+    const dialog=document.createElement('dialog');dialog.className='substock-dialog';document.body.append(dialog);dialog.showModal();dialog.onclose=()=>dialog.remove();
+    let filter='all',current=selected;
+    const draw=()=>{
+      const children=locations.filter(row=>row.parent_op===selected.op);
+      const entries=(env.data().stock||[]).filter(item=>String(item.company_id)===String(company)&&item.op===current.op);
+      const total=entries.reduce((sum,item)=>sum+(Number(item.qty)||0),0);
+      const cards=children.map(child=>{const rows=(env.data().stock||[]).filter(item=>String(item.company_id)===String(company)&&item.op===child.op);return `<button type="button" data-child="${esc(child.op)}" style="--substock-color:#2563eb" aria-pressed="${current.op===child.op}"><span>${esc(child.name)}</span><strong>${rows.reduce((sum,item)=>sum+(Number(item.qty)||0),0)}</strong><small>Voir les articles</small></button>`;}).join('');
+      const visible=entries.filter(item=>filter==='all'||item.type===filter);
+      dialog.innerHTML=`<header><div><p>GESTIONNAIRE · STOCK PERSONNALISÉ</p><h2>${esc(current.name)}${children.length?' · Sous-stocks':''}</h2></div><button type="button" data-close>Fermer</button></header>${children.length?`<p>Sélectionnez un sous-stock pour consulter son contenu.</p><div class="substock-cards">${cards}</div>`:`<section class="bg-white border rounded-xl p-5 mt-5"><h3 class="font-bold text-lg">Ce stock n’a pas encore de sous-stock.</h3><p class="my-3">Contenu actuel : ${entries.length} article(s), ${total} unités.</p><button type="button" data-create-child class="bg-indigo-700 text-white">Créer vos sous-stocks</button></section>`}<div class="substock-toolbar"><button type="button" data-filter="all">Tous les articles (${entries.length})</button><span>Stock total : ${total}</span></div><div class="substock-items">${visible.map(item=>`<details><summary><b>${esc(item.label)}</b><span>${esc(item.qty)} disponible(s) · ${esc(item.type||'Type non renseigné')}</span></summary></details>`).join('')||'<p>Aucun matériel dans ce stock.</p>'}</div>`;
+      dialog.querySelector('[data-close]').onclick=()=>dialog.close();
+      dialog.querySelectorAll('[data-child]').forEach(button=>button.onclick=()=>{current=children.find(child=>child.op===button.dataset.child);filter='all';draw();});
+      dialog.querySelectorAll('[data-filter]').forEach(button=>button.onclick=()=>{filter=button.dataset.filter;draw();});
+      dialog.querySelector('[data-create-child]')?.addEventListener('click',()=>{dialog.close();env.navigate('mes-stocks');setTimeout(()=>{const select=document.querySelector('[data-location]');if(select){select.value=selected.op;select.dispatchEvent(new Event('change'));setTimeout(()=>document.querySelector('[data-create-child]')?.click(),0);}},0);});
+    };
+    draw();
+  }
+  global.ManagerLocations={setup:config=>{env=config;},enter,openCustomStock,isBusy:()=>busy,stop:()=>{generation++;}};
 })(window);
