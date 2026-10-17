@@ -8689,7 +8689,7 @@
             operatorsForTotals = cockpitOrder.filter((op) => managed.has(op));
           }
         } catch (e) {}
-        const managedLocationOps = [...new Set(managerLocations.map(location => location.op))];
+        const managedLocationOps = [...new Set(managerLocations.filter(location => location.created_by).map(location => location.op))];
         if (String(currentUser?.role || '').toUpperCase() === 'GESTIONNAIRE') operatorsForTotals = operatorsForTotals.filter(op => !managedLocationOps.includes(op));
 
         const normalizedTargets = (operatorsForTotals || []).map(normalizeOperatorKey);
