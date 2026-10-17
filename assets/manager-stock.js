@@ -38,18 +38,10 @@
     }catch(error){global.alert(error.code==='PGRST202'?'La suppression nécessite la migration Supabase 202609240003_delete_manager_stock_item.sql.':error.message);}
     finally{busy=false;}
   }
-  function pdf(bon) {
-    const doc=new global.jspdf.jsPDF();
-    doc.setFontSize(16);doc.text('BON DE SORTIE — TRANSFERT',14,20);
-    doc.setFontSize(10);
-    const lines=[`Référence : ${bon.ref}`,`Date : ${new Date(bon.date).toLocaleString('fr-FR')}`,`Stock source : ${bon.op}`,`Stock destinataire : ${bon.destination}`,`Gestionnaire : ${bon.byName}`,`Service : ${bon.serviceAbbreviation}`];
-    doc.text(lines,14,30);
-    doc.autoTable({startY:65,head:[['Matériel','Quantité','Source avant / après','Destination avant / après']],body:[[bon.before.label,String(bon.quantity),`${bon.before.qty} / ${bon.after.qty}`,`${bon.destinationBeforeQty} / ${bon.destinationAfterQty}`]]});
-    let y=doc.lastAutoTable.finalY+12;
-    for(const text of [`Motif : ${bon.reason}`,`Signature du gestionnaire : ${bon.signature}`,`Identifiant de traçabilité : ${bon.id}`]) {
-      for(const line of doc.splitTextToSize(text,180)){if(y>280){doc.addPage();y=20;}doc.text(line,14,y);y+=6;}
-    }
-    doc.save(`${bon.ref}.pdf`);
+  async function pdf(bon) {
+    if(!global.generateSignedBonPdf)throw new Error('Générateur commun des bons de sortie indisponible.');
+    const blob=await global.generateSignedBonPdf(bon);
+    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`Bon_Sortie_${bon.numBon||bon.ref||bon.id}.pdf`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   async function enter(container,options={}) {
     const token=++generation;
@@ -70,8 +62,7 @@
       container.innerHTML=`<div class="p-4 space-y-5"><h2 class="text-xl font-bold">Transferts de matériel</h2><p>Le transfert débite votre stock source, crédite le destinataire et génère un bon de sortie avec les deux mouvements et votre signature.</p>${ops.includes('ITC-B02')?'<p class="bg-blue-50 p-3 rounded-xl">Bouaké, Yamoussoukro et San-Pédro : consultation et alimentation par transfert. Seul le gestionnaire affecté à chaque stock peut en modifier les articles.</p>':''}<button id="transfer-refresh" class="border p-3 rounded-xl">Actualiser</button><form class="bg-white p-5 rounded-2xl space-y-4">
         <label class="block">Stock source<select name="source" class="border p-3 w-full">${options}</select></label>
         <label class="block">Stock destinataire<select name="destination" class="border p-3 w-full" required></select></label>
-        <label class="block">Article<select name="article" class="border p-3 w-full" required></select></label>
-        <label class="block">Quantité<input name="quantity" type="number" min="0.001" step="any" required class="border p-3 w-full"></label>
+        <div><div class="flex justify-between items-center"><b>Articles à transférer</b><button type="button" id="transfer-add-item" class="border rounded-lg px-3 py-2">Ajouter un article</button></div><div id="transfer-items" class="space-y-3 mt-3"></div></div>
         <label class="block">Service<select name="service" class="border p-3 w-full" required><option value="" disabled selected>Choisir un service</option>${serviceOptions}</select></label>
         <label class="block">Motif<textarea name="reason" maxlength="1000" required class="border p-3 w-full"></textarea></label>
         <label class="block">Signature du gestionnaire<input name="signature" maxlength="500" required value="${esc(env.profile()?.name)}" class="border p-3 w-full"></label>
@@ -79,25 +70,28 @@
         ${!canTransfer?'<p>Aucune destination de transfert disponible.</p>':''}</form>
         <section class="bg-white p-5 rounded-2xl"><h3 class="font-bold">Historique et bons de sortie</h3>${history.map((b,i)=>`<div class="border-b py-4"><b>${esc(b.ref)}</b><p>${esc(b.op)} → ${esc(b.destination)} · ${esc(b.before.label)} · ${esc(b.quantity)} unités</p><p>${esc(new Date(b.date).toLocaleString('fr-FR'))} · ${esc(b.byName)} · ${esc(b.reason)}</p><p>Source : ${esc(b.before.qty)} → ${esc(b.after.qty)} ; destination : ${esc(b.destinationBeforeQty)} → ${esc(b.destinationAfterQty)}</p><button data-bon="${i}" class="border p-2 rounded-lg">Télécharger le bon PDF</button></div>`).join('')||'<p>Aucun transfert.</p>'}</section></div>`;
       container.dataset.transferReady='true';
-      const form=container.querySelector('form'),fields=form.elements;
+      const form=container.querySelector('form'),fields=form.elements,rows=container.querySelector('#transfer-items');
+      const addRow=()=>{const row=document.createElement('div');row.className='grid md:grid-cols-[2fr_1fr_auto] gap-2';row.innerHTML=`<select name="article" class="border p-3 w-full" required></select><input name="quantity" type="number" min="0.001" step="any" required class="border p-3 w-full" placeholder="Quantité"><button type="button" class="border rounded-lg px-3">Retirer</button>`;row.querySelector('button').onclick=()=>{if(rows.children.length>1)row.remove();};rows.append(row);fill();};
       const fill=()=>{
+        const chosen=fields.destination.value;
         fields.destination.innerHTML=targets.filter(o=>o!==fields.source.value).map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
-        fields.article.innerHTML=items.filter(i=>op(i.op)===fields.source.value&&Number(i.qty)>0).map(i=>`<option value="${esc(i._dbKey)}">${esc(i.label)} — ${esc(i.qty)} disponibles</option>`).join('');
+        if(targets.includes(chosen)&&chosen!==fields.source.value)fields.destination.value=chosen;
+        rows.querySelectorAll('select[name="article"]').forEach(select=>{const selected=select.value;select.innerHTML=items.filter(i=>op(i.op)===fields.source.value&&Number(i.qty)>0).map(i=>`<option value="${esc(i._dbKey)}">${esc(i.label)} — ${esc(i.qty)} disponibles</option>`).join('');if([...select.options].some(o=>o.value===selected))select.value=selected;});
       };
-      fields.source.onchange=fill;fill();
+      fields.source.onchange=fill;container.querySelector('#transfer-add-item').onclick=addRow;addRow();fill();
       container.querySelector('#transfer-refresh').onclick=()=>{if(!busy){delete container.dataset.transferReady;enter(container);}};
       container.querySelectorAll('[data-bon]').forEach(b=>b.onclick=()=>pdf(history[Number(b.dataset.bon)]));
       let operationId=global.crypto.randomUUID(),attempt=null;
       form.onsubmit=async event=>{
         event.preventDefault();if(busy)return;
-        const item=items.find(i=>i._dbKey===fields.article.value),quantity=Number(fields.quantity.value);
-        if(!item||!Number.isFinite(quantity)||quantity<=0||quantity>Number(item.qty))return global.alert('Quantité invalide ou stock insuffisant.');
-        if(!targets.includes(fields.destination.value)||fields.destination.value===op(item.op))return global.alert('Choisissez un stock destinataire autorisé.');
+        if(!targets.includes(fields.destination.value))return global.alert('Choisissez un stock destinataire autorisé.');
+        const transfers=[...rows.children].map(row=>{const item=items.find(i=>i._dbKey===row.querySelector('select').value),quantity=Number(row.querySelector('input').value);return {item,quantity};});
+        const totals=new Map();for(const {item,quantity} of transfers){if(!item||!Number.isFinite(quantity)||quantity<=0)return global.alert('Quantité invalide.');totals.set(item._dbKey,(totals.get(item._dbKey)||0)+quantity);}
+        if(transfers.some(({item})=>!item)||transfers.some(({item})=>totals.get(item._dbKey)>Number(item.qty)))return global.alert('Quantité invalide ou stock insuffisant.');
         if(!global.confirm('Confirmer le transfert physique et la création du bon de sortie ?'))return;
-        const args={stock_key:item._dbKey,expected:item,new_label:null,quantity,destination:fields.destination.value,reason:fields.reason.value.trim(),signature:fields.signature.value.trim(),service:fields.service.value};
-        const fingerprint=JSON.stringify(args);if(attempt&&attempt!==fingerprint)operationId=global.crypto.randomUUID();attempt=fingerprint;
+        const base={destination:fields.destination.value,reason:fields.reason.value.trim(),signature:fields.signature.value.trim(),service:fields.service.value};
         busy=true;form.querySelectorAll('button,input,select,textarea').forEach(e=>e.disabled=true);
-        try{await execute({...args,operation_id:operationId});await enter(container);}
+        try{await execute({operation_id:global.crypto.randomUUID(),items:transfers.map(({item,quantity})=>({stock_key:item._dbKey,expected:item,quantity})),...base});await enter(container);}
         catch(error){container.querySelector('#transfer-status').textContent=error.message;}
         finally{busy=false;form.querySelectorAll('button,input,select,textarea').forEach(e=>e.disabled=false);}
       };

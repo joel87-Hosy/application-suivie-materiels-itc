@@ -1704,7 +1704,7 @@
     <script src="assets/company-users.js?v=20261013-role-management"></script>
     <script src="assets/notification-tabs.js?v=20261013-coordinator-v1"></script>
     <script src="assets/supabase-store.js?v=20261009-manager-command-receipts"></script>
-    <script src="assets/manager-stock.js?v=20260923-tabs"></script>
+    <script src="assets/manager-stock.js?v=20261017-multi-transfer"></script>
     <script src="assets/manager-locations.js"></script>
     <script src="assets/bon-scanner.js?v=20261014-storekeeper-handover-no-debit"></script>
     <script src="assets/storekeeper-backlog.js?v=20261009-storekeeper-backlog-date-filter"></script>
@@ -6396,9 +6396,9 @@
         const emetteur = String(
           sortie.emetteur || sortie.coordinateurNom || "EMETTEUR NON RENSEIGNE",
         ).toUpperCase();
-        const receiver = getBonEquipeName(sortie).toUpperCase();
+        const receiver = sortie.type === "TRANSFERT" ? String(sortie.destination || "").toUpperCase() : getBonEquipeName(sortie).toUpperCase();
         const ref = String(sortie.ref || "").toUpperCase();
-        const op = formatDemandeOps(sortie).toUpperCase();
+        const op = sortie.type === "TRANSFERT" && sortie.destination ? `${formatDemandeOps(sortie).toUpperCase()} → ${getOperatorMeta(sortie.destination).label}` : formatDemandeOps(sortie).toUpperCase();
         const receiverRole = String(sortie.receptionnaireRole || sortie.demandeurRole || "GESTIONNAIRE").toUpperCase();
 
         doc.setFont("helvetica", "normal");
