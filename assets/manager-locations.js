@@ -73,6 +73,7 @@
             const result=await rpc(name,{operation_id:operationId,...args});
             await env.reloadProfile();
             if(token===generation)await enter(container,resultSelection(result));
+            if(env.onLocationsChanged)await env.onLocationsChanged();
           }catch(error){if(token===generation)status.textContent=error.message;}
           finally{busy=false;container.querySelectorAll('button,input,select').forEach(el=>el.disabled=false);}
         };

@@ -2651,7 +2651,7 @@
         window.BonScanner.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData});
         window.StorekeeperBacklog.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
           refresh:async()=>{const generation=secureStore.generation;await secureStore.readCollections(['demandes','stock'],generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());}});
-        window.ManagerLocations.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,navigate:showSection,
+        window.ManagerLocations.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,navigate:showSection,onLocationsChanged:async()=>{const c=document.getElementById("app-container");if(currentSectionId==="cockpit"&&c){c.dataset.managerLocationsLoaded="";renderCockpit(c);}},
           refresh:async()=>{const generation=secureStore.generation;await secureStore.read(generation,{notify:false});if(generation!==secureStore.generation)throw new Error('Session remplacée.');appData=normalizeAppData(secureStore.value());},
           reloadProfile:async()=>{const generation=secureStore.generation;await secureStore.load(generation);if(generation!==secureStore.generation)throw new Error('Session remplacée.');currentUser={...currentUser,...secureStore.profile};appData=normalizeAppData(secureStore.value());updateMenuVisibility();updateUserInfo();}});
         window.StockSubstocks.setup({profile:()=>secureStore.profile,client:()=>supabaseBackend,data:()=>appData,
@@ -8645,6 +8645,18 @@
         }
         const stock = appData.stock || [];
         const demandes = appData.demandes || [];
+        const managerLocations = String(currentUser?.role || '').toUpperCase() === 'GESTIONNAIRE'
+          ? (appData.stock_locations || []).filter(location => location.company_id === currentUser.company_id && ControlCore.managerStocks(currentUser).includes(location.op))
+          : [];
+        if (String(currentUser?.role || '').toUpperCase() === 'GESTIONNAIRE' && !container.dataset.managerLocationsLoaded) {
+          container.dataset.managerLocationsLoaded = 'loading';
+          supabaseBackend.from('stock_locations').select('*').eq('company_id',currentUser.company_id).order('op').then(({data,error})=>{
+            if(error)throw error;
+            appData.stock_locations=data||[];
+            container.dataset.managerLocationsLoaded='true';
+            if(currentSectionId==='cockpit'&&container.isConnected)renderCockpit(container);
+          }).catch(error=>{container.dataset.managerLocationsLoaded='error';console.warn('Chargement des stocks personnalisés indisponible',error);});
+        }
 
         let pendingDemandes =
           demandes.filter((d) => d.status === "EN ATTENTE GESTIONNAIRE") || [];
@@ -8686,6 +8698,8 @@
             operatorsForTotals = cockpitOrder.filter((op) => managed.has(op));
           }
         } catch (e) {}
+        const managedLocationOps = [...new Set(managerLocations.map(location => location.op))];
+        if (String(currentUser?.role || '').toUpperCase() === 'GESTIONNAIRE') operatorsForTotals = operatorsForTotals.filter(op => !managedLocationOps.includes(op));
 
         const normalizedTargets = (operatorsForTotals || []).map(normalizeOperatorKey);
         const perOperatorAlerts = {};
@@ -8747,7 +8761,7 @@
           `<p class="text-[10px] opacity-80 mt-1">${escapeHtml(roleName)} - VUE OPERATIONNELLE DES STOCKS</p></div>`,
         );
         parts.push(
-          `<div class="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl border border-white/20 text-[10px]"><i class="fas fa-layer-group"></i><span>${totalsByOp.length} BLOCS ACTIFS</span></div>`,
+          `<div class="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl border border-white/20 text-[10px]"><i class="fas fa-layer-group"></i><span>${totalsByOp.length + managerLocations.length} BLOCS ACTIFS</span></div>`,
         );
         parts.push("</div></div>");
 
@@ -8767,6 +8781,13 @@
             `<p class="text-2xl font-black text-indigo-900 mt-1">${t.total} U</p>`,
           );
           parts.push(substockClickable ? '<span class="text-xs text-blue-700 block mt-2">Voir et réorganiser les sous-stocks</span></button>' : '</div>');
+        });
+        managerLocations.forEach(location => {
+          const items=stock.filter(item=>item.company_id===location.company_id&&item.op===location.op);
+          const total=items.reduce((sum,item)=>sum+(Number(item.qty)||0),0);
+          const children=managerLocations.filter(child=>child.parent_op===location.op);
+          const title=location.parent_op ? `${managerLocations.find(parent=>parent.op===location.parent_op)?.name||location.parent_op} › ${location.name}` : location.name;
+          parts.push(`<button type="button" onclick="showSection('mes-stocks');setTimeout(()=>{const s=document.querySelector('[data-location]');if(s){s.value='${escapeHtml(location.op)}';s.dispatchEvent(new Event('change'));}},0)" class="dashboard-hover-block dashboard-hover-kpi p-4 rounded-2xl shadow-lg bg-white text-center border border-violet-300"><p class="text-xs text-slate-500 uppercase font-black"><i class="fas fa-warehouse mr-2"></i>${escapeHtml(title)}</p><p class="text-2xl font-black text-indigo-900 mt-1">${total} U</p><span class="text-xs text-violet-700 block mt-2">${items.length} article(s) · Cliquer pour ouvrir</span>${children.length?`<span class="text-[10px] text-slate-500 block mt-1">${children.map(child=>escapeHtml(child.name)).join(' · ')}</span>`:''}</button>`);
         });
         parts.push("</div>");
 
