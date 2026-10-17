@@ -44,6 +44,13 @@
     const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`Bon_Sortie_${bon.numBon||bon.ref||bon.id}.pdf`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   async function enter(container,options={}) {
+    const previousForm=container.querySelector('form');
+    const previousDestination=previousForm?.elements.destination?.value||'';
+    const previousSource=previousForm?.elements.source?.value||'';
+    const previousService=previousForm?.elements.service?.value||'';
+    const previousReason=previousForm?.elements.reason?.value||'';
+    const previousSignature=previousForm?.elements.signature?.value||'';
+    const previousLines=previousForm?[...previousForm.querySelectorAll('#transfer-items > div')].map(row=>({article:row.querySelector('select')?.value||'',quantity:row.querySelector('input')?.value||''})):[];
     const token=++generation;
     if(!allowed()){container.textContent='Accès réservé au gestionnaire.';return;}
     const cached=(env.data().stock||[]).length>0||container.dataset.transferReady==='true';
@@ -78,7 +85,15 @@
         if(targets.includes(chosen)&&chosen!==fields.source.value)fields.destination.value=chosen;
         rows.querySelectorAll('select[name="article"]').forEach(select=>{const selected=select.value;select.innerHTML=items.filter(i=>op(i.op)===fields.source.value&&Number(i.qty)>0).map(i=>`<option value="${esc(i._dbKey)}">${esc(i.label)} — ${esc(i.qty)} disponibles</option>`).join('');if([...select.options].some(o=>o.value===selected))select.value=selected;});
       };
-      fields.source.onchange=fill;container.querySelector('#transfer-add-item').onclick=addRow;addRow();fill();
+      if(ops.includes(previousSource))fields.source.value=previousSource;
+      if(previousService)fields.service.value=previousService;
+      if(previousReason)fields.reason.value=previousReason;
+      if(previousSignature)fields.signature.value=previousSignature;
+      fields.source.onchange=fill;container.querySelector('#transfer-add-item').onclick=addRow;
+      for(const line of previousLines.length?previousLines:[{article:'',quantity:''}]){addRow();const row=rows.lastElementChild;row.querySelector('input').value=line.quantity;row.dataset.previousArticle=line.article;}
+      fill();
+      if(targets.includes(previousDestination)&&previousDestination!==fields.source.value)fields.destination.value=previousDestination;
+      rows.querySelectorAll('select[name="article"]').forEach(select=>{const remembered=select.closest('div')?.dataset.previousArticle;if(remembered&&[...select.options].some(option=>option.value===remembered))select.value=remembered;});
       container.querySelector('#transfer-refresh').onclick=()=>{if(!busy){delete container.dataset.transferReady;enter(container);}};
       container.querySelectorAll('[data-bon]').forEach(b=>b.onclick=()=>pdf(history[Number(b.dataset.bon)]));
       let operationId=global.crypto.randomUUID(),attempt=null;
@@ -96,7 +111,7 @@
         finally{busy=false;form.querySelectorAll('button,input,select,textarea').forEach(e=>e.disabled=false);}
       };
       env.readNotifications?.('transferts-stocks');
-      if(cached&&!options.background){const refreshToken=token;setTimeout(async()=>{if(refreshToken!==generation||!container.isConnected)return;try{await env.refresh();if(refreshToken===generation&&container.isConnected)enter(container,{background:true});}catch(error){console.warn('Actualisation des transferts indisponible',error);}},0);}
+
     }catch(error){if(token===generation)container.textContent=error.message;}
   }
   global.ManagerStock={setup:config=>{env=config;},edit,remove,enter,pdf,isBusy:()=>busy,stop:()=>{generation++;}};
