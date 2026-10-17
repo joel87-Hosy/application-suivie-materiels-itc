@@ -32,6 +32,7 @@
       const custom=owned.filter(l=>l.created_by);
       const active=owned.find(l=>l.op===selected)||custom[0]||owned[0];
       const items=(env.data().stock||[]).filter(i=>i.company_id===company&&i.op===active?.op);
+      const children=owned.filter(location=>location.parent_op===active?.op);
       const options=(rows,empty=false)=>`${empty?'<option value="">Aucun — créer un stock principal</option>':''}${rows.map(l=>`<option value="${esc(l.op)}" ${l.op===active?.op?'selected':''}>${esc(title(l))}</option>`).join('')}`;
       container.innerHTML=`<div class="p-4 space-y-6"><h2 class="text-xl font-bold">Mes stocks et sous-stocks</h2><p>Créez vos espaces de stockage puis ajoutez leurs articles. Chaque nouvel espace vous est automatiquement attribué.</p>
         <form data-create class="bg-white p-5 rounded-2xl space-y-3"><h3 class="font-bold">Créer un stock ou un sous-stock</h3>
@@ -39,6 +40,7 @@
           <label class="block">Stock parent<select name="parent" class="border rounded-xl p-3 w-full">${options(owned,true)}</select></label>
           <p class="text-sm">Choisissez un parent pour créer un sous-stock. Chaque espace possède ses propres quantités ; celles des sous-stocks ne sont pas ajoutées au stock parent.</p>
           <button class="bg-indigo-700 text-white rounded-xl p-3" type="submit">Créer et m’attribuer ce stock</button><p role="status"></p></form>
+        ${active&&!active.parent_op?`<section class="bg-white p-5 rounded-2xl space-y-3"><div class="flex items-center justify-between gap-3"><div><h3 class="font-bold">Sous-stocks de ${esc(active.name)}</h3><p class="text-sm text-slate-500">${children.length} sous-stock(s)</p></div><button type="button" data-create-child class="bg-indigo-700 text-white rounded-xl p-3">${children.length?'Ajouter un sous-stock':'Créer un sous-stock'}</button></div><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">${children.map(child=>{const childItems=(env.data().stock||[]).filter(item=>item.company_id===company&&item.op===child.op),total=childItems.reduce((sum,item)=>sum+(Number(item.qty)||0),0);return `<button type="button" data-open-child="${esc(child.op)}" class="border border-indigo-200 border-t-4 border-t-indigo-500 rounded-2xl p-4 text-left hover:shadow-lg"><strong class="block">${esc(child.name)}</strong><span class="block text-2xl font-black text-indigo-900 mt-2">${total} U</span><small class="text-slate-500">${childItems.length} article(s) · Voir le contenu</small></button>`;}).join('')||'<p class="text-slate-500">Aucun sous-stock créé pour ce stock.</p>'}</div></section>`:''}
         <section class="bg-white p-5 rounded-2xl space-y-3"><h3 class="font-bold">Vos espaces de stockage (${owned.length})</h3>
           <label class="block">Stock à consulter<select data-location class="border rounded-xl p-3 w-full">${options(owned)}</select></label>
           ${active?`<h4 class="font-bold">${esc(title(active))}</h4><p>${items.length} article(s)</p>`:'<p>Créez votre premier stock.</p>'}
@@ -53,8 +55,10 @@
           <button type="submit" class="bg-emerald-700 text-white rounded-xl p-3">Enregistrer l’entrée</button><p role="status"></p></form>`:active?'<button type="button" data-reception class="bg-emerald-700 text-white rounded-xl p-3">Ajouter des articles via Réception matériel</button>':''}
         <button type="button" data-refresh class="border rounded-xl p-3">Actualiser mes stocks</button></div>`;
       container.dataset.managerLocationsReady='true';
-      container.querySelector('[data-create]').elements.parent.value='';
+      container.querySelector('[data-create]').elements.parent.value=active&&!active.parent_op?active.op:'';
       container.querySelector('[data-location]').onchange=e=>enter(container,e.target.value);
+      container.querySelector('[data-create-child]')?.addEventListener('click',()=>{const form=container.querySelector('[data-create]');form.elements.parent.value=active.op;form.elements.locationName.focus();form.scrollIntoView({behavior:'smooth',block:'center'});});
+      container.querySelectorAll('[data-open-child]').forEach(button=>button.onclick=()=>enter(container,button.dataset.openChild));
       container.querySelector('[data-refresh]').onclick=()=>{container.dataset.managerLocationsReady='';enter(container,active?.op);};
       container.querySelector('[data-reception]')?.addEventListener('click',()=>env.navigate('reception'));
       container.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>global.ManagerStock.edit(items[Number(b.dataset.edit)]));
@@ -81,17 +85,5 @@
       bind(container.querySelector('[data-create]'),'create_manager_stock_location',f=>({location_name:f.locationName.value.trim(),parent_stock:f.parent.value||null}),r=>r.op);
       bind(container.querySelector('[data-receive]'),'receive_manager_location_item',f=>({stock_op:active.op,material_label:f.label.value.trim(),material_type:f.materialType.value.trim(),quantity:Number(f.quantity.value)}),()=>active.op);
   }
-  async function openFromDashboard(op){
-    const company=env.profile()?.company_id;
-    let locations=(env.data().stock_locations||[]).filter(location=>String(location.company_id)===String(company));
-    if(!locations.length){const {data,error}=await env.client().from('stock_locations').select('*').eq('company_id',company).order('op');if(error)throw error;locations=data||[];env.data().stock_locations=locations;}
-    const location=locations.find(row=>row.op===op);if(!location)return;
-    const children=locations.filter(row=>row.parent_op===op);
-    const stocks=(env.data().stock||[]).filter(item=>String(item.company_id)===String(company));
-    const childRows=children.map(child=>{const entries=stocks.filter(item=>item.op===child.op);return `<section class="border rounded-xl p-4 mt-4"><h3 class="font-bold">${esc(child.name)} · ${entries.length} article(s) · ${entries.reduce((sum,item)=>sum+(Number(item.qty)||0),0)} unités</h3><div class="overflow-x-auto"><table class="w-full text-left"><thead><tr><th>Article</th><th>Type</th><th>Quantité</th></tr></thead><tbody>${entries.map(item=>`<tr class="border-b"><td class="p-2">${esc(item.label)}</td><td>${esc(item.type)}</td><td>${esc(item.qty)}</td></tr>`).join('')||'<tr><td colspan="3" class="p-3">Aucun article dans ce sous-stock.</td></tr>'}</tbody></table></div></section>`;}).join('');
-    const rootItems=stocks.filter(item=>item.op===op),dialog=document.createElement('dialog');dialog.className='substock-dialog';
-    dialog.innerHTML=`<header><div><p>GESTIONNAIRE · STOCK</p><h2>${esc(location.name)}</h2></div><button type="button" data-close>Fermer</button></header><section class="border rounded-xl p-4 mt-4"><h3 class="font-bold">Articles du stock principal (${rootItems.length}) · ${rootItems.reduce((sum,item)=>sum+(Number(item.qty)||0),0)} unités</h3><div class="overflow-x-auto"><table class="w-full text-left"><thead><tr><th>Article</th><th>Type</th><th>Quantité</th></tr></thead><tbody>${rootItems.map(item=>`<tr class="border-b"><td class="p-2">${esc(item.label)}</td><td>${esc(item.type)}</td><td>${esc(item.qty)}</td></tr>`).join('')||'<tr><td colspan="3" class="p-3">Aucun article dans ce stock.</td></tr>'}</tbody></table></div></section>${childRows||'<p class="mt-4 text-slate-600">Aucun sous-stock créé.</p>'}`;
-    dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});document.body.append(dialog);dialog.showModal();dialog.onclose=()=>dialog.remove();
-  }
-  global.ManagerLocations={setup:config=>{env=config;},enter,openFromDashboard,isBusy:()=>busy,stop:()=>{generation++;}};
+  global.ManagerLocations={setup:config=>{env=config;},enter,isBusy:()=>busy,stop:()=>{generation++;}};
 })(window);
