@@ -33,9 +33,10 @@
       const active=owned.find(l=>l.op===selected)||custom[0]||owned[0];
       const items=(env.data().stock||[]).filter(i=>i.company_id===company&&i.op===active?.op);
       const children=owned.filter(location=>location.parent_op===active?.op);
+      const creatingChild=Boolean(selected)&&Boolean(active)&&!active.parent_op;
       const options=(rows,empty=false)=>`${empty?'<option value="">Aucun — créer un stock principal</option>':''}${rows.map(l=>`<option value="${esc(l.op)}" ${l.op===active?.op?'selected':''}>${esc(title(l))}</option>`).join('')}`;
       container.innerHTML=`<div class="p-4 space-y-6"><h2 class="text-xl font-bold">Mes stocks et sous-stocks</h2><p>Créez vos espaces de stockage puis ajoutez leurs articles. Chaque nouvel espace vous est automatiquement attribué.</p>
-        <form data-create class="bg-white p-5 rounded-2xl space-y-3"><h3 class="font-bold">Créer un stock ou un sous-stock</h3>
+        <form data-create class="bg-white p-5 rounded-2xl space-y-3">${creatingChild?'<button type="button" data-back-substocks class="border rounded-xl px-4 py-2">Retour aux sous-stocks</button>':''}<h3 class="font-bold">Créer un stock ou un sous-stock</h3>
           <label class="block">Nom<input name="locationName" required maxlength="100" class="border rounded-xl p-3 w-full"></label>
           <label class="block">Stock parent<select name="parent" class="border rounded-xl p-3 w-full">${options(owned,true)}</select></label>
           <p class="text-sm">Choisissez un parent pour créer un sous-stock. Chaque espace possède ses propres quantités ; celles des sous-stocks ne sont pas ajoutées au stock parent.</p>
@@ -57,6 +58,7 @@
       container.dataset.managerLocationsReady='true';
       container.querySelector('[data-create]').elements.parent.value=active&&!active.parent_op?active.op:'';
       container.querySelector('[data-location]').onchange=e=>enter(container,e.target.value);
+      container.querySelector('[data-back-substocks]')?.addEventListener('click',()=>enter(container,active.op));
       container.querySelector('[data-create-child]')?.addEventListener('click',()=>{const form=container.querySelector('[data-create]');form.elements.parent.value=active.op;form.elements.locationName.focus();form.scrollIntoView({behavior:'smooth',block:'center'});});
       container.querySelectorAll('[data-open-child]').forEach(button=>button.onclick=()=>enter(container,button.dataset.openChild));
       container.querySelector('[data-refresh]').onclick=()=>{container.dataset.managerLocationsReady='';enter(container,active?.op);};
