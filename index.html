@@ -8773,7 +8773,7 @@
           );
           parts.push(substockClickable ? '<span class="text-xs text-blue-700 block mt-2">Voir et réorganiser les sous-stocks</span></button>' : '</div>');
         });
-        managerLocations.forEach(location => {
+        managerLocations.filter(location => location.created_by).forEach(location => {
           const items=stock.filter(item=>item.company_id===location.company_id&&item.op===location.op);
           const total=items.reduce((sum,item)=>sum+(Number(item.qty)||0),0);
           const children=managerLocations.filter(child=>child.parent_op===location.op);
