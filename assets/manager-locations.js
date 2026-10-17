@@ -58,7 +58,7 @@
       container.dataset.managerLocationsReady='true';
       container.querySelector('[data-create]').elements.parent.value=active&&!active.parent_op?active.op:'';
       container.querySelector('[data-location]').onchange=e=>enter(container,e.target.value);
-      container.querySelector('[data-back-substocks]')?.addEventListener('click',()=>enter(container,active.op));
+      container.querySelector('[data-back-substocks]')?.addEventListener('click',()=>openCustomStock(active.op));
       container.querySelector('[data-create-child]')?.addEventListener('click',()=>{const form=container.querySelector('[data-create]');form.elements.parent.value=active.op;form.elements.locationName.focus();form.scrollIntoView({behavior:'smooth',block:'center'});});
       container.querySelectorAll('[data-open-child]').forEach(button=>button.onclick=()=>enter(container,button.dataset.openChild));
       container.querySelector('[data-refresh]').onclick=()=>{container.dataset.managerLocationsReady='';enter(container,active?.op);};
@@ -92,7 +92,7 @@
     let locations=(env.data().stock_locations||[]).filter(row=>String(row.company_id)===String(company));
     if(!locations.length){const {data,error}=await env.client().from('stock_locations').select('*').eq('company_id',company).order('op');if(error)throw error;locations=data||[];env.data().stock_locations=locations;}
     const selected=locations.find(row=>row.op===op&&row.created_by);if(!selected)return;
-    const dialog=document.createElement('dialog');dialog.className='substock-dialog';document.body.append(dialog);dialog.showModal();dialog.onclose=()=>dialog.remove();
+    const dialog=document.createElement('dialog');dialog.className='substock-dialog';document.body.append(dialog);dialog.showModal();dialog.onclose=()=>{dialog.remove();env.onClose?.();};
     let filter='all',current=selected;
     const draw=()=>{
       const children=locations.filter(row=>row.parent_op===selected.op);
@@ -104,7 +104,7 @@
       dialog.querySelector('[data-close]').onclick=()=>dialog.close();
       dialog.querySelectorAll('[data-child]').forEach(button=>button.onclick=()=>{current=children.find(child=>child.op===button.dataset.child);filter='all';draw();});
       dialog.querySelectorAll('[data-filter]').forEach(button=>button.onclick=()=>{filter=button.dataset.filter;draw();});
-      dialog.querySelector('[data-create-child]')?.addEventListener('click',()=>{dialog.close();env.navigate('mes-stocks');setTimeout(()=>{const select=document.querySelector('[data-location]');if(select){select.value=selected.op;select.dispatchEvent(new Event('change'));setTimeout(()=>document.querySelector('[data-create-child]')?.click(),0);}},0);});
+      dialog.querySelector('[data-create-child]')?.addEventListener('click',()=>{dialog.close();env.navigate('mes-stocks');setTimeout(()=>{const select=document.querySelector('[data-location]');if(select){select.value=selected.op;select.dispatchEvent(new Event('change'));setTimeout(()=>{const form=document.querySelector('[data-create]');if(form){form.elements.parent.value=selected.op;form.elements.locationName.focus();form.scrollIntoView({behavior:'smooth',block:'center'});}},0);}},0);});
     };
     draw();
   }
