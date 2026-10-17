@@ -81,5 +81,17 @@
       bind(container.querySelector('[data-create]'),'create_manager_stock_location',f=>({location_name:f.locationName.value.trim(),parent_stock:f.parent.value||null}),r=>r.op);
       bind(container.querySelector('[data-receive]'),'receive_manager_location_item',f=>({stock_op:active.op,material_label:f.label.value.trim(),material_type:f.materialType.value.trim(),quantity:Number(f.quantity.value)}),()=>active.op);
   }
-  global.ManagerLocations={setup:config=>{env=config;},enter,isBusy:()=>busy,stop:()=>{generation++;}};
+  async function openFromDashboard(op){
+    const company=env.profile()?.company_id;
+    let locations=(env.data().stock_locations||[]).filter(location=>String(location.company_id)===String(company));
+    if(!locations.length){const {data,error}=await env.client().from('stock_locations').select('*').eq('company_id',company).order('op');if(error)throw error;locations=data||[];env.data().stock_locations=locations;}
+    const location=locations.find(row=>row.op===op);if(!location)return;
+    const children=locations.filter(row=>row.parent_op===op);
+    const stocks=(env.data().stock||[]).filter(item=>String(item.company_id)===String(company));
+    const childRows=children.map(child=>{const entries=stocks.filter(item=>item.op===child.op);return `<section class="border rounded-xl p-4 mt-4"><h3 class="font-bold">${esc(child.name)} · ${entries.length} article(s) · ${entries.reduce((sum,item)=>sum+(Number(item.qty)||0),0)} unités</h3><div class="overflow-x-auto"><table class="w-full text-left"><thead><tr><th>Article</th><th>Type</th><th>Quantité</th></tr></thead><tbody>${entries.map(item=>`<tr class="border-b"><td class="p-2">${esc(item.label)}</td><td>${esc(item.type)}</td><td>${esc(item.qty)}</td></tr>`).join('')||'<tr><td colspan="3" class="p-3">Aucun article dans ce sous-stock.</td></tr>'}</tbody></table></div></section>`;}).join('');
+    const rootItems=stocks.filter(item=>item.op===op),dialog=document.createElement('dialog');dialog.className='substock-dialog';
+    dialog.innerHTML=`<header><div><p>GESTIONNAIRE · STOCK</p><h2>${esc(location.name)}</h2></div><button type="button" data-close>Fermer</button></header><section class="border rounded-xl p-4 mt-4"><h3 class="font-bold">Articles du stock principal (${rootItems.length}) · ${rootItems.reduce((sum,item)=>sum+(Number(item.qty)||0),0)} unités</h3><div class="overflow-x-auto"><table class="w-full text-left"><thead><tr><th>Article</th><th>Type</th><th>Quantité</th></tr></thead><tbody>${rootItems.map(item=>`<tr class="border-b"><td class="p-2">${esc(item.label)}</td><td>${esc(item.type)}</td><td>${esc(item.qty)}</td></tr>`).join('')||'<tr><td colspan="3" class="p-3">Aucun article dans ce stock.</td></tr>'}</tbody></table></div></section>${childRows||'<p class="mt-4 text-slate-600">Aucun sous-stock créé.</p>'}`;
+    dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});document.body.append(dialog);dialog.showModal();dialog.onclose=()=>dialog.remove();
+  }
+  global.ManagerLocations={setup:config=>{env=config;},enter,openFromDashboard,isBusy:()=>busy,stop:()=>{generation++;}};
 })(window);
