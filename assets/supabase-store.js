@@ -45,6 +45,7 @@
       this.uid = null;
       this.pending = null;
       this.raw = {};
+      this.stockLocations = [];
       this.notificationCompanies = {};
       this.readNotificationKeys = new Set();
       this.ready = false;
@@ -84,7 +85,7 @@
       };
       // The server enforces validation for every company, including new tenants.
       this.profile.validatorWorkflowEnabled = true;
-      await this.read(generation, {names:initialCollections});
+      await Promise.all([this.read(generation, {names:initialCollections}),this.readStockLocations(generation)]);
       if (generation !== this.generation) throw new Error('Session remplacée.');
       this.ready = true;
       this.watchRecords(generation);
@@ -144,6 +145,14 @@
       }
       this.raw.settings = Object.fromEntries((settingRows || []).map(row => [row.setting_key, row.value]));
       if (this.ready && notify) this.onChange(this.value());
+    }
+    async readStockLocations(generation) {
+      if (!this.profile) return [];
+      const {data,error}=await this.client.from('stock_locations').select('*').eq('company_id',this.profile.company_id).order('op');
+      if(error)throw error;
+      if(generation!==this.generation)throw new Error('Session remplacée.');
+      this.stockLocations=data||[];
+      return this.stockLocations;
     }
     async readCollections(names, generation, {notify = false,replace = false} = {}) {
       if (!this.ready || !this.profile) throw new Error('Données non chargées. Reconnectez-vous.');
@@ -222,6 +231,7 @@
         .filter(([, row]) => row && typeof row === 'object')
         .map(([recordKey, row]) => ({ ...clone(row), ...(name === 'notifications' && this.readNotificationKeys.has(recordKey) ? {lu:true} : {}), _dbKey: recordKey }))
         .sort((a, b) => (a._order ?? (Number(a._dbKey) || 0)) - (b._order ?? (Number(b._dbKey) || 0)));
+      data.stock_locations=clone(this.stockLocations||[]);
       for (const setting of settings) data[setting] = clone(this.raw.settings?.[setting] ?? (['materialTypes', 'scansDuJour'].includes(setting) ? [] : null));
       return data;
     }
@@ -299,6 +309,7 @@
         if (settingsError) throw settingsError;
       }
       await this.read(this.generation);
+      await this.readStockLocations(this.generation);
     }
   }
   global.SupabaseStore = SupabaseStore;

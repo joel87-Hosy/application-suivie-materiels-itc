@@ -90,6 +90,7 @@
         .filter(([, row]) => row && typeof row === 'object')
         .map(([key, row]) => ({...clone(row), _dbKey: key}))
         .sort((a, b) => (a._order ?? (Number(a._dbKey) || 0)) - (b._order ?? (Number(b._dbKey) || 0)));
+      data.stock_locations=[];
       for (const key of settings) data[key] = clone(this.raw.settings?.[key] ?? (['materialTypes', 'scansDuJour'].includes(key) ? [] : null));
       return data;
     }

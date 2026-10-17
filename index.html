@@ -2594,7 +2594,7 @@
           () => window.ManagerStock?.stop(), () => window.ValidatorWorkflow?.stop(), () => window.BonScanner?.stop(), () => window.BonSignatures?.cancel(), () => secureStore.stop()]) {
           try { cleanup(); } catch (error) { console.warn('Nettoyage de session', error); }
         }
-        appData = emptyAppData();
+          appData = emptyAppData();
         currentUser = null;
         clearPrivateLocalData();
         logoutPromise = signOutActiveAuth().catch(error => console.warn('Déconnexion', error))
@@ -8646,17 +8646,8 @@
         const stock = appData.stock || [];
         const demandes = appData.demandes || [];
         const managerLocations = String(currentUser?.role || '').toUpperCase() === 'GESTIONNAIRE'
-          ? (appData.stock_locations || []).filter(location => location.company_id === currentUser.company_id && ControlCore.managerStocks(currentUser).includes(location.op))
+          ? (appData.stock_locations || []).filter(location => String(location.company_id) === String(currentUser.company_id) && ControlCore.managerStocks(currentUser).includes(location.op))
           : [];
-        if (String(currentUser?.role || '').toUpperCase() === 'GESTIONNAIRE' && !container.dataset.managerLocationsLoaded) {
-          container.dataset.managerLocationsLoaded = 'loading';
-          supabaseBackend.from('stock_locations').select('*').eq('company_id',currentUser.company_id).order('op').then(({data,error})=>{
-            if(error)throw error;
-            appData.stock_locations=data||[];
-            container.dataset.managerLocationsLoaded='true';
-            if(currentSectionId==='cockpit'&&container.isConnected)renderCockpit(container);
-          }).catch(error=>{container.dataset.managerLocationsLoaded='error';console.warn('Chargement des stocks personnalisés indisponible',error);});
-        }
 
         let pendingDemandes =
           demandes.filter((d) => d.status === "EN ATTENTE GESTIONNAIRE") || [];
@@ -12191,7 +12182,7 @@
           document.getElementById("login-screen").classList.remove("hidden");
           document.getElementById("main-app").classList.add("hidden");
           secureStore.stop();
-          appData = emptyAppData();
+        appData = emptyAppData();
           clearPrivateLocalData();
           document.getElementById("app-container").innerHTML = "";
           currentUser = null;
