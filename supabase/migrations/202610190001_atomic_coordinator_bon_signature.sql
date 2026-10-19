@@ -2,12 +2,14 @@ BEGIN;
 SET LOCAL lock_timeout='5s';
 SET LOCAL statement_timeout='30s';
 
+DROP FUNCTION IF EXISTS public.sign_technician_bon_as_coordinator(text,text,jsonb,jsonb,bigint,text,text,jsonb,boolean);
+
 CREATE OR REPLACE FUNCTION public.sign_technician_bon_as_coordinator(
   request_key text,
   expected_status text,
   expected_items jsonb,
   items jsonb,
-  assigned_manager_id bigint,
+  assigned_manager_id text,
   signature_name text,
   signature_image text,
   routing jsonb DEFAULT '{}'::jsonb,
@@ -33,7 +35,7 @@ BEGIN
     RAISE EXCEPTION 'Les changements de coordination sont invalides.';
   END IF;
   SELECT * INTO manager FROM public.app_profiles
-   WHERE company_id=actor.company_id AND user_id=assigned_manager_id AND is_active AND role='Gestionnaire' FOR SHARE;
+   WHERE company_id=actor.company_id AND profile->>'id'=assigned_manager_id AND is_active AND role='Gestionnaire' FOR SHARE;
   IF manager.user_id IS NULL THEN RAISE EXCEPTION 'Gestionnaire affecté introuvable ou inactif.'; END IF;
   SELECT * INTO request FROM public.app_records
    WHERE collection='demandes' AND record_key=request_key AND company_id=actor.company_id FOR UPDATE;
@@ -84,7 +86,7 @@ BEGIN
   RETURN result;
 END $$;
 
-REVOKE ALL ON FUNCTION public.sign_technician_bon_as_coordinator(text,text,jsonb,jsonb,bigint,text,text,jsonb,boolean) FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.sign_technician_bon_as_coordinator(text,text,jsonb,jsonb,bigint,text,text,jsonb,boolean) TO authenticated;
+REVOKE ALL ON FUNCTION public.sign_technician_bon_as_coordinator(text,text,jsonb,jsonb,text,text,text,jsonb,boolean) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.sign_technician_bon_as_coordinator(text,text,jsonb,jsonb,text,text,text,jsonb,boolean) TO authenticated;
 NOTIFY pgrst,'reload schema';
 COMMIT;
