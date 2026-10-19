@@ -10074,29 +10074,27 @@
         const coordinationInk = await window.BonSignatures.capture('Signature du coordinateur', signature);
         if (!coordinationInk || signingSession !== secureStore.generation) return;
         const initialItems = (d.items || []).map(item => ({label:item.label, op:normalizeOperatorKey(getDemandItemOperator(item, d)), qty:parseInt(item.qty, 10) || 0}));
+        const initialServerItems = JSON.parse(JSON.stringify(d.items || []));
         const wasAdjusted = !sameCoordinationItems(initialItems, editedItems);
-        if (wasAdjusted) {
-          d.coordinationAdjustments = Array.isArray(d.coordinationAdjustments) ? d.coordinationAdjustments : [];
-          d.coordinationAdjustments.push({at:new Date().toISOString(), byId:currentUser?.id || null, by:currentUser?.name || "COORDINATION", beforeItems:initialItems, afterItems:editedItems});
-          d.items = editedItems;
-          d.coordinationItemsAdjustedAt = new Date().toISOString();
+        try {
+          const {error} = await supabaseBackend.rpc('sign_technician_bon_as_coordinator', {
+            request_key: d._dbKey,
+            expected_status: 'EN ATTENTE COORDINATION',
+            expected_items: initialServerItems,
+            items: editedItems,
+            assigned_manager_id: managerId,
+            signature_name: coordinationInk.name,
+            signature_image: coordinationInk.image,
+            routing,
+            adjusted: wasAdjusted,
+          });
+          if (error) throw error;
+          await refreshAppDataFromServer({render:false});
+        } catch (error) {
+          alert("Enregistrement impossible : " + error.message);
+          await refreshAppDataFromServer({render:false}).catch(() => {});
+          return;
         }
-        d.assignedGestionnaireId = managerId;
-        Object.assign(d,routing);
-        d.assignedGestionnaireName = gestionnaireNameById(managerId) || "";
-        d.coordinationSignatureText = coordinationInk.name;
-        d.bonSignatures = {...d.bonSignatures, coordination: coordinationInk};
-        d.coordinationSignedAt = new Date().toLocaleString();
-        d.coordinationBy = currentUser ? currentUser.name : "COORDINATION";
-        d.status = "EN ATTENTE GESTIONNAIRE";
-        d.statut = "EN ATTENTE GESTIONNAIRE";
-        // The server routes validator notifications atomically with the bon.
-        // A legacy requester ID (or the audit copy) must not block its signature.
-        if (!window.ValidatorWorkflow.enabled()) {
-          addNotification(managerId, `BON A VALIDER : ${d.id} signe par ${currentUser?.name || "COORDINATION"}`);
-          addNotification(d.demandeurOriginalId, wasAdjusted ? `VOTRE BON ${getBonReference(d)} A ETE AJUSTE ET SIGNE PAR LA COORDINATION.` : `VOTRE BON ${getBonReference(d)} A ETE SIGNE PAR LA COORDINATION.`);
-        }
-        if (!(await save())) return;
         alert(window.ValidatorWorkflow.enabled() ? "BON ENVOYÉ AU VALIDATEUR." : "BON ENVOYE AU GESTIONNAIRE.");
         showSection("cockpit");
       }
