@@ -18,6 +18,7 @@
     "ai-backend": "node server/ai-chat-backend.js",
     "ai-backend:dev": "set PORT=8787&& node server/ai-chat-backend.js",
     "build": "node scripts/build_static.js",
+    "inventory:backend": "node scripts/inventory_backend_dependencies.js",
     "build:rules": "node scripts/build_database_rules.js",
     "test:security": "firebase emulators:exec --only database --project demo-itc-security \"node tools/test_database_security.js\"",
     "test:profile": "node tools/test_profile.js",
